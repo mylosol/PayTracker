@@ -11,6 +11,17 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
+    # Block direct browser access to the application source tree. Only the
+    # `public/` directory is meant to be web-reachable; everything else is
+    # framework guts.
+    #
+    # NB: <Directory> / <DirectoryMatch> blocks are server-config-only in
+    # Apache and produce `<DirectoryMatch not allowed here` 500s when used
+    # in .htaccess. We achieve the same effect with a RewriteRule that
+    # returns 403 (the `[F]` flag) for any URL whose first path segment
+    # names one of the protected directories.
+    RewriteRule ^(app|bootstrap|config|routes|resources|storage|tests|vendor|deploy|docs)(/|$) - [F,L]
+
     # Serve real files / directories untouched (e.g. /preview/public/assets/...).
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
@@ -20,13 +31,9 @@
     RewriteRule ^ public/index.php [L,QSA]
 </IfModule>
 
-# Belt-and-braces denial of dotfile access at the preview root.
+# Belt-and-braces denial of dotfile access at the preview root (.env, .git,
+# .htaccess itself, etc.). `Require` is .htaccess-legal — only `<Directory>`
+# / `<DirectoryMatch>` are server-config-only.
 <FilesMatch "^\.">
     Require all denied
 </FilesMatch>
-
-# Block direct browser access to the application source — only `public/` is
-# meant to be web-reachable.
-<DirectoryMatch "^.*/(app|bootstrap|config|routes|resources|storage|tests|vendor)(/|$)">
-    Require all denied
-</DirectoryMatch>
