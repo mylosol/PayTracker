@@ -32,7 +32,12 @@ final class HealthController extends Controller
         return $this->view('health', $this->collect());
     }
 
-    public function json(Request $request): Response
+    /**
+     * Machine-readable health probe. Named `jsonResponse` (not `json`) so it
+     * doesn't shadow the base Controller's `json()` helper — PHP's LSP check
+     * fires at class-load time and would otherwise hard-fatal the page.
+     */
+    public function jsonResponse(Request $request): Response
     {
         $payload = $this->collect();
         $status  = $payload['database']['ok'] === true ? 200 : 503;

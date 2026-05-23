@@ -16,5 +16,5 @@ use PayTracker\Http\Router;
 return static function (Router $router): void {
     $router->get('/',         [HomeController::class,   'index']);
     $router->get('/health',   [HealthController::class, 'index']);
-    $router->get('/health.json', [HealthController::class, 'json']);
+    $router->get('/health.json', [HealthController::class, 'jsonResponse']);
 };
