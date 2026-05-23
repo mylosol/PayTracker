@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use PayTracker\Http\Controllers\HealthController;
 use PayTracker\Http\Controllers\HomeController;
+use PayTracker\Http\Controllers\LoginController;
 use PayTracker\Http\Router;
 
 /*
@@ -14,7 +15,13 @@ use PayTracker\Http\Router;
  * closure without polluting any container state.
  */
 return static function (Router $router): void {
-    $router->get('/',         [HomeController::class,   'index']);
-    $router->get('/health',   [HealthController::class, 'index']);
+    // --- Public --------------------------------------------------------
+    $router->get('/',            [HomeController::class,   'index']);
+    $router->get('/health',      [HealthController::class, 'index']);
     $router->get('/health.json', [HealthController::class, 'jsonResponse']);
+
+    // --- Authentication ------------------------------------------------
+    $router->get('/login',  [LoginController::class, 'showForm']);
+    $router->post('/login', [LoginController::class, 'submit']);
+    $router->post('/logout', [LoginController::class, 'logout']);
 };

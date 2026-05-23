@@ -49,6 +49,12 @@ lives at a separate URL specifically so production stays untouched.
 - The environment tag says `production`.
 - The PHP version starts with `7.` — that means the deploy landed on the
   wrong PHP runtime; flag immediately.
+- A "Welcome, …" card appears even though you used an incognito window —
+  that means session isolation is broken.
+
+You should see a card labelled **"Sign in to continue"** with a blue
+**Sign in →** button. That's the new per-account login replacing the
+old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 ---
 
@@ -107,7 +113,97 @@ lives at a separate URL specifically so production stays untouched.
 
 ---
 
-## 5. Production is untouched
+## 5. Sign-in flow (per-account auth)
+
+> Before this step you need a test account on the preview channel. Ask
+> engineering to seed one for you — they'll run
+> `php scripts/set-password.php <your-handle> <your-password>` on the
+> preview server and tell you the handle + password to use. The same
+> account works for every QA pass; you don't need a new one each time.
+
+### 5a. Wrong password is rejected
+
+1. From the preview landing page click **Sign in →**.
+2. You should arrive at `https://paytracker.xyz/preview/login` with a
+   form titled **"Sign in"**.
+3. Enter your test handle but a deliberately wrong password
+   (e.g. `definitely-not-it`).
+4. Click **Sign in**.
+
+**Expected:**
+
+- The page reloads at `/preview/login` with a red banner reading
+  **"Incorrect login or password."**
+- The URL bar still shows `/login`. You are NOT signed in.
+
+**Fail conditions:**
+
+- The banner reveals which part was wrong (e.g. "no such user" or
+  "wrong password"). The system must give the same generic message for
+  every failure so an attacker can't enumerate accounts.
+- You land on the home page even though the password was wrong.
+
+### 5b. Correct credentials sign you in
+
+1. Stay on the login page.
+2. Enter your test handle and the **correct** password.
+3. Click **Sign in**.
+
+**Expected:**
+
+- The URL changes to `https://paytracker.xyz/preview/`.
+- A new card appears reading **"Welcome, *your-handle*"** with a green
+  `signed in` tag.
+- The card shows your role (`user` or `admin`) and the timestamp of
+  the previous successful login (blank on the very first sign-in).
+- A **Sign out** button is visible at the bottom of that card.
+
+**Fail conditions:**
+
+- A 500 page appears — copy the error and flag.
+- You stay on `/login` despite using the correct credentials.
+
+### 5c. Sign out returns you to the login page
+
+1. Click the **Sign out** button on the home card.
+
+**Expected:**
+
+- The URL becomes `https://paytracker.xyz/preview/login`.
+- The login form is empty and ready to receive a fresh sign-in.
+- If you press the browser **Back** button you do NOT see the
+  "Welcome" card — the session is genuinely gone, not just hidden.
+
+**Fail conditions:**
+
+- The browser back button reveals the post-login dashboard. That means
+  the session cookie wasn't truly invalidated; flag immediately.
+
+### 5d. Repeated bad guesses lock the account
+
+> Skip this section if your test account is already locked from a
+> previous run — engineering can reset it with
+> `php scripts/set-password.php …` which clears the lockout counters.
+
+1. From the login page, submit the **wrong** password five times in
+   a row using your test handle.
+2. After the fifth failure, submit the **correct** password.
+
+**Expected:**
+
+- Even with the correct password, login is refused with the same
+  generic **"Incorrect login or password."** banner.
+- Engineering can confirm the account row's `locked_until` column is
+  set ~15 minutes into the future.
+
+**Fail conditions:**
+
+- The correct password works immediately after five failures — the
+  lockout did not engage.
+
+---
+
+## 6. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -126,7 +222,7 @@ lives at a separate URL specifically so production stays untouched.
 
 ---
 
-## 6. Security headers are present (optional — engineer-assisted)
+## 7. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

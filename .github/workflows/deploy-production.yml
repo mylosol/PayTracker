@@ -147,6 +147,16 @@ jobs:
           EOF
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/.env"
 
+      # Run pending DB migrations on the remote using the live production
+      # .env. Migrations are additive-only and tracked so re-runs are
+      # idempotent (the migrator skips anything already applied).
+      - name: Apply database migrations on remote
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker && php scripts/migrate.php"
+
       # ----- Post-deploy smoke ---------------------------------------------
       # The legacy index.php currently serves the production hostname. Once
       # the modern app supersedes it, swap this URL for /health.json to gate
