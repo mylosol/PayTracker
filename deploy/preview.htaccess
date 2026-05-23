@@ -22,12 +22,19 @@
     # names one of the protected directories.
     RewriteRule ^(app|bootstrap|config|routes|resources|storage|tests|vendor|deploy|docs)(/|$) - [F,L]
 
-    # Serve real files / directories untouched (e.g. /preview/public/assets/...).
+    # Static-asset passthrough — but ONLY for paths under public/. The
+    # preview deploy intentionally also carries the legacy code tree (for
+    # parity with the production deploy), so without this scoping a
+    # request for /preview/ would land on the legacy index.php instead
+    # of the modern front controller. Scoping to ^public/ is what
+    # isolates the preview channel from legacy code.
+    RewriteCond %{REQUEST_URI} ^/.+/public/
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Send everything else to the front controller.
+    # Everything else — including the preview root — goes through the
+    # modern front controller.
     RewriteRule ^ public/index.php [L,QSA]
 </IfModule>
 
