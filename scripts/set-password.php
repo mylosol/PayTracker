@@ -70,13 +70,16 @@ try {
     $connection = $app->make(Connection::class);
     $pdo        = $connection->pdo();
 
-    // Locate by either user handle or email — same logic the AuthService uses.
+    // Locate by either user handle or email — same logic the AuthService
+    // uses. Positional placeholders: with EMULATE_PREPARES=false, MySQL
+    // native prepared statements don't allow the same named placeholder
+    // to appear twice in one query (HY093).
     $find = $pdo->prepare(
         'SELECT id, user FROM `account`
-         WHERE user = :h OR (email IS NOT NULL AND email = :h)
+         WHERE user = ? OR (email IS NOT NULL AND email = ?)
          LIMIT 1'
     );
-    $find->execute(['h' => $handle]);
+    $find->execute([$handle, $handle]);
     $row = $find->fetch();
     if (! is_array($row)) {
         fwrite(STDERR, "No account found matching `{$handle}`.\n");

@@ -54,13 +54,17 @@ final class AuthService
         $this->session->start();
         $pdo = $this->connection->pdo();
 
+        // Positional placeholders — we use the same value twice and PDO's
+        // EMULATE_PREPARES=false setting disallows reusing a named
+        // placeholder with native MySQL prepared statements (raises
+        // HY093 "Invalid parameter number" at execute time).
         $stmt = $pdo->prepare(
             'SELECT id, user, email, password_hash, role, failed_login_count, locked_until
              FROM `account`
-             WHERE user = :handle OR (email IS NOT NULL AND email = :handle)
+             WHERE user = ? OR (email IS NOT NULL AND email = ?)
              LIMIT 1'
         );
-        $stmt->execute(['handle' => $handle]);
+        $stmt->execute([$handle, $handle]);
         $row = $stmt->fetch();
 
         if (! is_array($row) || ! is_string($row['password_hash'] ?? null) || $row['password_hash'] === '') {
