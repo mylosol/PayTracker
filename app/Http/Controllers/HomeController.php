@@ -38,7 +38,7 @@ final class HomeController extends Controller
             'version'   => $this->version(),
             'account'   => $account,
             'csrfToken' => $this->csrf->token(),
-            'base'      => $this->base($request),
+            'base'      => $request->basePath(),
         ]);
     }
 
@@ -62,12 +62,5 @@ final class HomeController extends Controller
             return 'unknown';
         }
         return isset($decoded['patch']) ? 'patch ' . (string) $decoded['patch'] : 'unknown';
-    }
-
-    private function base(Request $request): string
-    {
-        $script = (string) ($request->server['SCRIPT_NAME'] ?? '');
-        $prefix = (string) preg_replace('#/(?:public/)?index\.php$#', '', $script);
-        return rtrim($prefix, '/');
     }
 }

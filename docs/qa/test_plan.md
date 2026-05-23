@@ -203,7 +203,91 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 ---
 
-## 6. Production is untouched
+## 6. Add a location (first ported legacy feature)
+
+> Requires you to be signed in (Section 5b). If you're not, do that first.
+
+### 6a. The link is gated behind authentication
+
+1. Sign out of the preview if you're currently signed in.
+2. Manually type **https://paytracker.xyz/preview/locations** into the
+   browser address bar.
+
+**Expected:**
+
+- You are redirected to **`/preview/login`**. You never see the
+  Locations page.
+
+**Fail conditions:**
+
+- The Locations page renders for an anonymous visitor — that means the
+  auth gate isn't running.
+
+### 6b. The list page renders for a signed-in user
+
+1. Sign back in.
+2. From the home page, click **Manage locations →**.
+
+**Expected:**
+
+- URL changes to **`/preview/locations`**.
+- Heading reads **"Locations"** with a green **+ Add city** button.
+- A paragraph reading **"N cities on file."** appears (N matches the
+  current count — at least a few, since the legacy app has been
+  populating this table for years).
+- A two-column list of city names appears below, alphabetically
+  sorted.
+
+### 6c. The add-city form validates input
+
+1. Click **+ Add city**.
+2. URL changes to `/preview/locations/new`.
+3. Leave the city name blank, pick **FL**, click **Add city**.
+
+**Expected:** red banner reads **"Enter both a city name and a state."**
+
+4. Type a city name with digits in it (e.g. `Testville2`), pick **FL**,
+   click **Add city**.
+
+**Expected:** red banner reads **"City name may only contain letters,
+spaces, periods, hyphens, apostrophes, and commas."** Your typed value
+is preserved in the form (so you don't have to retype it).
+
+### 6d. A valid submission inserts the city
+
+1. Type a city name you know is NOT in the legacy list yet — to keep
+   test data identifiable, use the convention **`Qa Test ###, FL`**
+   where `###` is a short timestamp (e.g. `Qa Test 1820, FL` for
+   18:20). Avoid real city names so we don't pollute production data.
+2. Pick a state.
+3. Click **Add city**.
+
+**Expected:**
+
+- You land on `/preview/locations`.
+- A green banner reads **`Added "Qa Test 1820, FL" (id NNN).`**
+- Scrolling the list, the new city appears alphabetically.
+
+**Fail conditions:**
+
+- 500 page — copy and flag.
+- Banner says the city already exists when it shouldn't.
+
+### 6e. Duplicate detection works
+
+1. Submit the EXACT same city name + state again.
+
+**Expected:** red banner reads **`"Qa Test 1820, FL" is already in
+the list.`** No second row is inserted.
+
+> Cleanup: ask engineering to delete your QA-test rows via
+> `DELETE FROM city WHERE city LIKE 'Qa Test %'` on the preview DB
+> when you're done — keeps the production list tidy when this branch
+> eventually merges.
+
+---
+
+## 7. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -222,7 +306,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 ---
 
-## 7. Security headers are present (optional — engineer-assisted)
+## 8. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

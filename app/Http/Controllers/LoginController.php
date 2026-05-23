@@ -39,12 +39,12 @@ final class LoginController extends Controller
         // rather than re-prompting. Defeats the case where a logged-in
         // user clicks the browser back button.
         if ($this->auth->currentAccount() !== null) {
-            return $this->redirect($this->base($request) . '/');
+            return $this->redirect($request->basePath() . '/');
         }
         return $this->view('auth/login', [
             'csrfToken' => $this->csrf->token(),
             'flash'     => $this->popFlash(),
-            'base'      => $this->base($request),
+            'base'      => $request->basePath(),
         ]);
     }
 
@@ -73,7 +73,7 @@ final class LoginController extends Controller
 
         // PRG (Post-Redirect-Get) so a refresh on the dashboard doesn't
         // re-POST the login form.
-        return $this->redirect($this->base($request) . '/');
+        return $this->redirect($request->basePath() . '/');
     }
 
     public function logout(Request $request): Response
@@ -83,16 +83,16 @@ final class LoginController extends Controller
         // is annoying but not security-critical; we enforce it anyway because
         // the cost is zero once the helper exists.
         if (! $this->csrf->verify($request->input('_csrf'))) {
-            return $this->redirect($this->base($request) . '/');
+            return $this->redirect($request->basePath() . '/');
         }
         $this->auth->logout();
-        return $this->redirect($this->base($request) . '/login');
+        return $this->redirect($request->basePath() . '/login');
     }
 
     private function failBack(Request $request, string $message): Response
     {
         $this->session->put('_flash', $message);
-        return $this->redirect($this->base($request) . '/login');
+        return $this->redirect($request->basePath() . '/login');
     }
 
     private function popFlash(): ?string
@@ -100,17 +100,5 @@ final class LoginController extends Controller
         $flash = $this->session->get('_flash');
         $this->session->forget('_flash');
         return is_string($flash) ? $flash : null;
-    }
-
-    /**
-     * Compute the deploy base path (e.g. "/preview") from SCRIPT_NAME so the
-     * absolute redirect targets work on both the production root and the
-     * /preview/ side channel without env-var plumbing.
-     */
-    private function base(Request $request): string
-    {
-        $script = (string) ($request->server['SCRIPT_NAME'] ?? '');
-        $prefix = (string) preg_replace('#/(?:public/)?index\.php$#', '', $script);
-        return rtrim($prefix, '/');
     }
 }
