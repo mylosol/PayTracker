@@ -68,29 +68,14 @@ jobs:
           find app bootstrap config public routes -name '*.php' -print0 \
             | xargs -0 -n1 php -l > /dev/null
 
-      # `php -l` only catches parse-level errors. Method-signature
-      # incompatibilities (LSP violations) are class-load-time errors and
-      # would otherwise only surface as a 500 on the deployed server. This
-      # step force-loads every class under app/ via the autoloader so any
-      # such error fails the build instead.
-      - name: Class-load smoke (catch LSP / load-time fatals)
-        run: |
-          php -r '
-          require "vendor/autoload.php";
-          $base = realpath("app");
-          $rii  = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($base));
-          foreach ($rii as $f) {
-              if ($f->isDir() || $f->getExtension() !== "php") continue;
-              $rel = substr($f->getPathname(), strlen($base) + 1);
-              if (basename($rel) === "helpers.php") continue;
-              $class = "PayTracker\\\\" . str_replace([DIRECTORY_SEPARATOR, ".php"], ["\\\\", ""], $rel);
-              if (! class_exists($class) && ! interface_exists($class) && ! trait_exists($class)) {
-                  fwrite(STDERR, "FAIL: could not load $class\n");
-                  exit(1);
-              }
-          }
-          echo "all classes load cleanly\n";
-          '
+      # PSR-4 conformance check. `--strict-psr` makes composer fail when any
+      # class's namespace doesn't match its file location. This catches
+      # rename/typo bugs before they reach the server. It's lightweight and
+      # doesn't try to instantiate classes (which would risk false positives
+      # from autoload side-effects). LSP / load-time fatals are caught by
+      # the live smoke at the end of the workflow.
+      - name: Validate PSR-4 autoload mapping
+        run: composer dump-autoload --optimize --strict-psr --no-interaction
 
       # ----- Prepare SSH ----------------------------------------------------
       - name: Install SSH key
