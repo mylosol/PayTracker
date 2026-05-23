@@ -61,8 +61,15 @@ final class Router
      */
     public function dispatch(Request $request): Response
     {
+        // Per RFC 9110, HEAD MUST behave identically to GET except for the
+        // absence of a response body. We satisfy that by matching HEAD
+        // against GET routes and letting the web server / PHP runtime
+        // strip the body. The alternative (404 on HEAD) would break
+        // curl -I, monitoring probes, and any HTTP cache validator.
+        $matchMethod = $request->method === 'HEAD' ? 'GET' : $request->method;
+
         foreach ($this->routes as $route) {
-            if ($route['method'] !== $request->method) {
+            if ($route['method'] !== $matchMethod) {
                 continue;
             }
             if (preg_match($route['regex'], $request->path, $matches) !== 1) {
