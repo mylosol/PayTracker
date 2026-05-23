@@ -86,9 +86,20 @@ final class Application
     }
 
     /**
-     * Resolve a binding by abstract name. Auto-instantiates classes that have
-     * no explicit binding when the class exists and is constructible without
-     * arguments — convenient for plain value objects.
+     * Resolve a binding by abstract name.
+     *
+     * Resolution order:
+     *   1. Already-resolved (memoised) → return as-is.
+     *   2. Explicit binding factory → call it.
+     *   3. Concrete class with a constructor whose parameters all have
+     *      class type-hints we can recursively resolve → instantiate with
+     *      those dependencies.
+     *   4. Concrete class with a parameter-less constructor → `new`.
+     *   5. Anything else → throw.
+     *
+     * Auto-wiring is deliberately minimal: only class-typed parameters are
+     * resolved. Scalars must come from an explicit binding so we never
+     * silently inject zeros / empty strings.
      */
     public function make(string $abstract): mixed
     {
@@ -100,11 +111,46 @@ final class Application
             return $this->resolved[$abstract] = ($this->bindings[$abstract])($this);
         }
 
-        if (class_exists($abstract)) {
-            return $this->resolved[$abstract] = new $abstract();
+        if (! class_exists($abstract)) {
+            throw new RuntimeException(sprintf('No binding registered for [%s].', $abstract));
         }
 
-        throw new RuntimeException(sprintf('No binding registered for [%s].', $abstract));
+        return $this->resolved[$abstract] = $this->autowire($abstract);
+    }
+
+    /**
+     * Build an instance of `$class` by reflecting its constructor and
+     * resolving each parameter through `make()`. The recursion is bounded by
+     * the dependency graph; cycles would manifest as an infinite loop and so
+     * are forbidden by convention (none exist in the current codebase).
+     */
+    private function autowire(string $class): object
+    {
+        $reflection  = new \ReflectionClass($class);
+        $constructor = $reflection->getConstructor();
+
+        if ($constructor === null || $constructor->getNumberOfParameters() === 0) {
+            return new $class();
+        }
+
+        $args = [];
+        foreach ($constructor->getParameters() as $param) {
+            $type = $param->getType();
+            if ($type instanceof \ReflectionNamedType && ! $type->isBuiltin()) {
+                $args[] = $this->make($type->getName());
+                continue;
+            }
+            if ($param->isDefaultValueAvailable()) {
+                $args[] = $param->getDefaultValue();
+                continue;
+            }
+            throw new RuntimeException(sprintf(
+                'Cannot auto-wire parameter $%s of %s::__construct — register an explicit binding.',
+                $param->getName(),
+                $class,
+            ));
+        }
+        return $reflection->newInstanceArgs($args);
     }
 
     /**
