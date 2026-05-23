@@ -1,0 +1,32 @@
+# Preview-channel root .htaccess.
+#
+# Placed by the GitHub Actions preview-deploy workflow at the deploy root
+# (e.g. /home/robshe48/paytracker/preview/.htaccess). It routes every URL
+# under /preview/ that doesn't map to a real file or directory through the
+# modern front controller in public/index.php.
+#
+# This file is intentionally NOT named `.htaccess` in the repository to keep
+# it inert during local development — the workflow renames it on deploy.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Serve real files / directories untouched (e.g. /preview/public/assets/...).
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Send everything else to the front controller.
+    RewriteRule ^ public/index.php [L,QSA]
+</IfModule>
+
+# Belt-and-braces denial of dotfile access at the preview root.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Block direct browser access to the application source — only `public/` is
+# meant to be web-reachable.
+<DirectoryMatch "^.*/(app|bootstrap|config|routes|resources|storage|tests|vendor)(/|$)">
+    Require all denied
+</DirectoryMatch>
