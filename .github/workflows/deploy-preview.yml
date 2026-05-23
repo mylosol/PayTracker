@@ -41,10 +41,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up PHP 8.3
+      # Pin the CI runtime to the exact PHP version DreamHost shared hosting
+      # ships (8.2). Linting and platform_check then catch any 8.3-only
+      # syntax before it hits the server. Bump in lockstep if/when DreamHost
+      # rolls 8.3 to this shared host.
+      - name: Set up PHP 8.2
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.2'
           extensions: pdo, pdo_mysql, mbstring, json
           coverage: none
           tools: composer:v2
