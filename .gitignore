@@ -7,7 +7,7 @@ jspm_packages/
 .env.local
 .env.*.local
 *.env
-db*.php
+db.php
 googleMapsAPI.php
 
 # Operating System system files
