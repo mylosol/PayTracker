@@ -1,0 +1,29 @@
+# Dependency folders (never upload these, they can be re-installed)
+node_modules/
+jspm_packages/
+
+# Environment variables & API Keys (CRITICAL: Keep these private!)
+.env
+.env.local
+.env.*.local
+*.env
+<<<<<<< HEAD
+
+=======
+db.php
+googleMapsAPI.php
+>>>>>>> 0d6678f8d81bad7c4f04a278fe0d6416ec90b736
+
+# Operating System system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Log files and debug dumps
+*.log
+npm-debug.log*
+<<<<<<< HEAD
+yarn-debug.log*
+=======
+yarn-debug.log*
+>>>>>>> 0d6678f8d81bad7c4f04a278fe0d6416ec90b736
