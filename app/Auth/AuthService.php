@@ -1,0 +1,205 @@
+<?php
+
+declare(strict_types=1);
+
+namespace PayTracker\Auth;
+
+use PayTracker\Database\Connection;
+use PayTracker\Models\Account;
+use PayTracker\Security\Session;
+
+/**
+ * AuthService — the single entry point for login/logout/identity reads.
+ *
+ * Design rules enforced here:
+ *   - Lookup is by `user` (the legacy login handle) OR `email`, whichever
+ *     the caller supplies. Both columns are indexed.
+ *   - Failed attempts increment `failed_login_count` and, after a
+ *     threshold, set `locked_until` so the account refuses login for a
+ *     cool-off period. This is server-side rate limiting; it cannot be
+ *     bypassed by the client.
+ *   - On any failure path we sleep for a small random jitter before
+ *     returning so an attacker cannot distinguish "user not found" from
+ *     "bad password" by response time.
+ *   - On success the session id is regenerated (defeats session fixation)
+ *     and the account id is stored in `$_SESSION['account_id']`. No
+ *     PII (password, email, etc.) is stored in the session.
+ *   - If the stored hash's cost factor is below the current target we
+ *     transparently rehash and persist the new hash — no flag day needed
+ *     when we bump cost.
+ */
+final class AuthService
+{
+    /** After this many consecutive failures, lock the account briefly. */
+    private const LOCKOUT_THRESHOLD = 5;
+
+    /** Lockout duration in seconds (15 minutes). */
+    private const LOCKOUT_SECONDS = 900;
+
+    public function __construct(
+        private readonly Connection $connection,
+        private readonly Session $session,
+        private readonly PasswordHasher $hasher,
+    ) {
+    }
+
+    /**
+     * Attempt a login. Returns the account id on success or null on any
+     * failure. The CALLER is responsible for translating null into a
+     * user-facing error — this method never reveals which of "wrong
+     * handle", "wrong password", or "locked" was the cause.
+     */
+    public function attempt(string $handle, string $password): ?int
+    {
+        $this->session->start();
+        $pdo = $this->connection->pdo();
+
+        // Positional placeholders — we use the same value twice and PDO's
+        // EMULATE_PREPARES=false setting disallows reusing a named
+        // placeholder with native MySQL prepared statements (raises
+        // HY093 "Invalid parameter number" at execute time).
+        $stmt = $pdo->prepare(
+            'SELECT id, user, email, password_hash, role, failed_login_count, locked_until
+             FROM `account`
+             WHERE user = ? OR (email IS NOT NULL AND email = ?)
+             LIMIT 1'
+        );
+        $stmt->execute([$handle, $handle]);
+        $row = $stmt->fetch();
+
+        if (! is_array($row) || ! is_string($row['password_hash'] ?? null) || $row['password_hash'] === '') {
+            $this->equalizeFailureLatency();
+            return null;
+        }
+
+        // Honour an active lockout window. We deliberately do NOT count a
+        // login attempt while locked — that would let an attacker extend
+        // the lockout forever and effectively DOS the account.
+        if ($this->isLocked($row)) {
+            $this->equalizeFailureLatency();
+            return null;
+        }
+
+        if (! $this->hasher->verify($password, $row['password_hash'])) {
+            $this->recordFailure((int) $row['id'], (int) $row['failed_login_count']);
+            $this->equalizeFailureLatency();
+            return null;
+        }
+
+        // Success. Reset counters, persist the new hash if the cost moved,
+        // rotate the session id, and store the identity.
+        $this->recordSuccess((int) $row['id']);
+        if ($this->hasher->needsRehash($row['password_hash'])) {
+            $newHash = $this->hasher->hash($password);
+            $upd     = $pdo->prepare('UPDATE `account` SET password_hash = :h WHERE id = :id');
+            $upd->execute(['h' => $newHash, 'id' => $row['id']]);
+        }
+        $this->session->regenerate();
+        $this->session->put('account_id', (int) $row['id']);
+        $this->session->put('account_user', (string) $row['user']);
+        $this->session->put('account_role', (string) $row['role']);
+        return (int) $row['id'];
+    }
+
+    /**
+     * Tear down the current session. Cookie + server-side state both go.
+     */
+    public function logout(): void
+    {
+        $this->session->start();
+        $_SESSION = [];
+        if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_ACTIVE) {
+            $params = session_get_cookie_params();
+            // Expire the cookie at the client too — server-side destruction
+            // alone leaves a stale cookie that could be replayed if the
+            // session store re-hydrated it.
+            setcookie(session_name(), '', [
+                'expires'  => time() - 42_000,
+                'path'     => $params['path'],
+                'domain'   => $params['domain'] ?? '',
+                'secure'   => $params['secure'],
+                'httponly' => $params['httponly'],
+                'samesite' => $params['samesite'] ?? 'Lax',
+            ]);
+            session_destroy();
+        }
+    }
+
+    /**
+     * Look up the currently logged-in account, or null if anonymous. The
+     * lookup hits the DB so a locked / deleted account immediately loses
+     * access — we do not rely on the cached session role for authorisation.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function currentAccount(): ?array
+    {
+        $this->session->start();
+        $id = $this->session->get('account_id');
+        if (! is_int($id) || $id <= 0) {
+            return null;
+        }
+        $stmt = $this->connection->pdo()->prepare(
+            'SELECT id, user, email, role, last_login_at, locked_until
+             FROM `account` WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+        return is_array($row) ? $row : null;
+    }
+
+    /** @param array<string, mixed> $row */
+    private function isLocked(array $row): bool
+    {
+        $until = $row['locked_until'] ?? null;
+        if (! is_string($until) || $until === '') {
+            return false;
+        }
+        return strtotime($until) > time();
+    }
+
+    private function recordFailure(int $accountId, int $currentCount): void
+    {
+        $newCount = $currentCount + 1;
+        $lockedUntil = $newCount >= self::LOCKOUT_THRESHOLD
+            ? gmdate('Y-m-d H:i:s', time() + self::LOCKOUT_SECONDS)
+            : null;
+
+        $stmt = $this->connection->pdo()->prepare(
+            'UPDATE `account`
+             SET failed_login_count = :count,
+                 locked_until       = :until
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'count' => $newCount,
+            'until' => $lockedUntil,
+            'id'    => $accountId,
+        ]);
+    }
+
+    private function recordSuccess(int $accountId): void
+    {
+        $stmt = $this->connection->pdo()->prepare(
+            'UPDATE `account`
+             SET failed_login_count = 0,
+                 locked_until       = NULL,
+                 last_login_at      = :now
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'now' => gmdate('Y-m-d H:i:s'),
+            'id'  => $accountId,
+        ]);
+    }
+
+    /**
+     * Sleep for a small random duration to flatten the timing signature
+     * of failure responses. This is NOT a substitute for password_verify
+     * being constant-time — it covers the surrounding lookup + DB writes.
+     */
+    private function equalizeFailureLatency(): void
+    {
+        usleep(random_int(150_000, 250_000)); // 150–250 ms
+    }
+}

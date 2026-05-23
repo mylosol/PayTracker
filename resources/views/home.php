@@ -1,11 +1,15 @@
 <?php
 /**
- * @var string $appName
- * @var string $env
- * @var string $version
+ * @var string                       $appName
+ * @var string                       $env
+ * @var string                       $version
+ * @var array<string,mixed>|null     $account
+ * @var string                       $csrfToken
+ * @var string                       $base
  */
 layout('layouts/app');
-$isProduction = $env === 'production';
+$isProduction  = $env === 'production';
+$authenticated = is_array($account);
 ?>
 <div class="card">
     <h1><?= e($appName) ?> <span class="pill <?= $isProduction ? 'ok' : 'warn' ?>"><?= e($env) ?></span></h1>
@@ -20,11 +24,48 @@ $isProduction = $env === 'production';
     <p>Build: <code><?= e($version) ?></code></p>
 </div>
 
+<?php if ($authenticated): ?>
+    <div class="card">
+        <h2>Welcome, <?= e((string) $account['user']) ?> <span class="pill ok">signed in</span></h2>
+        <p class="muted">
+            Role: <code><?= e((string) $account['role']) ?></code>
+            <?php if (! empty($account['last_login_at'])): ?>
+                &middot; Last login: <code><?= e((string) $account['last_login_at']) ?> UTC</code>
+            <?php endif; ?>
+        </p>
+        <p>The modernized dashboard surfaces will land here as feature
+            branches port them off the legacy app.</p>
+
+        <form method="post" action="<?= e($base) ?>/logout" style="margin-top:1rem;">
+            <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+            <button type="submit"
+                    style="background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;font:inherit;cursor:pointer;">
+                Sign out
+            </button>
+        </form>
+    </div>
+<?php else: ?>
+    <div class="card">
+        <h2>Sign in to continue</h2>
+        <p class="muted">
+            Modern PayTracker requires a per-account login — the shared
+            password is retired. If you don't have an account on this
+            channel yet, an administrator can seed one for you.
+        </p>
+        <p>
+            <a href="<?= e($base) ?>/login"
+               style="display:inline-block;background:var(--accent);color:#fff;padding:.5rem 1.2rem;border-radius:6px;text-decoration:none;">
+                Sign in &rarr;
+            </a>
+        </p>
+    </div>
+<?php endif; ?>
+
 <div class="card">
     <h2>Where to go next</h2>
     <ul>
-        <li><a href="/health">/health</a> &mdash; runtime, environment and database probe.</li>
-        <li><a href="/health.json">/health.json</a> &mdash; same probe, machine-readable.</li>
+        <li><a href="<?= e($base) ?>/health">/health</a> &mdash; runtime, environment and database probe.</li>
+        <li><a href="<?= e($base) ?>/health.json">/health.json</a> &mdash; same probe, machine-readable.</li>
     </ul>
     <p class="muted">
         QA testers: the browser-based walkthrough lives in

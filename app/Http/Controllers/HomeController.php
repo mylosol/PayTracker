@@ -4,25 +4,41 @@ declare(strict_types=1);
 
 namespace PayTracker\Http\Controllers;
 
+use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Security\Csrf;
 
 /**
- * HomeController — preview landing page.
+ * HomeController — the landing surface.
  *
- * On the feature/preview channel this page acts as a control surface for
- * stakeholders: it confirms the build is live, names the active environment,
- * and links to the QA test plan. It deliberately does NOT query production
- * data (the spec mandates production isolation during preview validation).
+ * Two states:
+ *   - Anonymous: render a public marketing card and a "Sign in" link.
+ *   - Authenticated: render the (still skeletal) dashboard with the
+ *     account handle and a CSRF-armed logout form.
+ *
+ * Both views share the same layout so the chrome (header, footer, version
+ * marker) is identical regardless of auth state.
  */
 final class HomeController extends Controller
 {
+    public function __construct(
+        private readonly AuthService $auth,
+        private readonly Csrf $csrf,
+    ) {
+    }
+
     public function index(Request $request): Response
     {
+        $account = $this->auth->currentAccount();
+
         return $this->view('home', [
-            'appName' => (string) config('app.name', 'PayTracker'),
-            'env'     => (string) config('app.env', 'production'),
-            'version' => $this->version(),
+            'appName'   => (string) config('app.name', 'PayTracker'),
+            'env'       => (string) config('app.env', 'production'),
+            'version'   => $this->version(),
+            'account'   => $account,
+            'csrfToken' => $this->csrf->token(),
+            'base'      => $this->base($request),
         ]);
     }
 
@@ -46,5 +62,12 @@ final class HomeController extends Controller
             return 'unknown';
         }
         return isset($decoded['patch']) ? 'patch ' . (string) $decoded['patch'] : 'unknown';
+    }
+
+    private function base(Request $request): string
+    {
+        $script = (string) ($request->server['SCRIPT_NAME'] ?? '');
+        $prefix = (string) preg_replace('#/(?:public/)?index\.php$#', '', $script);
+        return rtrim($prefix, '/');
     }
 }

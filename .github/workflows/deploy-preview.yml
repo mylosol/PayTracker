@@ -165,6 +165,18 @@ jobs:
           EOF
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/preview/.env"
 
+      # Run pending DB migrations on the remote using the live preview .env.
+      # Migrations are additive-only by policy (see app/Console/Migrator.php)
+      # so re-running is safe: the tracking table skips anything already
+      # applied. If a migration fails, the deploy fails — production traffic
+      # is unaffected because the Pi is still authoritative for paytracker.xyz.
+      - name: Apply database migrations on remote
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker/preview && php scripts/migrate.php"
+
       - name: Smoke test (preview /health.json)
         run: |
           set -euo pipefail
