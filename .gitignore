@@ -7,12 +7,10 @@ jspm_packages/
 .env.local
 .env.*.local
 *.env
-<<<<<<< HEAD
 
-=======
+# Specific PHP Application Secrets
 db.php
 googleMapsAPI.php
->>>>>>> 0d6678f8d81bad7c4f04a278fe0d6416ec90b736
 
 # Operating System system files
 .DS_Store
@@ -22,8 +20,4 @@ desktop.ini
 # Log files and debug dumps
 *.log
 npm-debug.log*
-<<<<<<< HEAD
 yarn-debug.log*
-=======
-yarn-debug.log*
->>>>>>> 0d6678f8d81bad7c4f04a278fe0d6416ec90b736
