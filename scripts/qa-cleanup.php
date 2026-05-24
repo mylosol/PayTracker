@@ -9,8 +9,8 @@ declare(strict_types=1);
  *
  *   1. "Qa Test ###, ST" rows in the `city` table from Section 6 of the
  *      test plan. The naming convention (documented in test_plan.md) makes
- *      these unambiguous, so we delete them by a strict LIKE pattern that
- *      cannot match legitimate city names.
+ *      these unambiguous, so the default delete pattern cannot match
+ *      legitimate city names.
  *
  *   2. Lockout counters on accounts that tested Section 5d — the legitimate
  *      tester is now staring at a 15-minute lockout. We can reset
@@ -23,11 +23,19 @@ declare(strict_types=1);
  * is double-guarded: APP_ENV=production refuses unless --confirm-production
  * is also passed, matching the safety pattern already in set-password.php.
  *
+ * Custom patterns: a tester who forgot the "Qa Test " convention can pass
+ * --pattern='Their Prefix%' (or any SQL LIKE pattern) to clean rows they
+ * named differently. The pattern is bound as a parameter (no SQL injection
+ * risk) and is rejected if it would match overly-broadly (must contain at
+ * least 3 non-wildcard chars). The default pattern is "Qa Test %" — that
+ * still applies when --pattern is NOT passed.
+ *
  * Usage:
- *   php scripts/qa-cleanup.php                          # dry-run report
- *   php scripts/qa-cleanup.php --apply                  # apply on preview
- *   php scripts/qa-cleanup.php --apply --cities         # only QA cities
- *   php scripts/qa-cleanup.php --apply --unlock         # only lockouts
+ *   php scripts/qa-cleanup.php                              # dry-run report
+ *   php scripts/qa-cleanup.php --apply                      # apply on preview
+ *   php scripts/qa-cleanup.php --apply --cities             # only cities
+ *   php scripts/qa-cleanup.php --apply --unlock             # only lockouts
+ *   php scripts/qa-cleanup.php --apply --pattern='Test City%'  # custom prefix
  *   php scripts/qa-cleanup.php --apply --confirm-production
  */
 
@@ -47,6 +55,28 @@ $onlyCities        = in_array('--cities', $flags, true);
 $onlyUnlock        = in_array('--unlock', $flags, true);
 $confirmProduction = in_array('--confirm-production', $flags, true);
 
+$customPattern = null;
+foreach ($flags as $f) {
+    if (str_starts_with($f, '--pattern=')) {
+        $customPattern = substr($f, strlen('--pattern='));
+        break;
+    }
+}
+
+// Reject patterns that would sweep too broadly. The check is intentionally
+// strict: at least 3 literal (non-wildcard) characters must remain after
+// stripping `%` and `_`. This makes `%`, `_`, `%a%`, and `%T%` all refused
+// while still allowing reasonable prefixes like `Test City%` or `Foo Bar%`.
+if ($customPattern !== null) {
+    $literal = (string) preg_replace('/[%_]/', '', $customPattern);
+    if (strlen($literal) < 3) {
+        fwrite(STDERR, "Refusing --pattern='{$customPattern}': must contain at least 3 non-wildcard characters.\n");
+        exit(3);
+    }
+}
+
+$pattern = $customPattern ?? 'Qa Test %';
+
 // If neither --cities nor --unlock is passed, do both. Mirrors the common
 // "I just finished a QA pass, please tidy up" intent.
 $doCities = $onlyCities || ! $onlyUnlock;
@@ -58,7 +88,7 @@ if (config('app.env') === 'production' && $apply && ! $confirmProduction) {
 }
 
 $mode = $apply ? 'APPLY' : 'DRY-RUN';
-echo "qa-cleanup [{$mode}] env=" . (string) config('app.env') . "\n";
+echo "qa-cleanup [{$mode}] env=" . (string) config('app.env') . " pattern='{$pattern}'\n";
 
 try {
     /** @var Connection $connection */
@@ -67,22 +97,20 @@ try {
 
     // --- 1. QA-test cities ----------------------------------------------
     if ($doCities) {
-        // Strict pattern: starts with literal "Qa Test " followed by one or
-        // more chars. Cannot match a real city.
-        $find = $pdo->prepare("SELECT id, city FROM `city` WHERE city LIKE 'Qa Test %'");
-        $find->execute();
+        $find = $pdo->prepare('SELECT id, city FROM `city` WHERE city LIKE ?');
+        $find->execute([$pattern]);
         $rows = $find->fetchAll();
 
         if ($rows === []) {
-            echo "  cities: no QA test rows found.\n";
+            echo "  cities: no rows match '{$pattern}'.\n";
         } else {
-            echo "  cities: " . count($rows) . " QA test row(s) to remove:\n";
+            echo "  cities: " . count($rows) . " row(s) match '{$pattern}':\n";
             foreach ($rows as $r) {
                 printf("    - id=%d  city=%s\n", (int) $r['id'], (string) $r['city']);
             }
             if ($apply) {
-                $del = $pdo->prepare("DELETE FROM `city` WHERE city LIKE 'Qa Test %'");
-                $del->execute();
+                $del = $pdo->prepare('DELETE FROM `city` WHERE city LIKE ?');
+                $del->execute([$pattern]);
                 echo "    → deleted.\n";
             }
         }

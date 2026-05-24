@@ -292,6 +292,13 @@ the list.`** No second row is inserted.
 > Default mode is dry-run; APP_ENV=production refuses without
 > `--confirm-production`. Run this at the end of every QA pass so the
 > production list stays tidy when the branch eventually merges.
+>
+> If you accidentally used a different naming convention (e.g.
+> `Test City, FL`), pass your own prefix:
+> `php scripts/qa-cleanup.php --apply --pattern='Test City%'`. The
+> pattern is parameter-bound (no SQL injection) and the script
+> refuses patterns with fewer than 3 literal characters so a stray
+> `%` can't sweep the whole table.
 
 ---
 
