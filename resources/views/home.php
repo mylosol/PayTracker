@@ -36,6 +36,13 @@ $authenticated = is_array($account);
         <p>The modernized dashboard surfaces will land here as feature
             branches port them off the legacy app.</p>
 
+        <p>
+            <a href="<?= e($base) ?>/locations"
+               style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                Manage locations &rarr;
+            </a>
+        </p>
+
         <form method="post" action="<?= e($base) ?>/logout" style="margin-top:1rem;">
             <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
             <button type="submit"

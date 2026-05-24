@@ -90,4 +90,18 @@ final class Request
     {
         return strcasecmp($this->method, $method) === 0;
     }
+
+    /**
+     * Deploy-relative base path. `""` in production, `"/preview"` on the
+     * preview channel. Controllers prepend this to absolute redirect
+     * targets so a single route definition works identically across both
+     * channels without env-var plumbing.
+     *
+     * The derivation mirrors `fromGlobals()` so the value is consistent
+     * with how the router strips the prefix off `path`.
+     */
+    public function basePath(): string
+    {
+        return self::derivePrefix((string) ($this->server['SCRIPT_NAME'] ?? ''));
+    }
 }
