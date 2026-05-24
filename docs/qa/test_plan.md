@@ -280,10 +280,13 @@ is preserved in the form (so you don't have to retype it).
 **Expected:** red banner reads **`"Qa Test 1820, FL" is already in
 the list.`** No second row is inserted.
 
-> Cleanup: ask engineering to delete your QA-test rows via
-> `DELETE FROM city WHERE city LIKE 'Qa Test %'` on the preview DB
-> when you're done — keeps the production list tidy when this branch
-> eventually merges.
+> Cleanup: there's a dedicated script for this. From the preview shell:
+> `php scripts/qa-cleanup.php` (dry-run, lists what it would do)
+> then `php scripts/qa-cleanup.php --apply` to actually delete the
+> `Qa Test ...` rows and clear any lockout counters left by Section 5d.
+> Default mode is dry-run; APP_ENV=production refuses without
+> `--confirm-production`. Run this at the end of every QA pass so the
+> production list stays tidy when the branch eventually merges.
 
 ---
 
