@@ -255,29 +255,34 @@ is preserved in the form (so you don't have to retype it).
 
 ### 6d. A valid submission inserts the city
 
-1. Type a city name you know is NOT in the legacy list yet — to keep
-   test data identifiable, use the convention **`Qa Test ###, FL`**
-   where `###` is a short timestamp (e.g. `Qa Test 1820, FL` for
-   18:20). Avoid real city names so we don't pollute production data.
+1. Type a city name you know is NOT in the legacy list yet. To keep
+   test data identifiable AND respect the digits-forbidden rule from
+   step 6c, use the convention **`Qa Test <letter-word>, FL`** —
+   pick any NATO phonetic letter that other testers haven't used
+   recently (`Alpha`, `Bravo`, `Charlie`, `Delta`, `Echo`, etc.).
+   Example: **`Qa Test Echo, FL`**. Avoid real city names so we
+   don't pollute production data.
 2. Pick a state.
 3. Click **Add city**.
 
 **Expected:**
 
 - You land on `/preview/locations`.
-- A green banner reads **`Added "Qa Test 1820, FL" (id NNN).`**
+- A green banner reads **`Added "Qa Test Echo, FL" (id NNN).`**
 - Scrolling the list, the new city appears alphabetically.
 
 **Fail conditions:**
 
 - 500 page — copy and flag.
-- Banner says the city already exists when it shouldn't.
+- Banner says the city already exists when it shouldn't (means a
+  previous tester used the same NATO letter and didn't clean up —
+  pick a different one and try again).
 
 ### 6e. Duplicate detection works
 
 1. Submit the EXACT same city name + state again.
 
-**Expected:** red banner reads **`"Qa Test 1820, FL" is already in
+**Expected:** red banner reads **`"Qa Test Echo, FL" is already in
 the list.`** No second row is inserted.
 
 > Cleanup: there's a dedicated script for this. From the preview shell:
