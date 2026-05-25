@@ -302,7 +302,94 @@ the list.`** No second row is inserted.
 
 ---
 
-## 7. Production is untouched
+## 7. City distances (normalized matrix)
+
+> Requires sign-in (Section 5b).
+
+This section verifies the **`city_distances`** backfill — a one-time
+migration that copies the legacy column-per-city matrix tables
+(`largeMiles` / `pcola_largeMiles`) into a relational table. The new
+table is read-only for now; writes will land in a future branch.
+
+### 7a. The page loads and reports plausible counts
+
+1. From the home page, click **City distances →**.
+
+**Expected:**
+
+- URL changes to `/preview/distances`.
+- A **"Backfill summary"** card shows:
+    - Total rows: at least a few hundred (depends on legacy density —
+      the matrix is sparse, but should not be zero).
+    - Unique (from, to) pairs: a similar number, often equal to total
+      when no pair appears in both source tables.
+    - Distinct cities referenced: somewhere between 50 and 150.
+    - **By source:** two lines — one for `largeMiles` and one for
+      `pcola_largeMiles`, each with a non-zero count.
+
+**Fail conditions:**
+
+- Total rows is `0` and the red banner about a missing migration
+  appears. The backfill migration didn't run; check `_migrations` on
+  the server.
+
+### 7b. Sample table looks right
+
+Below the summary, the page shows the first 25 rows alphabetically.
+
+**Expected:**
+
+- Each row has a city name in **From** and **To** columns, a positive
+  integer in **Miles**, and either `largeMiles` or `pcola_largeMiles`
+  in the **Source** column.
+- City names include a state code (e.g. `Andalusia, AL`,
+  `Bonifay, FL`) — the backfill auto-registered these in the `city`
+  table from the matrix labels.
+
+**Fail conditions:**
+
+- A row shows zero miles, NULL anywhere, or a city name with double
+  spaces or a stray space before the comma (the backfill is supposed
+  to normalize these — flag if you spot one).
+- The `From` and `To` columns contain the same city (self-distances
+  should have been skipped).
+
+### 7c. Pair lookup works
+
+1. From the sample table, copy one **From** city and one **To** city.
+2. Paste them into the lookup form's **From** and **To** fields.
+3. Click **Look up**.
+
+**Expected:**
+
+- A new section appears below the form listing the miles + source for
+  that pair. The miles value matches the row in the sample table.
+- If the same pair appears in both source tables (rare), both lines
+  are listed.
+
+4. Now type a pair you know is *not* in the list (e.g. `Foo, ZZ` →
+   `Bar, ZZ`) and click **Look up**.
+
+**Expected:**
+
+- The form returns **"No recorded distance for …"** — confirming the
+  lookup query is real, not a hardcoded list.
+
+### 7d. Auth gate still applies
+
+1. Sign out.
+2. Manually type `https://paytracker.xyz/preview/distances` into the
+   address bar.
+
+**Expected:** redirected to `/preview/login`. The distances page is
+behind the same auth gate as `/locations`.
+
+> No cleanup needed for this section — it's purely a read-only
+> verification page.
+
+---
+
+## 8. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -321,7 +408,7 @@ the list.`** No second row is inserted.
 
 ---
 
-## 8. Security headers are present (optional — engineer-assisted)
+## 9. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

@@ -41,6 +41,11 @@ $authenticated = is_array($account);
                style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
                 Manage locations &rarr;
             </a>
+            &nbsp;
+            <a href="<?= e($base) ?>/distances"
+               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                City distances &rarr;
+            </a>
         </p>
 
         <form method="post" action="<?= e($base) ?>/logout" style="margin-top:1rem;">
