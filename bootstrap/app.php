@@ -57,6 +57,6 @@ $app->bind(Router::class, static function (): Router {
     return $router;
 });
 
-$app->bind(Kernel::class, static fn (Application $app): Kernel => new Kernel($app, $app->make(Router::class)));
+$app->bind(Kernel::class, static fn (Application $app): Kernel => new Kernel($app->make(Router::class)));
 
 return $app;
