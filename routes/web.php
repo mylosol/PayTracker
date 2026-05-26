@@ -5,6 +5,7 @@ declare(strict_types=1);
 use PayTracker\Http\Controllers\DistancesController;
 use PayTracker\Http\Controllers\HealthController;
 use PayTracker\Http\Controllers\HomeController;
+use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
 use PayTracker\Http\Router;
@@ -34,4 +35,7 @@ return static function (Router $router): void {
 
     // --- City distances (signed-in, read-only for now) ----------------
     $router->get('/distances',     [DistancesController::class, 'index']);
+
+    // --- Driver loads (signed-in, read-only for now) ------------------
+    $router->get('/loads',         [LoadsController::class, 'index']);
 };
