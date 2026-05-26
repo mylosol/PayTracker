@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PayTracker\Models;
 
 use PayTracker\Database\Model;
+use PDO;
 
 /**
  * `driver_loads` — relational replacement for the per-driver `loadsNN`
