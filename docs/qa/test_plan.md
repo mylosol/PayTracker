@@ -389,7 +389,86 @@ behind the same auth gate as `/locations`.
 
 ---
 
-## 8. Production is untouched
+## 8. Driver loads (normalized per-driver tables)
+
+> Requires sign-in (Section 5b).
+
+This section verifies the **`driver_loads`** backfill — a migration that
+copies the 21 legacy `loadsNN` per-driver tables (where `N` is the
+driver's `account.id`) into a single relational table keyed by
+`driver_id` + `frtl`. The new table is read-only for now.
+
+### 8a. The page loads and reports plausible counts
+
+1. From the home page, click **Driver loads →**.
+
+**Expected:**
+
+- URL changes to `/preview/loads`.
+- **"Backfill summary"** card shows:
+    - Total rows: in the low thousands (the 21 legacy tables hold
+      around 3,300 rows combined, dominated by one driver with ~2,500).
+    - Drivers with at least one load: between 10 and 20 — most legacy
+      `loadsNN` tables are empty, so this number is smaller than the
+      table count.
+    - Date range: oldest is several years ago; newest is within the
+      last few weeks (depending on legacy app usage).
+
+**Fail conditions:**
+
+- Total rows is `0` and the red banner about a missing migration
+  appears.
+
+### 8b. Per-driver counts look right
+
+The next card lists each driver with at least one load, sorted by row
+count.
+
+**Expected:**
+
+- The top row has a high count (the most active driver). The handle
+  next to the driver_id is an email-shaped string from the `account`
+  table.
+- One row may show **`(orphan)`** instead of a handle — that's the
+  legacy `loads65` data preserved with no matching account row. Not
+  a bug; flagged as a follow-up cleanup concern.
+
+### 8c. Spot-check against a legacy table
+
+Pick any driver_id from the per-driver list. Click **view recent →**
+next to it.
+
+**Expected:**
+
+- A new card appears showing the 25 most recent loads for that driver.
+- Each row has a 6–7 digit FRTL number, a date, the dash-separated
+  `variables` / `loadinfo` / `paid` legacy encodings, and NP / OP
+  amounts.
+
+Engineer-assisted parity check (optional but reassuring):
+
+```bash
+# On the preview shell — replace <id> with the driver_id you picked.
+mysql -h <host> -u <user> -p<pw> paytracking -e \
+  "SELECT (SELECT COUNT(*) FROM loads<id>) AS legacy,
+          (SELECT COUNT(*) FROM driver_loads WHERE driver_id = <id>) AS modern"
+```
+
+Both numbers should match exactly (the backfill is a verbatim copy).
+
+### 8d. Auth gate still applies
+
+1. Sign out.
+2. Manually type `https://paytracker.xyz/preview/loads` into the
+   address bar.
+
+**Expected:** redirected to `/preview/login`.
+
+> No cleanup needed — read-only verification page.
+
+---
+
+## 9. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -408,7 +487,7 @@ behind the same auth gate as `/locations`.
 
 ---
 
-## 9. Security headers are present (optional — engineer-assisted)
+## 10. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 
