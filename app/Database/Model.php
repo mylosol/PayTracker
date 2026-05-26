@@ -30,7 +30,17 @@ abstract class Model
     }
 
     /**
-     * @param array<string, scalar|null> $bindings
+     * Execute a prepared statement against the live connection.
+     *
+     * `$bindings` accepts BOTH named (string-keyed) parameters AND positional
+     * (int-keyed) parameters — PDO's native preparation mode requires
+     * positional binding when a parameter would otherwise need to repeat
+     * the same name in a query (MySQL's native prepared statements don't
+     * support repeated named placeholders). The widened union type
+     * (`array<int|string, ...>`) reflects that — callers may pass either
+     * form depending on the query shape.
+     *
+     * @param array<int|string, scalar|null> $bindings
      */
     protected function prepared(string $sql, array $bindings = []): PDOStatement
     {

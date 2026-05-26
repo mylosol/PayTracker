@@ -113,13 +113,17 @@ final class AuthService
             // Expire the cookie at the client too — server-side destruction
             // alone leaves a stale cookie that could be replayed if the
             // session store re-hydrated it.
+            // `session_get_cookie_params()` is documented to always return
+            // all of these keys (PHP 7.3+), so the `??` defaults previously
+            // here on `domain` and `samesite` were dead code. phpstan flags
+            // them and is correct.
             setcookie(session_name(), '', [
                 'expires'  => time() - 42_000,
                 'path'     => $params['path'],
-                'domain'   => $params['domain'] ?? '',
+                'domain'   => $params['domain'],
                 'secure'   => $params['secure'],
                 'httponly' => $params['httponly'],
-                'samesite' => $params['samesite'] ?? 'Lax',
+                'samesite' => $params['samesite'],
             ]);
             session_destroy();
         }

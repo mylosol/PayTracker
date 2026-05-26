@@ -51,8 +51,12 @@ if (! function_exists('env')) {
      */
     function env(string $key, mixed $default = null): mixed
     {
+        // `getenv()` returns `string|false` and the superglobal lookups are
+        // either set (any scalar) or unset (the `??` skips them) — so the
+        // final value can never be literally `null`. We only need to bail
+        // on the `false` (missing) and `''` (empty) sentinels.
         $value = $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key);
-        if ($value === false || $value === null || $value === '') {
+        if ($value === false || $value === '') {
             return $default;
         }
         return match (strtolower((string) $value)) {
