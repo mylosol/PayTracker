@@ -56,8 +56,11 @@ jobs:
       - name: Validate composer manifest
         run: composer validate --strict
 
-      - name: Install PHP dependencies
-        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+      # Install with dev dependencies so phpstan is available below.
+      # We re-install --no-dev right before rsync so the deployed vendor/
+      # tree stays lean.
+      - name: Install PHP dependencies (with dev for static analysis)
+        run: composer install --prefer-dist --no-interaction --no-progress
 
       - name: Syntax-check all new PHP sources
         run: |
@@ -73,6 +76,20 @@ jobs:
       # the live /health.json smoke at the end of the workflow.
       - name: Validate PSR-4 autoload mapping
         run: composer dump-autoload --optimize --strict-psr --no-interaction
+
+      # Static analysis. Catches the class of bug that bare-class-reference
+      # inside a method body produces (e.g. forgetting `use PDO;` before
+      # `PDO::FETCH_ASSOC`), which `php -l` and PSR-4 validation both miss.
+      # Config in phpstan.neon; level can be bumped over time.
+      - name: Static analysis (phpstan)
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress --error-format=github
+
+      # Strip dev dependencies before rsync so the deployed vendor/ tree
+      # doesn't carry phpstan, phpunit, and their transitive deps. We
+      # already proved the build is clean above; reinstalling without dev
+      # deps is fast (composer cache is hot).
+      - name: Re-install without dev dependencies (for deploy)
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
       - name: Install SSH key
         run: |
