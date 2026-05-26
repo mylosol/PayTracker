@@ -1,0 +1,174 @@
+# PayTracker — preview-channel deployment.
+#
+# Trigger:  push to any `feature/**` branch
+# Target:   /home/robshe48/paytracker/preview  on DreamHost
+# URL:      https://paytracker.xyz/preview/
+#
+# Goal of the preview channel: let stakeholders validate a branch end-to-end
+# without ever touching production code, files, or session cookies. Because
+# the deploy lives at a distinct URL path (`/preview/`) the session cookie
+# automatically scopes away from the production root.
+#
+# The preview deploy WILL overwrite anything previously deployed at the
+# preview path — that is by design; only one branch is "previewed live" at
+# a time. Re-running the workflow from a different feature branch swaps it
+# in.
+#
+# Secrets required (same set as production):
+#   DH_SSH_HOST  DH_SSH_USER  DH_SSH_PRIVATE_KEY  DH_SSH_KNOWN_HOSTS
+#   APP_KEY  SQL_HOST  SQL_DB  SQL_UN  SQL_PW  MAPS_API_PAT
+
+name: Deploy preview
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to DreamHost (preview)
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Pin the CI runtime to the exact PHP version DreamHost shared hosting
+      # ships (8.2). Linting and platform_check then catch any 8.3-only
+      # syntax before it hits the server. Bump in lockstep if/when DreamHost
+      # rolls 8.3 to this shared host.
+      - name: Set up PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo, pdo_mysql, mbstring, json
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate composer manifest
+        run: composer validate --strict
+
+      - name: Install PHP dependencies
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+      - name: Syntax-check all new PHP sources
+        run: |
+          set -euo pipefail
+          find app bootstrap config public routes -name '*.php' -print0 \
+            | xargs -0 -n1 php -l > /dev/null
+
+      # PSR-4 conformance check. `--strict-psr` makes composer fail when any
+      # class's namespace doesn't match its file location. This catches
+      # rename/typo bugs before they reach the server. It's lightweight and
+      # doesn't try to instantiate classes (which would risk false positives
+      # from autoload side-effects). LSP / load-time fatals are caught by
+      # the live /health.json smoke at the end of the workflow.
+      - name: Validate PSR-4 autoload mapping
+        run: composer dump-autoload --optimize --strict-psr --no-interaction
+
+      - name: Install SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DH_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Ensure preview directory exists on remote
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "mkdir -p /home/robshe48/paytracker/preview"
+
+      # `--delete` keeps the preview tree clean; we exclude the legacy root
+      # files the rebuild does not need so the preview shows only the modern
+      # stack. Once the modern app fully supersedes the legacy code these
+      # exclusions can be tightened or removed.
+      - name: Rsync repository to preview path
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          set -euo pipefail
+          rsync -avz --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='tests/' \
+            --exclude='.PayTracker/' \
+            --exclude='.env' \
+            --exclude='.env.local' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
+            ./ "$REMOTE:/home/robshe48/paytracker/preview/"
+
+      # Promote the preview-specific root .htaccess into place. The repo
+      # version is intentionally named differently so it stays inert during
+      # local development.
+      - name: Activate preview .htaccess
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cp /home/robshe48/paytracker/preview/deploy/preview.htaccess /home/robshe48/paytracker/preview/.htaccess"
+
+      - name: Write preview .env on remote
+        env:
+          REMOTE:    ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          APP_KEY:   ${{ secrets.APP_KEY }}
+          DB_HOST:   ${{ secrets.SQL_HOST }}
+          DB_NAME:   ${{ secrets.SQL_DB }}
+          DB_USER:   ${{ secrets.SQL_UN }}
+          DB_PASS:   ${{ secrets.SQL_PW }}
+          MAPS_KEY:  ${{ secrets.MAPS_API_PAT }}
+          BRANCH:    ${{ github.ref_name }}
+          COMMIT:    ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "cat > /home/robshe48/paytracker/preview/.env" <<EOF
+          APP_ENV=preview
+          APP_DEBUG=true
+          APP_NAME="PayTracker (preview: ${BRANCH})"
+          APP_URL=https://paytracker.xyz/preview
+          APP_TIMEZONE=America/Chicago
+          APP_KEY=${APP_KEY}
+
+          # The preview channel reads the same database as production by
+          # default — read-only flows are safe. Once write flows arrive,
+          # point this at a sandboxed schema to keep production data
+          # completely untouched, per the spec's isolation requirement.
+          DB_HOST=${DB_HOST}
+          DB_PORT=3306
+          DB_DATABASE=${DB_NAME}
+          DB_USERNAME=${DB_USER}
+          DB_PASSWORD=${DB_PASS}
+          DB_CHARSET=utf8mb4
+
+          SESSION_NAME=paytracker_preview_session
+          SESSION_LIFETIME_MIN=120
+          SESSION_SECURE_COOKIE=true
+          SESSION_SAMESITE=Lax
+
+          GOOGLE_MAPS_API_KEY=${MAPS_KEY}
+
+          # Build provenance — surfaced on /health for traceability.
+          BUILD_BRANCH=${BRANCH}
+          BUILD_COMMIT=${COMMIT}
+          EOF
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/preview/.env"
+
+      - name: Smoke test (preview /health.json)
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 \
+            "https://paytracker.xyz/preview/health.json" \
+            | tee preview-health.json
+          test "$(jq -r .database.ok preview-health.json)" = "true"

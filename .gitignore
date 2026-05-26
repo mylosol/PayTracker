@@ -1,23 +1,39 @@
-# Dependency folders (never upload these, they can be re-installed)
+# --- Dependency folders ------------------------------------------------------
 node_modules/
 jspm_packages/
+vendor/
 
-# Environment variables & API Keys (CRITICAL: Keep these private!)
+# --- Environment files (CRITICAL: never commit secrets) ----------------------
 .env
 .env.local
 .env.*.local
 *.env
+!.env.example
 
-# Specific PHP Application Secrets
+# --- Legacy PHP secrets (still present in the unmodernized root) ------------
 db.php
+include/db.php
 googleMapsAPI.php
+include/googleMapsAPI.php
 
-# Operating System system files
+# --- Build / runtime artefacts ----------------------------------------------
+storage/logs/*.log
+storage/cache/*
+!storage/logs/.gitkeep
+!storage/cache/.gitkeep
+
+# --- OS metadata ------------------------------------------------------------
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Log files and debug dumps
+# --- Log files and debug dumps ----------------------------------------------
 *.log
 npm-debug.log*
 yarn-debug.log*
+
+# --- IDE / editor -----------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
