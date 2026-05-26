@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use PayTracker\Http\Controllers\DistancesController;
 use PayTracker\Http\Controllers\HealthController;
 use PayTracker\Http\Controllers\HomeController;
 use PayTracker\Http\Controllers\LocationController;
@@ -30,4 +31,7 @@ return static function (Router $router): void {
     $router->get('/locations',     [LocationController::class, 'index']);
     $router->get('/locations/new', [LocationController::class, 'create']);
     $router->post('/locations',    [LocationController::class, 'store']);
+
+    // --- City distances (signed-in, read-only for now) ----------------
+    $router->get('/distances',     [DistancesController::class, 'index']);
 };
