@@ -19,12 +19,18 @@ test.describe('city distances', () => {
         await page.goto('distances');
 
         await expect(page.getByRole('heading', { name: /city distances/i })).toBeVisible();
-        // Both legacy matrices must have contributed rows.
-        await expect(page.getByText(/largeMiles/)).toBeVisible();
-        await expect(page.getByText(/pcola_largeMiles/)).toBeVisible();
+
+        // Scope source-name assertions to the "Backfill summary" card. The
+        // page also renders 25 sample rows, each listing the source in its
+        // own cell — a page-wide getByText match would resolve to 10+
+        // elements and toBeVisible would (correctly) refuse to assert on
+        // a multi-element locator.
+        const summaryCard = page.locator('div.card', { hasText: /backfill summary/i });
+        await expect(summaryCard.getByText(/largeMiles/)).toHaveCount(1);
+        await expect(summaryCard.getByText(/pcola_largeMiles/)).toHaveCount(1);
 
         // "Total rows: <code>NNN</code>" — assert it's > 0.
-        const totalText = await page.getByText(/total rows:/i).textContent();
+        const totalText = await summaryCard.getByText(/total rows:/i).textContent();
         const total = Number(totalText?.match(/\d+/)?.[0] ?? '0');
         expect(total).toBeGreaterThan(0);
     });

@@ -57,7 +57,12 @@ test.describe('locations (add-city)', () => {
         await page.locator('#name').fill('Testville2');
         await page.locator('#state').selectOption('FL');
         await page.getByRole('button', { name: /add city/i }).click();
-        await expect(page.getByText(/letters, spaces, periods, hyphens/i)).toBeVisible();
+
+        // Match the flash banner specifically. The static helper text under
+        // the input ("Letters, spaces, periods, hyphens, apostrophes only.")
+        // would also satisfy a "letters, spaces, periods, hyphens" regex —
+        // anchor on the flash's unique opening phrase instead.
+        await expect(page.getByText(/city name may only contain/i)).toBeVisible();
         // Value preserved across the failed redirect — UX guarantee.
         await expect(page.locator('#name')).toHaveValue('Testville2');
     });
