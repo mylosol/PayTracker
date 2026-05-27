@@ -245,10 +245,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # `cache: 'npm'` would speed up subsequent runs, but it requires a
+          # committed package-lock.json. We don't have one yet — the first
+          # `npm install` on a fresh runner generates it. Skipping the
+          # cache directive is the trade-off; ~10s extra per run vs the
+          # complication of committing and maintaining the lockfile.
+          # Revisit when the JS dep list grows beyond a couple of packages.
 
       - name: Install Playwright dependencies
-        run: npm ci || npm install
+        run: npm install --no-audit --no-fund
 
       - name: Install Playwright browser (Chromium only)
         run: npx playwright install --with-deps chromium
