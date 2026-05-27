@@ -10,6 +10,15 @@ number, what you expected, and what you actually saw. Do **not** touch
 the production site (https://paytracker.xyz/) while testing — the preview
 lives at a separate URL specifically so production stays untouched.
 
+> **Automation status**: Sections 5–8 are now covered by a Playwright
+> suite that runs against the live preview channel on every deploy. CI
+> will fail the deploy if any of those sections regress, so by the time
+> you're walking this document the automated checks have already passed.
+> Your job is the visual / judgement-based parts — layout, typography,
+> "does this read right to a real user" — that automation can't replace.
+> The Playwright suite lives in `tests/e2e/` if you want to read or
+> extend it.
+
 ---
 
 ## What you'll need

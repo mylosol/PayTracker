@@ -17,6 +17,13 @@
 # Secrets required (same set as production):
 #   DH_SSH_HOST  DH_SSH_USER  DH_SSH_PRIVATE_KEY  DH_SSH_KNOWN_HOSTS
 #   APP_KEY  SQL_HOST  SQL_DB  SQL_UN  SQL_PW  MAPS_API_PAT
+#
+# Optional (Playwright E2E tests skip gracefully when unset):
+#   QA_TEST_USER       login handle for the seeded preview test account
+#                      (e.g. mylosol@gmail.com)
+#   QA_TEST_PASSWORD   the password the deploy seeds into that account
+#                      via scripts/set-password.php on every run, AND
+#                      the password Playwright uses to log in
 
 name: Deploy preview
 
@@ -121,6 +128,12 @@ jobs:
             --exclude='.github/' \
             --exclude='node_modules/' \
             --exclude='tests/' \
+            --exclude='playwright-report/' \
+            --exclude='test-results/' \
+            --exclude='blob-report/' \
+            --exclude='playwright.config.ts' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
             --exclude='.PayTracker/' \
             --exclude='.env' \
             --exclude='.env.local' \
@@ -194,6 +207,27 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
             "cd /home/robshe48/paytracker/preview && php scripts/migrate.php"
 
+      # Sync the QA test account's password from GH secrets so the Playwright
+      # suite below can log in with a known-good credential. The password
+      # set here lives only on the preview channel — it is NEVER set on
+      # production. Gating happens at the shell level (not via a GH Actions
+      # `if:` expression) because `${{ secrets.X != '' }}` doesn't evaluate
+      # reliably when the secret is masked; checking the env var directly
+      # in bash is straightforward and explicit.
+      - name: Sync QA test account password (preview only)
+        env:
+          REMOTE:  ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          QA_USER: ${{ secrets.QA_TEST_USER }}
+          QA_PASS: ${{ secrets.QA_TEST_PASSWORD }}
+        run: |
+          if [ -z "$QA_USER" ] || [ -z "$QA_PASS" ]; then
+            echo "QA_TEST_USER / QA_TEST_PASSWORD not configured in repo secrets — skipping password sync."
+            echo "Playwright auth tests will skip themselves; non-auth tests still run."
+            exit 0
+          fi
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker/preview && php scripts/set-password.php '$QA_USER' '$QA_PASS' --role=admin"
+
       - name: Smoke test (preview /health.json)
         run: |
           set -euo pipefail
@@ -201,3 +235,39 @@ jobs:
             "https://paytracker.xyz/preview/health.json" \
             | tee preview-health.json
           test "$(jq -r .database.ok preview-health.json)" = "true"
+
+      # ----- Playwright end-to-end suite -----------------------------------
+      # Runs the browser-level coverage of Sections 5-8 of docs/qa/test_plan.md
+      # against the just-deployed preview channel. The suite handles its own
+      # auth via QA_TEST_USER / QA_TEST_PASSWORD (synced into the DB above),
+      # and individual tests `.skip()` cleanly when those env vars are unset.
+      - name: Set up Node.js 20 (for Playwright)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Playwright dependencies
+        run: npm ci || npm install
+
+      - name: Install Playwright browser (Chromium only)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright suite against the live preview
+        env:
+          BASE_URL:         https://paytracker.xyz/preview/
+          QA_TEST_USER:     ${{ secrets.QA_TEST_USER }}
+          QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
+        run: npx playwright test --reporter=github,list
+
+      # Upload the HTML report on failure so we can inspect screenshots,
+      # traces, and timings without re-running the suite locally.
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
