@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace PayTracker\Models;
 
+use PayTracker\Database\Connection;
 use PayTracker\Database\Model;
+use PayTracker\Services\GoogleMapsService;
 
 /**
  * `city_distances` — relational replacement for the legacy column-per-city
@@ -27,6 +29,14 @@ use PayTracker\Database\Model;
 final class CityDistance extends Model
 {
     protected static string $table = 'city_distances';
+
+    public function __construct(
+        Connection $connection,
+        private readonly City $cities,
+        private readonly GoogleMapsService $maps,
+    ) {
+        parent::__construct($connection);
+    }
 
     /**
      * Aggregate counters for the /distances dashboard. Always returns the
@@ -110,5 +120,52 @@ final class CityDistance extends Model
             ORDER BY d.source ASC';
         $rows = $this->prepared($sql, [$fromName, $toName])->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Look up the recorded mileage for a pair, falling back to the Google
+     * Maps Distance Matrix API on a cache miss and writing the API result
+     * back into city_distances so the next lookup hits the local matrix.
+     *
+     * Returns null if BOTH the local cache misses AND the API can't connect
+     * the cities (or the API key isn't configured). The controller maps
+     * null to a user-facing "we couldn't resolve a mileage" validation
+     * error rather than failing the whole submission.
+     *
+     * Behaviour:
+     *   1. If between() finds any recorded distance, the FIRST one wins
+     *      (sources sort alphabetically — google_maps < largeMiles <
+     *      pcola_largeMiles — so a legacy matrix entry beats a Google entry
+     *      when both exist).
+     *   2. On cache miss, call GoogleMapsService::distanceMiles().
+     *   3. On a real Google answer, insert/find both endpoint cities,
+     *      then INSERT IGNORE the new (from, to, miles, source='google_maps')
+     *      row. IGNORE handles the race where two concurrent requests
+     *      resolve the same pair.
+     *
+     * Caches are written ONE-WAY (from → to) because the legacy data was
+     * directional too. The opposite direction will be resolved + cached
+     * the next time it's needed. Cheap, predictable.
+     */
+    public function lookupOrFetch(string $fromName, string $toName): ?int
+    {
+        $rows = $this->between($fromName, $toName);
+        if (count($rows) > 0) {
+            return (int) $rows[0]['miles'];
+        }
+        if (! $this->maps->isConfigured()) {
+            return null;
+        }
+        $miles = $this->maps->distanceMiles($fromName, $toName);
+        if ($miles === null) {
+            return null;
+        }
+
+        $fromId = $this->cities->findOrCreate($fromName);
+        $toId   = $this->cities->findOrCreate($toName);
+        $sql    = 'INSERT IGNORE INTO ' . self::ident(self::$table)
+                . ' (from_city_id, to_city_id, miles, source) VALUES (?, ?, ?, ?)';
+        $this->prepared($sql, [$fromId, $toId, $miles, 'google_maps']);
+        return $miles;
     }
 }

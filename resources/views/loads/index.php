@@ -13,9 +13,15 @@ layout('layouts/app');
     <h1>Driver loads</h1>
     <p class="muted">
         Relational replacement for the 21 legacy <code>loadsNN</code>
-        per-driver tables. Read-only on this branch &mdash; writes will
-        land in a follow-up that ports the load-entry surfaces.
+        per-driver tables. Writes go through the modern entry form
+        below; reads here cover both backfilled history and new rows.
         <a href="<?= e($base) ?>/">&larr; Back</a>
+    </p>
+    <p>
+        <a href="<?= e($base) ?>/loads/new"
+           style="display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:.5rem 1.2rem;border-radius:6px;">
+            + Add load
+        </a>
     </p>
 </div>
 

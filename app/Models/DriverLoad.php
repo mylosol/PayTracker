@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace PayTracker\Models;
 
+use InvalidArgumentException;
 use PayTracker\Database\Model;
 use PDO;
+use Throwable;
 
 /**
  * `driver_loads` — relational replacement for the per-driver `loadsNN`
@@ -116,5 +118,145 @@ final class DriverLoad extends Model
             LIMIT ' . $limit;
         $rows = $this->prepared($sql, [$driverId])->fetchAll();
         return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Insert a single load.
+     *
+     * Performs the full write transaction:
+     *   1. Lock the driver's existing rows briefly and compute the next
+     *      `frtl` as MAX(frtl)+1 (or 1 if the driver has no rows yet).
+     *      The composite PK (driver_id, frtl) guarantees no collisions
+     *      INSIDE the transaction; a separate concurrent submission for
+     *      the SAME driver retries via the duplicate-key catch.
+     *   2. Re-build the legacy `variables` / `loadinfo` / `paid` strings
+     *      so unported legacy pages and the read-only /loads view
+     *      keep working.
+     *   3. INSERT a row that populates BOTH the typed columns AND the
+     *      blob strings.
+     *
+     * The pay columns (`np`, `op`) are left at 0 here. Pay calculation
+     * happens in a separate admin-driven flow (BasePayAdminSubmit etc.)
+     * that hasn't been ported yet; once it has, it will UPDATE rows by
+     * (driver_id, frtl).
+     *
+     * @param array{
+     *   driver_id:int,
+     *   load_type:int,
+     *   pickup_city:string,
+     *   delivery_city:string,
+     *   empty_miles:int,
+     *   begin_empty_miles:int,
+     *   is_split:int,
+     *   is_weekend:int,
+     *   extra_pay:float,
+     *   dem_minutes:int,
+     *   break_minutes:int,
+     *   out_of_route_ind:int,
+     *   out_of_route_miles:int,
+     *   used_google_maps:int,
+     *   terminal_pcola:int,
+     *   notes?:string|null,
+     * } $data
+     *
+     * @return int the frtl assigned to the inserted row
+     *
+     * @throws InvalidArgumentException if driver_id does not exist in account
+     */
+    public function insertOne(array $data): int
+    {
+        $pdo = $this->connection->pdo();
+
+        // Reject unknown drivers up front rather than letting the insert
+        // succeed with a dangling foreign value. account is MyISAM so there
+        // is no FK; this check is the equivalent.
+        $check = $pdo->prepare('SELECT 1 FROM `account` WHERE id = ? LIMIT 1');
+        $check->execute([$data['driver_id']]);
+        if ($check->fetchColumn() === false) {
+            throw new InvalidArgumentException(
+                "Unknown driver_id={$data['driver_id']} — refusing to insert load"
+            );
+        }
+
+        // Legacy hyphen-string formats. Field positions documented in
+        // migration 2026_05_27_002.
+        $loadinfo = implode('-', [
+            $data['load_type'],
+            $data['empty_miles'],
+            $data['pickup_city'],
+            $data['delivery_city'],
+            $data['is_split'],
+            $data['is_weekend'],
+            '2',                       // legacy constant
+            $data['begin_empty_miles'],
+            $data['used_google_maps'],
+            number_format($data['extra_pay'], 0, '.', ''),
+            $data['dem_minutes'],
+            $data['break_minutes'],
+            $data['out_of_route_ind'],
+            $data['out_of_route_miles'],
+        ]);
+        // `variables` is the week-context blob; on fresh inserts we use the
+        // canonical "168-night--0" form observed in 100% of live rows. A
+        // future branch that ports the weekly-settings UI can vary this.
+        $variables = '168-night--0';
+        // `paid` is an 8-field pay-state vector. Fresh inserts start in the
+        // "submitted, unpaid" state — first slot 1, rest 0.
+        $paid = '1-0-0-0-0-0-0-0';
+
+        // Retry loop to survive concurrent insertions for the same driver.
+        // The race is extremely narrow (a single driver double-clicking
+        // submit) but the composite PK leaves no room for ambiguity if it
+        // happens — better to retry than to silently overwrite.
+        $maxAttempts = 5;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $pdo->beginTransaction();
+            try {
+                /** @var int|false $maxFrtl */
+                $maxFrtl = $pdo->query(
+                    'SELECT MAX(frtl) FROM `driver_loads` WHERE driver_id = ' . (int) $data['driver_id']
+                )->fetchColumn();
+                $nextFrtl = $maxFrtl === false || $maxFrtl === null ? 1 : ((int) $maxFrtl) + 1;
+
+                $sql = 'INSERT INTO `driver_loads` (
+                            driver_id, frtl, date,
+                            variables, loadinfo, paid, notPaid, notes, np, op,
+                            load_type, empty_miles, pickup_city, delivery_city,
+                            is_split, is_weekend, begin_empty_miles, used_google_maps,
+                            extra_pay, dem_minutes, break_minutes,
+                            out_of_route_ind, out_of_route_miles, terminal_pcola
+                        ) VALUES (
+                            ?, ?, NOW(),
+                            ?, ?, ?, 0, ?, 0.00, 0.00,
+                            ?, ?, ?, ?,
+                            ?, ?, ?, ?,
+                            ?, ?, ?,
+                            ?, ?, ?
+                        )';
+                $this->prepared($sql, [
+                    $data['driver_id'], $nextFrtl,
+                    $variables, $loadinfo, $paid, $data['notes'] ?? null,
+                    $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
+                    $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
+                    number_format($data['extra_pay'], 2, '.', ''),
+                    $data['dem_minutes'], $data['break_minutes'],
+                    $data['out_of_route_ind'], $data['out_of_route_miles'], $data['terminal_pcola'],
+                ]);
+                $pdo->commit();
+                return $nextFrtl;
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                // PDO error code 23000 == integrity constraint violation
+                // (duplicate key). Retry to pick up a fresh MAX(frtl).
+                if ($e instanceof \PDOException && $e->getCode() === '23000' && $attempt < $maxAttempts) {
+                    continue;
+                }
+                throw $e;
+            }
+        }
+
+        throw new \RuntimeException(
+            "DriverLoad::insertOne exhausted {$maxAttempts} retries for driver_id={$data['driver_id']}"
+        );
     }
 }

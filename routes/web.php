@@ -5,6 +5,7 @@ declare(strict_types=1);
 use PayTracker\Http\Controllers\DistancesController;
 use PayTracker\Http\Controllers\HealthController;
 use PayTracker\Http\Controllers\HomeController;
+use PayTracker\Http\Controllers\LoadEntryController;
 use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
@@ -36,6 +37,10 @@ return static function (Router $router): void {
     // --- City distances (signed-in, read-only for now) ----------------
     $router->get('/distances',     [DistancesController::class, 'index']);
 
-    // --- Driver loads (signed-in, read-only for now) ------------------
-    $router->get('/loads',         [LoadsController::class, 'index']);
+    // --- Driver loads -------------------------------------------------
+    // Read-only summary surface + the modern write form (one load per
+    // submit; legacy multi-load cookie batch is intentionally not ported).
+    $router->get('/loads',         [LoadsController::class,     'index']);
+    $router->get('/loads/new',     [LoadEntryController::class, 'create']);
+    $router->post('/loads',        [LoadEntryController::class, 'store']);
 };

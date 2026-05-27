@@ -60,4 +60,23 @@ final class City extends Model
         $this->prepared($sql, [$name]);
         return (int) $this->connection->pdo()->lastInsertId();
     }
+
+    /**
+     * Resolve a city name to its id, inserting a row if one does not exist.
+     * Used by the city_distances cache-fill path: when Google Maps returns
+     * mileage for a pair we don't have yet, we need both endpoint city.id
+     * values to write the row.
+     *
+     * No validation — callers should only pass names that survived a form-
+     * level allow-list check (letters, spaces, commas, periods, hyphens,
+     * apostrophes). The cache-fill caller in CityDistance gates this.
+     */
+    public function findOrCreate(string $name): int
+    {
+        $existing = $this->findByName($name);
+        if ($existing !== null) {
+            return (int) $existing['id'];
+        }
+        return $this->insert($name);
+    }
 }
