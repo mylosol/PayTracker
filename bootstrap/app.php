@@ -9,6 +9,7 @@ use PayTracker\Http\Router;
 use PayTracker\Logging\Logger;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
+use PayTracker\Services\GoogleMapsService;
 use PayTracker\Support\Config;
 
 /*
@@ -46,6 +47,19 @@ $app->bind(Logger::class, static function (Application $app): Logger {
  */
 $app->bind(Session::class, static fn (): Session => new Session());
 $app->bind(Csrf::class, static fn (Application $app): Csrf => new Csrf($app->make(Session::class)));
+
+/*
+ * GoogleMapsService — Distance Matrix fallback for load-entry. The API key
+ * is a scalar so it needs an explicit binding; auto-wiring only handles
+ * class dependencies.
+ */
+$app->bind(GoogleMapsService::class, static function (Application $app): GoogleMapsService {
+    /** @var Config $config */
+    $config = $app->make(Config::class);
+    /** @var array{api_key:string,timeout:int} $maps */
+    $maps = $config->get('services.google_maps', ['api_key' => '', 'timeout' => 10]);
+    return new GoogleMapsService($maps['api_key'], $app->make(Logger::class), $maps['timeout']);
+});
 
 /*
  * Router — populated by `routes/web.php` and handed to the Kernel.

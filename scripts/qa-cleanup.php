@@ -53,6 +53,7 @@ $flags             = array_values(array_filter(array_slice($argv, 1), static fn 
 $apply             = in_array('--apply', $flags, true);
 $onlyCities        = in_array('--cities', $flags, true);
 $onlyUnlock        = in_array('--unlock', $flags, true);
+$onlyLoads         = in_array('--loads', $flags, true);
 $confirmProduction = in_array('--confirm-production', $flags, true);
 
 $customPattern = null;
@@ -77,10 +78,12 @@ if ($customPattern !== null) {
 
 $pattern = $customPattern ?? 'Qa Test %';
 
-// If neither --cities nor --unlock is passed, do both. Mirrors the common
+// If no specific category flag is passed, do all three. Mirrors the common
 // "I just finished a QA pass, please tidy up" intent.
-$doCities = $onlyCities || ! $onlyUnlock;
-$doUnlock = $onlyUnlock || ! $onlyCities;
+$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads;
+$doCities = $onlyCities || ! $anySpecific;
+$doUnlock = $onlyUnlock || ! $anySpecific;
+$doLoads  = $onlyLoads  || ! $anySpecific;
 
 if (config('app.env') === 'production' && $apply && ! $confirmProduction) {
     fwrite(STDERR, "Refusing to run against APP_ENV=production without --confirm-production.\n");
@@ -147,6 +150,42 @@ try {
                 );
                 $upd->execute();
                 echo "    → reset.\n";
+            }
+        }
+    }
+
+    // --- 3. QA-test driver_loads rows ----------------------------------
+    // The Playwright load-entry spec inserts rows with `notes` prefixed
+    // by "QA TEST " — that's the marker we sweep on. We don't accept a
+    // custom pattern here: the prefix is hardcoded in the spec and any
+    // load that uses a different prefix is, by definition, NOT a QA
+    // artefact and we should not delete it.
+    if ($doLoads) {
+        $loadPattern = 'QA TEST %';
+        $find = $pdo->prepare(
+            'SELECT driver_id, frtl, date, notes
+             FROM `driver_loads` WHERE notes LIKE ?'
+        );
+        $find->execute([$loadPattern]);
+        $rows = $find->fetchAll();
+
+        if ($rows === []) {
+            echo "  loads: no driver_loads rows match notes LIKE '{$loadPattern}'.\n";
+        } else {
+            echo "  loads: " . count($rows) . " row(s) match notes LIKE '{$loadPattern}':\n";
+            foreach ($rows as $r) {
+                printf(
+                    "    - driver_id=%d frtl=%d date=%s notes=%s\n",
+                    (int) $r['driver_id'],
+                    (int) $r['frtl'],
+                    (string) $r['date'],
+                    (string) $r['notes'],
+                );
+            }
+            if ($apply) {
+                $del = $pdo->prepare('DELETE FROM `driver_loads` WHERE notes LIKE ?');
+                $del->execute([$loadPattern]);
+                echo "    → deleted.\n";
             }
         }
     }

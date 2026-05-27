@@ -477,7 +477,76 @@ Both numbers should match exactly (the backfill is a verbatim copy).
 
 ---
 
-## 9. Production is untouched
+## 9. Add a load (modern write path)
+
+This is the first port of the legacy load-entry surface — one row per
+submit, mileage looked up from `city_distances` first with a Google Maps
+fallback that caches results back into the matrix. The Playwright suite
+covers this section automatically; manual steps below mirror what the
+spec exercises.
+
+### 9a. Anonymous redirect
+1. Sign out (or open a private window).
+2. Visit `/preview/loads/new`.
+
+**Expected:** redirected to `/preview/login`.
+
+### 9b. Form renders for signed-in user
+1. Sign in.
+2. Visit `/preview/loads/new`.
+
+**Expected:**
+- Heading "Add a load".
+- Pick-up and delivery fields both render with the city autocompletion
+  datalist.
+- A hidden `_csrf` input is present (inspect the form HTML).
+- Load-type radios default to "Loaded one-way".
+
+### 9c. Empty submission rejected
+1. From `/loads/new`, leave pick-up and delivery blank, click **Add load**.
+
+**Expected:** flash banner "Pick-up and delivery cities are required."
+
+### 9d. Same pickup and delivery rejected
+1. Fill both fields with `Panama City, FL`, submit.
+
+**Expected:** flash banner "Pick-up and delivery cannot be the same city."
+
+### 9e. Unknown city rejected
+1. Fill pickup with `Nowhereville, ZZ`, delivery with `Panama City, FL`,
+   submit.
+
+**Expected:** flash banner "...is not in the city list. Add it first."
+
+### 9f. Valid submission inserts and shows assigned frtl
+1. Fill pickup with `Panama City, FL`, delivery with `Lynn Haven, FL`.
+2. Notes: `QA TEST manual walk` (the `QA TEST ` prefix is what lets
+   `scripts/qa-cleanup.php --loads` sweep it later).
+3. Submit.
+
+**Expected:**
+- Redirect to `/preview/loads`.
+- Flash banner: `Added load frtl=NNN: Panama City, FL → Lynn Haven, FL, NN miles.`
+  (the trailing `(via Google Maps, now cached)` only appears the first
+   time a pair is resolved that wasn't already in `city_distances`).
+- The "Recent loads" table on `/loads` now shows the new row.
+
+### Cleanup
+
+```
+ssh ...preview
+cd /home/robshe48/paytracker/preview
+php scripts/qa-cleanup.php --loads          # dry-run
+php scripts/qa-cleanup.php --loads --apply  # delete the test rows
+```
+
+The deploy workflow runs `--apply --loads` automatically after the
+Playwright suite, so manual cleanup is only needed if you tested by
+hand without notes prefixed `QA TEST `.
+
+---
+
+## 10. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -496,7 +565,7 @@ Both numbers should match exactly (the backfill is a verbatim copy).
 
 ---
 
-## 10. Security headers are present (optional — engineer-assisted)
+## 11. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

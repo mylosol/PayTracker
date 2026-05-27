@@ -265,6 +265,18 @@ jobs:
           QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
         run: npx playwright test --reporter=github,list
 
+      # Always-run cleanup. The load-entry spec inserts real rows into
+      # driver_loads each pass (notes prefixed "QA TEST "). This sweep
+      # removes them so the table doesn't accumulate orphan QA artefacts.
+      # `if: always()` ensures we still tidy when Playwright itself failed.
+      - name: Sweep QA test data from preview DB
+        if: always()
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker/preview && php scripts/qa-cleanup.php --apply --loads"
+
       # Upload the HTML report on failure so we can inspect screenshots,
       # traces, and timings without re-running the suite locally.
       - name: Upload Playwright report on failure
