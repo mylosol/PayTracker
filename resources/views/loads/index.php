@@ -6,6 +6,7 @@
  * @var list<array{driver_id:int, user:?string, frtl:int, date:string, np:string, op:string}> $recent
  * @var int $driverFilter
  * @var list<array<string,mixed>> $driverRows
+ * @var string|null $flash
  */
 layout('layouts/app');
 ?>
@@ -17,6 +18,13 @@ layout('layouts/app');
         below; reads here cover both backfilled history and new rows.
         <a href="<?= e($base) ?>/">&larr; Back</a>
     </p>
+
+    <?php if ($flash !== null): ?>
+        <p style="background:#dcfce7;color:#166534;border-radius:6px;padding:.6rem .8rem;">
+            <?= e($flash) ?>
+        </p>
+    <?php endif; ?>
+
     <p>
         <a href="<?= e($base) ?>/loads/new"
            style="display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:.5rem 1.2rem;border-radius:6px;">
