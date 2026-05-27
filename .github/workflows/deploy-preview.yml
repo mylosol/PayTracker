@@ -236,16 +236,6 @@ jobs:
             | tee preview-health.json
           test "$(jq -r .database.ok preview-health.json)" = "true"
 
-      # TEMPORARY — capture driver_loads blob shape for the load-entry port.
-      # Remove this step once the parser is written. Read-only, no side
-      # effects. Output lands in the build log.
-      - name: Sample driver_loads blobs (TEMPORARY — load-entry diagnostic)
-        env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/sample-driver-loads.php"
-
       # ----- Playwright end-to-end suite -----------------------------------
       # Runs the browser-level coverage of Sections 5-8 of docs/qa/test_plan.md
       # against the just-deployed preview channel. The suite handles its own
