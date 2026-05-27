@@ -21,13 +21,16 @@ test.describe('city distances', () => {
         await expect(page.getByRole('heading', { name: /city distances/i })).toBeVisible();
 
         // Scope source-name assertions to the "Backfill summary" card. The
-        // page also renders 25 sample rows, each listing the source in its
-        // own cell — a page-wide getByText match would resolve to 10+
-        // elements and toBeVisible would (correctly) refuse to assert on
-        // a multi-element locator.
+        // page also renders 25 sample rows; a page-wide getByText would
+        // resolve to 10+ elements. Even card-scoped, getByText(/largeMiles/)
+        // matches BOTH the "largeMiles" row and the "pcola_largeMiles" row
+        // because the former is a substring of the latter. Read the card's
+        // textContent and assert with a negative-lookbehind-style regex
+        // (no `_` before "largeMiles") to disambiguate.
         const summaryCard = page.locator('div.card', { hasText: /backfill summary/i });
-        await expect(summaryCard.getByText(/largeMiles/)).toHaveCount(1);
-        await expect(summaryCard.getByText(/pcola_largeMiles/)).toHaveCount(1);
+        const summaryText = (await summaryCard.textContent()) ?? '';
+        expect(summaryText).toMatch(/(^|[^_])largeMiles/);
+        expect(summaryText).toContain('pcola_largeMiles');
 
         // "Total rows: <code>NNN</code>" — assert it's > 0.
         const totalText = await summaryCard.getByText(/total rows:/i).textContent();
