@@ -546,7 +546,100 @@ hand without notes prefixed `QA TEST `.
 
 ---
 
-## 10. Production is untouched
+## 10. Pay-rate admin (modern write path)
+
+Pre-req: signed in as the QA admin account.
+
+Visit `https://paytracker.xyz/preview/pay-admin`.
+
+### 10a. Anon visitor is redirected
+
+1. Open a private tab, navigate to `/preview/pay-admin`.
+
+**Expected:** redirect to `/preview/login`.
+
+### 10b. Page renders with backfilled data
+
+1. Sign in, visit `/preview/pay-admin`.
+
+**Expected:**
+- "Pay-rate admin" heading + Summary card showing non-zero
+  `Total rate rows` (preview backfill seeded ~496 rows: 114 + 114 + 114
+  + 114 + 40 across the five legacy tables, with PanamaPay seeded into
+  both default and current stages).
+- Three editor cards: **Pensacola — Round-trip**, **Pensacola — Long-haul**,
+  **Panama City — Round-trip**.
+- Each card shows a "Start draft from current" button and a "Reset
+  current ← default" button.
+
+### 10c. Start a draft
+
+1. On the Pensacola — Round-trip card, click **Start draft from current**.
+
+**Expected:**
+- Flash banner: "Draft started for pensacola (round_trip)."
+- The Draft column in the rates table now mirrors the Current column.
+- The card now shows **Promote draft → current** and **Reset draft to current**
+  buttons.
+
+### 10d. Edit a draft tier
+
+1. Pick any tier (e.g. miles=100), change the Rate input next to it
+   (e.g. from `101.8385` to `999.9999`), click **Save**.
+
+**Expected:**
+- Flash banner: "Saved tier 100 → 999.9999 in pensacola (round_trip) draft."
+- The Draft column for miles=100 now shows `999.9999`; Current still
+  shows the original.
+
+### 10e. Add a new tier
+
+1. In the "Add tier" form, enter Miles=`9999` Rate=`123.4567`, click
+   **Add to draft**.
+
+**Expected:**
+- Flash banner: "Saved tier 9999 → 123.4567..."
+- A new row appears at the bottom of the rates table with Current
+  showing "(dropped)" and Draft showing `123.4567` — the convention
+  for "this tier exists in draft but not in current".
+
+### 10f. Delete a draft tier
+
+1. On the row you just added (miles=9999), click **Delete** (confirm).
+
+**Expected:**
+- Flash banner: "Deleted tier 9999 from pensacola (round_trip) draft."
+- The row vanishes from the table.
+
+### 10g. Promote draft to current
+
+1. Click **Promote draft → current** (confirm).
+
+**Expected:**
+- Flash banner: "Promoted draft to current for pensacola (round_trip)."
+- The card returns to "no draft" state with the **Start draft from current**
+  button visible again.
+- The miles=100 tier now shows `999.9999` in the Current column.
+
+### 10h. Reset current ← default
+
+1. Click **Reset current ← default** (confirm).
+
+**Expected:**
+- Flash banner: "Reset pensacola (round_trip) rates to defaults."
+- miles=100 goes back to its factory default (preview sample:
+  `85.1492`).
+
+### Cleanup
+
+Section 10g and 10h leave the Pensacola RT current table at factory
+defaults. Re-apply any customisations you want preserved before
+signing off (or just leave it defaulted — the preview channel is
+disposable).
+
+---
+
+## 11. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -565,7 +658,7 @@ hand without notes prefixed `QA TEST `.
 
 ---
 
-## 11. Security headers are present (optional — engineer-assisted)
+## 12. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 
