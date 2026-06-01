@@ -9,6 +9,7 @@ use PayTracker\Http\Controllers\LoadEntryController;
 use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
+use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Router;
 
 /*
@@ -43,4 +44,16 @@ return static function (Router $router): void {
     $router->get('/loads',         [LoadsController::class,     'index']);
     $router->get('/loads/new',     [LoadEntryController::class, 'create']);
     $router->post('/loads',        [LoadEntryController::class, 'store']);
+
+    // --- Pay-rate admin (signed-in) -----------------------------------
+    // Modern replacement for the four legacy pay-admin pages. Manages
+    // pay_rates(terminal, trip_type, stage, miles, rate) with a
+    // default → current → draft staging model. PayCalculator that
+    // consumes these rates ships in a follow-up branch.
+    $router->get('/pay-admin',                 [PayAdminController::class, 'index']);
+    $router->post('/pay-admin/draft/start',    [PayAdminController::class, 'startDraft']);
+    $router->post('/pay-admin/draft/upsert',   [PayAdminController::class, 'upsertDraftTier']);
+    $router->post('/pay-admin/draft/delete',   [PayAdminController::class, 'deleteDraftTier']);
+    $router->post('/pay-admin/draft/promote',  [PayAdminController::class, 'promoteDraft']);
+    $router->post('/pay-admin/reset',          [PayAdminController::class, 'resetCurrent']);
 };
