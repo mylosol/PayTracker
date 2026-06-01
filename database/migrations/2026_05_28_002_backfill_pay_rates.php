@@ -46,9 +46,12 @@ return static function (PDO $pdo): void {
      * skip whatever isn't there and report at the end.
      */
     $exists = static function (string $table) use ($pdo): bool {
-        $stmt = $pdo->prepare('SHOW TABLES LIKE ?');
-        $stmt->execute([$table]);
-        return $stmt->fetchColumn() !== false;
+        // SHOW TABLES LIKE doesn't accept bound parameters in MariaDB —
+        // we hand-quote instead. Safe because the callers only pass
+        // hardcoded legacy table names (PensacolaPayDefault, etc.) —
+        // never user input.
+        $stmt = $pdo->query('SHOW TABLES LIKE ' . $pdo->quote($table));
+        return $stmt !== false && $stmt->fetchColumn() !== false;
     };
 
     $insert = $pdo->prepare(
