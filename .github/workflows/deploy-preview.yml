@@ -207,17 +207,6 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
             "cd /home/robshe48/paytracker/preview && php scripts/migrate.php"
 
-      # TEMP — sample legacy pay-rate tables (PensacolaPay*, LHPensacolaPay*,
-      # PanamaPay) so the pay-admin port can backfill pay_rates from real
-      # data. Same pattern used for the driver_loads blob sampler: capture
-      # output in the build log, then revert this step in a follow-up commit.
-      - name: TEMP — sample legacy pay tables
-        env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/sample-pay-tables.php"
-
       # Sync the QA test account's password from GH secrets so the Playwright
       # suite below can log in with a known-good credential. The password
       # set here lives only on the preview channel — it is NEVER set on
