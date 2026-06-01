@@ -81,20 +81,25 @@ if ($tableExists('variablesDefault') && $tableExists('variablesCurrent')) {
 // log doesn't explode.
 echo "\n=== Ground-truth load fixtures (15 rows, mixed types) ===\n";
 
+// driver_loads.variables holds the "tenure-shift-slip-?" blob per-row
+// (the legacy app captured the driver's settings AT THE TIME of the load,
+// so re-tenured drivers' historical loads stay accurate). That's the
+// column the PayCalculator needs as input — NOT account.variables,
+// which doesn't exist on the modern schema.
 $loadSql = '
     SELECT
-        dl.driver_id, dl.frtl, dl.date, dl.np, dl.op,
-        dl.load_type, dl.empty_miles, dl.pickup_city, dl.delivery_city,
-        dl.is_split, dl.is_weekend, dl.begin_empty_miles, dl.used_google_maps,
-        dl.extra_pay, dl.dem_minutes, dl.break_minutes,
-        dl.out_of_route_ind, dl.out_of_route_miles, dl.terminal_pcola,
-        a.variables AS account_variables
-    FROM driver_loads dl
-    JOIN account a ON a.id = dl.driver_id
-    WHERE dl.np > 0 AND dl.np <> "" AND dl.op IS NOT NULL
-      AND dl.load_type IS NOT NULL
-      AND a.variables IS NOT NULL AND a.variables <> ""
-    ORDER BY dl.date DESC
+        driver_id, frtl, date, np, op,
+        load_type, empty_miles, pickup_city, delivery_city,
+        is_split, is_weekend, begin_empty_miles, used_google_maps,
+        extra_pay, dem_minutes, break_minutes,
+        out_of_route_ind, out_of_route_miles, terminal_pcola,
+        variables AS row_variables,
+        loadinfo  AS row_loadinfo
+    FROM driver_loads
+    WHERE np > 0 AND np <> ""
+      AND load_type IS NOT NULL
+      AND variables IS NOT NULL AND variables <> ""
+    ORDER BY date DESC
     LIMIT 15';
 
 $loads = $pdo->query($loadSql)->fetchAll();
@@ -115,19 +120,18 @@ foreach ($dist as $r) {
     printf("  load_type=%s  rows=%d\n", $r['load_type'] === null ? '(null)' : (string) $r['load_type'], (int) $r['n']);
 }
 
-// ---------- 4. Distinct account.variables shapes -----------------------
+// ---------- 4. Distinct driver_loads.variables blob shapes -------------
 // These drive which tenure / shift branches PayCalculator needs to
-// support. Truncate at 20 distinct values — that's enough to see the
-// pattern.
-echo "\n=== distinct account.variables values (top 20) ===\n";
+// support. Sourced from driver_loads (not account) — see comment above.
+echo "\n=== distinct driver_loads.variables values (top 20) ===\n";
 $variants = $pdo->query(
     'SELECT variables, COUNT(*) AS n
-     FROM account
+     FROM driver_loads
      WHERE variables IS NOT NULL AND variables <> ""
      GROUP BY variables
      ORDER BY n DESC
      LIMIT 20'
 )->fetchAll();
 foreach ($variants as $v) {
-    printf("  %-30s drivers=%d\n", (string) $v['variables'], (int) $v['n']);
+    printf("  %-30s rows=%d\n", (string) $v['variables'], (int) $v['n']);
 }
