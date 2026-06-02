@@ -102,8 +102,8 @@ layout('layouts/app');
                         <th style="padding:.3rem .5rem;">Variables</th>
                         <th style="padding:.3rem .5rem;">Load info</th>
                         <th style="padding:.3rem .5rem;">Paid flags</th>
-                        <th style="padding:.3rem .5rem;text-align:right;">NP</th>
-                        <th style="padding:.3rem .5rem;text-align:right;">OP</th>
+                        <th style="padding:.3rem .5rem;text-align:right;">Net Pay</th>
+                        <th style="padding:.3rem .5rem;text-align:right;">Extras</th>
                     </tr>
                 </thead>
                 <tbody>

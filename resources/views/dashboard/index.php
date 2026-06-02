@@ -110,7 +110,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
     <?php if ($totals['count'] > 0 && (float) $totals['np_total'] === 0.0): ?>
         <p class="muted" style="background:#fef3c7;color:#92400e;border-radius:6px;padding:.5rem .8rem;margin-top:.8rem;">
             <strong>Heads up:</strong> there are <?= (int) $totals['count'] ?> load(s) on
-            this date but np total is $0.00 &mdash; the stored pay columns
+            this date but the net pay total is $0.00 &mdash; the stored pay
             may not have been computed yet. Click <strong>Refresh my pay</strong>
             below to recompute.
         </p>
@@ -124,7 +124,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             Refresh my pay
         </button>
         <small class="muted">
-            Recomputes np/op for your loads since <?= e(date('Y-m-d', strtotime($date . ' -30 days'))) ?>.
+            Recomputes pay for your loads since <?= e(date('Y-m-d', strtotime($date . ' -30 days'))) ?>.
             Safe to click repeatedly &mdash; the math is deterministic.
         </small>
     </form>
@@ -143,7 +143,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                     <th style="padding:.3rem .5rem;">Time</th>
                     <th style="padding:.3rem .5rem;">Type</th>
                     <th style="padding:.3rem .5rem;">Pickup &rarr; Delivery</th>
-                    <th style="padding:.3rem .5rem;text-align:right;">Pay</th>
+                    <th style="padding:.3rem .5rem;text-align:right;">Load Pay</th>
                     <th style="padding:.3rem .5rem;text-align:right;">&nbsp;</th>
                 </tr>
             </thead>

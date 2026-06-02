@@ -195,17 +195,17 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 <?php endforeach; ?>
 
 <div class="card">
-    <h2>Recompute pay (np/op)</h2>
+    <h2>Recompute pay</h2>
     <p class="muted">
         Walks <code>driver_loads</code> with PayCalculator using the current
-        pay rates + variables, refilling <code>np</code> and <code>op</code>
-        on rows whose computed values differ. Scope defaults to the last
+        pay rates + variables, refilling the stored net pay + extras on
+        rows whose computed values differ. Scope defaults to the last
         30 days; widen with the date filter or restrict to a single driver
         when needed.
     </p>
     <form method="post" action="<?= e($base) ?>/pay-admin/recompute"
           style="display:flex;gap:.8rem;align-items:end;flex-wrap:wrap;"
-          onsubmit="return confirm('Run PayCalculator over the selected driver_loads rows? This will UPDATE the np/op columns.');">
+          onsubmit="return confirm('Run PayCalculator over the selected driver_loads rows? This will UPDATE the stored pay values.');">
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
         <label>
             Since (YYYY-MM-DD)<br>
@@ -219,7 +219,7 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
         </label>
         <button type="submit"
                 style="background:#16a34a;color:#fff;border:0;padding:.5rem 1.2rem;border-radius:6px;font:inherit;cursor:pointer;">
-            Recompute np/op
+            Recompute pay
         </button>
     </form>
 </div>
