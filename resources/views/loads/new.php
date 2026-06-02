@@ -3,10 +3,11 @@
  * @var string                                                  $csrfToken
  * @var string                                                  $base
  * @var list<array<string,mixed>>                               $cities
+ * @var list<string>                                            $terminals
  * @var array<string,mixed>                                     $driver
  * @var string|null                                             $flash
  * @var array{
- *   pickup:string, delivery:string, load_type:string,
+ *   frtl:string, pickup:string, delivery:string, load_type:string,
  *   dem:string, break:string, extra:string,
  *   split:string, weekend:string,
  * } $old
@@ -28,10 +29,25 @@ layout('layouts/app');
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
 
         <p>
-            <label for="pickup_city"><strong>Pick-up city</strong></label><br>
-            <input list="city-options" id="pickup_city" name="pickup_city" type="text" required
-                   value="<?= e((string) $old['pickup']) ?>"
-                   style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+            <label for="frtl"><strong>FRTL #</strong> <span class="muted">(optional)</span></label><br>
+            <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]*"
+                   value="<?= e((string) $old['frtl']) ?>"
+                   style="width:14rem;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+            <small class="muted">From your dispatch paperwork. Leave blank to auto-assign the next number.</small>
+        </p>
+
+        <p>
+            <label for="pickup_city"><strong>Pick-up terminal</strong></label><br>
+            <select id="pickup_city" name="pickup_city" required
+                    style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+                <option value="" disabled <?= $old['pickup'] === '' ? 'selected' : '' ?>>Choose a terminal&hellip;</option>
+                <?php foreach ($terminals as $t): ?>
+                    <option value="<?= e($t) ?>" <?= $old['pickup'] === $t ? 'selected' : '' ?>>
+                        <?= e($t) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <small class="muted">Drivers pick up loads at one of the dispatch terminals; the full city list is for delivery only.</small>
         </p>
 
         <p>

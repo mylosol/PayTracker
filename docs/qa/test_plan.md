@@ -497,29 +497,50 @@ spec exercises.
 
 **Expected:**
 - Heading "Add a load".
-- Pick-up and delivery fields both render with the city autocompletion
-  datalist.
+- **FRTL #** is a required numeric field — the driver types in their
+  dispatch number from paperwork. It is NOT auto-generated.
+- **Pick-up terminal** renders as a dropdown restricted to the
+  dispatch terminals (`terminal` ∪ `pcola_terminal`) — e.g. Panama
+  City FL, Niceville FL, Freeport FL, Pelham GA, Pensacola FL,
+  Montgomery AL, Birmingham AL, DeFuniak Springs FL, Bainbridge GA.
+- **Delivery city** is a free-text input backed by the full city
+  autocompletion datalist.
 - A hidden `_csrf` input is present (inspect the form HTML).
 - Load-type radios default to "Loaded one-way".
 
 ### 9c. Empty submission rejected
-1. From `/loads/new`, leave pick-up and delivery blank, click **Add load**.
+1. From `/loads/new`, leave FRTL blank and click **Add load**.
 
-**Expected:** flash banner "Pick-up and delivery cities are required."
+**Expected:** flash banner "FRTL must be a positive number from your
+dispatch paperwork." (FRTL is the first field validated, so a fully
+empty form trips this check first.)
 
 ### 9d. Same pickup and delivery rejected
-1. Fill both fields with `Panama City, FL`, submit.
+1. FRTL = a fresh 9-digit number (e.g. `999100001`).
+2. Select Pick-up = `Panama City, FL`.
+3. Type Delivery = `Panama City, FL`. Submit.
 
 **Expected:** flash banner "Pick-up and delivery cannot be the same city."
 
-### 9e. Unknown city rejected
-1. Fill pickup with `Nowhereville, ZZ`, delivery with `Panama City, FL`,
-   submit.
+### 9e. Unknown delivery city rejected
+1. FRTL = a fresh number (e.g. `999100002`).
+2. Select Pick-up = `Panama City, FL`.
+3. Type Delivery = `Nowhereville, ZZ`. Submit.
 
 **Expected:** flash banner "...is not in the city list. Add it first."
 
-### 9f. Valid submission inserts and shows assigned frtl
-1. Fill pickup with `Panama City, FL`, delivery with `Lynn Haven, FL`.
+### 9e2. Duplicate FRTL rejected (new)
+
+1. FRTL = the SAME number you used in a previous successful test
+   submission for this driver.
+2. Fill the rest with any valid values. Submit.
+
+**Expected:** flash banner "FRTL N is already on file for this driver."
+The form preserves your typed inputs so you can correct the FRTL.
+
+### 9f. Valid submission inserts and shows the FRTL you typed
+1. FRTL = a fresh number (e.g. `999100099`).
+2. Select Pick-up = `Panama City, FL`, type Delivery = `Lynn Haven, FL`.
 2. Notes: `QA TEST manual walk` (the `QA TEST ` prefix is what lets
    `scripts/qa-cleanup.php --loads` sweep it later).
 3. Submit.
@@ -707,7 +728,61 @@ defaulted — the preview is disposable).
 
 ---
 
-## 12. Production is untouched
+## 12. Driver dashboard ("my pay")
+
+Pre-req: signed in as the QA admin account.
+
+Visit `https://paytracker.xyz/preview/dashboard`.
+
+### 12a. Anon redirect
+
+1. Open a private tab, navigate to `/preview/dashboard`.
+
+**Expected:** redirect to `/preview/login`.
+
+### 12b. Today's view renders
+
+1. Sign in, visit `/preview/dashboard`.
+
+**Expected:**
+- Heading reads **My pay — `YYYY-MM-DD`** with a `today` pill.
+- Three cards: heading + date-nav, **Totals**, **Loads**.
+- Date-nav has prev-day and next-day links and the **+ Add load** CTA.
+- If you have no loads today (likely, given the preview backfill is
+  from 2023), Loads shows "No loads on `YYYY-MM-DD`." and Totals shows
+  all zeros. This is the normal state for the QA account.
+
+### 12c. Empty-day view
+
+1. Append `?date=1999-01-01` to the URL.
+
+**Expected:** Loads card shows "No loads on 1999-01-01." Totals shows
+`Loads = 0`.
+
+### 12d. Date-nav preserves auth
+
+1. Append `?date=2023-04-10` to the URL.
+2. Click the **← 2023-04-09** link.
+
+**Expected:** URL becomes `/dashboard?date=2023-04-09`; you stay
+signed in and see the same dashboard layout.
+
+### 12e. Stale-totals warning (when applicable)
+
+If the QA account happens to have loads on the viewed date but the
+**Totals → Net pay (np)** value is `$0.00`, you should see an amber
+warning banner reading:
+
+> Heads up: there are N load(s) on this date but np total is $0.00 —
+> the stored pay columns may not have been computed yet. Ask the admin
+> to run /pay-admin → Recompute np/op scoped to this date.
+
+That banner is correct behaviour, not a bug — it's the signal that a
+PayCalculator recompute is needed.
+
+---
+
+## 13. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -726,7 +801,7 @@ defaulted — the preview is disposable).
 
 ---
 
-## 13. Security headers are present (optional — engineer-assisted)
+## 14. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

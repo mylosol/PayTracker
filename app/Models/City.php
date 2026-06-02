@@ -34,6 +34,66 @@ final class City extends Model
     }
 
     /**
+     * City list scoped to form-picker UIs. Same shape as all() but with
+     * the legacy "bare name" duplicates hidden when a state-suffixed
+     * variant exists.
+     *
+     * The `city` table carries two generations of rows:
+     *   - Legacy bare names: "Andalusia", "Apalachicola", "Chipley".
+     *   - Backfill-normalized names: "Andalusia, AL", "Apalachicola, FL",
+     *     "Chipley, FL" — inserted by migration 2026_05_23_003 from the
+     *     legacy largeMiles / pcola_largeMiles matrices.
+     *
+     * The backfill intentionally did NOT delete the bare rows (citing
+     * unknown legacy references to them). On the picker UI that means
+     * the user sees both forms back-to-back in the alphabetised list.
+     * This method filters the bare form out when a "Name, ST" twin
+     * exists for any ST, while preserving:
+     *   - Bare names with no state-suffixed twin (kept as-is).
+     *   - All state-suffixed names (always kept).
+     *
+     * The full all() list remains available for code paths (e.g. the
+     * existing /loads QA surface) that need every row.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function allForPicker(): array
+    {
+        $rows = $this->all();
+        if ($rows === []) {
+            return [];
+        }
+
+        // First pass: collect the "Name" prefix for every state-suffixed
+        // row. We treat any trailing ", XX" (two uppercase letters) as a
+        // state code; that matches every legacy normalization the
+        // backfill produced.
+        $hasSuffixed = [];
+        foreach ($rows as $row) {
+            $name = (string) $row['city'];
+            if (preg_match('/^(.+), [A-Z]{2}$/', $name, $m) === 1) {
+                $hasSuffixed[$m[1]] = true;
+            }
+        }
+
+        // Second pass: keep all state-suffixed rows; keep bare rows only
+        // when no state-suffixed twin exists.
+        $out = [];
+        foreach ($rows as $row) {
+            $name = (string) $row['city'];
+            $isSuffixed = preg_match('/, [A-Z]{2}$/', $name) === 1;
+            if ($isSuffixed) {
+                $out[] = $row;
+                continue;
+            }
+            if (! isset($hasSuffixed[$name])) {
+                $out[] = $row;
+            }
+        }
+        return $out;
+    }
+
+    /**
      * Look up a city by its display name. Case-insensitive on the comparison
      * side (utf8mb3_general_ci is case-insensitive by default in MySQL) so a
      * user who types "panama city, fl" doesn't successfully sneak in a

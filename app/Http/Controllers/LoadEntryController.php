@@ -10,6 +10,9 @@ use PayTracker\Http\Response;
 use PayTracker\Models\City;
 use PayTracker\Models\CityDistance;
 use PayTracker\Models\DriverLoad;
+use PayTracker\Models\Terminal;
+use PayTracker\Services\Pay\LoadInputs;
+use PayTracker\Services\PayCalculator;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 
@@ -59,6 +62,8 @@ final class LoadEntryController extends Controller
         private readonly City $cities,
         private readonly CityDistance $distances,
         private readonly DriverLoad $loads,
+        private readonly Terminal $terminals,
+        private readonly PayCalculator $calculator,
     ) {
     }
 
@@ -75,10 +80,12 @@ final class LoadEntryController extends Controller
         return $this->view('loads/new', [
             'csrfToken' => $this->csrf->token(),
             'base'      => $request->basePath(),
-            'cities'    => $this->cities->all(),
+            'cities'    => $this->cities->allForPicker(),
+            'terminals' => $this->terminals->all(),
             'driver'    => $account,
             'flash'     => $this->popFlash(),
             'old'       => [
+                'frtl'      => $this->session->get('_old_frtl')     ?? '',
                 'pickup'    => $this->session->get('_old_pickup')   ?? '',
                 'delivery'  => $this->session->get('_old_delivery') ?? '',
                 'load_type' => $this->session->get('_old_type')     ?? '0',
@@ -107,6 +114,7 @@ final class LoadEntryController extends Controller
         }
 
         // --- pull + preserve old input ----------------------------------
+        $frtlRaw  = trim((string) $request->input('frtl', ''));
         $pickup   = trim((string) $request->input('pickup_city', ''));
         $delivery = trim((string) $request->input('delivery_city', ''));
         $typeRaw  = (string) $request->input('load_type', '');
@@ -117,6 +125,7 @@ final class LoadEntryController extends Controller
         $extraRaw = (string) $request->input('extra_pay', '0');
         $notes    = trim((string) $request->input('notes', ''));
 
+        $this->session->put('_old_frtl', $frtlRaw);
         $this->session->put('_old_pickup', $pickup);
         $this->session->put('_old_delivery', $delivery);
         $this->session->put('_old_type', $typeRaw);
@@ -127,6 +136,25 @@ final class LoadEntryController extends Controller
         $this->session->put('_old_weekend', $wkRaw);
 
         // --- validate ---------------------------------------------------
+        // FRTL is the driver's dispatch number — typed in from paperwork
+        // when available. It's OPTIONAL: a driver who doesn't have the
+        // number handy can leave it blank and we'll auto-assign MAX+1
+        // for their account in DriverLoad::insertOne. When supplied,
+        // it must be a positive int unique per driver.
+        $frtl = 0; // 0 = "let the model auto-assign"
+        if ($frtlRaw !== '') {
+            if (! ctype_digit($frtlRaw) || (int) $frtlRaw <= 0) {
+                return $this->failBack($request, 'FRTL must be a positive number, or left blank to auto-assign.');
+            }
+            $frtl = (int) $frtlRaw;
+            if ($frtl > 2147483647) {
+                return $this->failBack($request, 'FRTL is too large to be valid.');
+            }
+            if ($this->loads->frtlExists((int) $account['id'], $frtl)) {
+                return $this->failBack($request, sprintf('FRTL %d is already on file for this driver.', $frtl));
+            }
+        }
+
         if ($pickup === '' || $delivery === '') {
             return $this->failBack($request, 'Pick-up and delivery cities are required.');
         }
@@ -151,12 +179,15 @@ final class LoadEntryController extends Controller
             return $this->failBack($request, 'Extra pay must be between 0 and ' . self::MAX_EXTRA_PAY . '.');
         }
 
-        // Verify both cities exist in our list. Loads can only reference
-        // cities the matrix knows about — the add-city flow is the proper
-        // way to introduce a new one.
-        if ($this->cities->findByName($pickup) === null) {
-            return $this->failBack($request, sprintf('Pick-up city "%s" is not in the city list. Add it first.', $pickup));
+        // Pick-up MUST be a known terminal — drivers fuel at terminals and
+        // load there. This is a stricter check than "is this a known city"
+        // because the city list is much larger than the terminal list.
+        if (! $this->terminals->isKnown($pickup)) {
+            return $this->failBack($request, sprintf('Pick-up "%s" is not a known terminal. Pick from the list.', $pickup));
         }
+
+        // Delivery can be any city the matrix knows about. The add-city
+        // flow is the proper way to introduce a new one.
         if ($this->cities->findByName($delivery) === null) {
             return $this->failBack($request, sprintf('Delivery city "%s" is not in the city list. Add it first.', $delivery));
         }
@@ -176,9 +207,42 @@ final class LoadEntryController extends Controller
         }
         $usedGoogleMaps = count($milesBefore) === 0 ? 1 : 0;
 
+        // --- compute pay -------------------------------------------------
+        // Run PayCalculator now so the dashboard's totals are accurate
+        // immediately. Loads inserted with np=0 would surface the
+        // dashboard's "ask admin to recompute" stale banner; computing
+        // here avoids that for the everyday flow. The admin recompute
+        // path (/pay-admin/recompute) still exists for the bulk
+        // "rates changed, replay history" case.
+        // Naming gotcha: $emptyMiles in this controller is actually the
+        // resolved pickup→delivery distance, not the empty-return leg
+        // (it's the value CityDistance returned). For the calculator we
+        // pass it as load_miles (the loaded leg) and set empty_miles=0
+        // because the modern form has no separate empty-return field.
+        // Drivers expecting empty pay on a one-way should pick Round-trip
+        // instead; that path uses the round-trip rate table without
+        // double-billing.
+        $payInput = new LoadInputs(
+            load_type:          $loadType,
+            load_miles:         $emptyMiles,
+            empty_miles:        0,
+            begin_empty_miles:  0,
+            is_split:           $isSplit,
+            is_weekend:         $isWeekend,
+            extra_pay:          (float) $extraRaw,
+            dem_minutes:        (int) $demRaw,
+            break_minutes:      (int) $brkRaw,
+            variables_blob:     '168-night--0',
+            out_of_route_ind:   0,
+            out_of_route_miles: 0,
+            terminal_pcola:     0,
+        );
+        $pay = $this->calculator->computeFor($payInput);
+
         // --- insert -----------------------------------------------------
         $frtl = $this->loads->insertOne([
             'driver_id'          => (int) $account['id'],
+            'frtl'               => $frtl,
             'load_type'          => $loadType,
             'pickup_city'        => $pickup,
             'delivery_city'      => $delivery,
@@ -194,21 +258,26 @@ final class LoadEntryController extends Controller
             'used_google_maps'   => $usedGoogleMaps,
             'terminal_pcola'     => 0,
             'notes'              => $notes !== '' ? $notes : null,
+            'np'                 => $pay['np'],
+            'op'                 => $pay['op'],
         ]);
 
         // Clear preserved input on success.
-        foreach (['_old_pickup', '_old_delivery', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend'] as $k) {
+        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend'] as $k) {
             $this->session->forget($k);
         }
 
         $sourceNote = $usedGoogleMaps ? ' (via Google Maps, now cached)' : '';
+        $frtlNote   = $frtlRaw === '' ? ' (auto-assigned)' : '';
         $this->session->put('_flash', sprintf(
-            'Added load frtl=%d: %s → %s, %d miles%s.',
+            'Added load frtl=%d%s: %s → %s, %d miles%s. Pay: $%s.',
             $frtl,
+            $frtlNote,
             $pickup,
             $delivery,
             $emptyMiles,
-            $sourceNote
+            $sourceNote,
+            number_format($pay['np'], 2)
         ));
         return $this->redirect($request->basePath() . '/loads');
     }

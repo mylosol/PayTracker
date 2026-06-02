@@ -37,8 +37,13 @@ $authenticated = is_array($account);
             branches port them off the legacy app.</p>
 
         <p>
-            <a href="<?= e($base) ?>/locations"
+            <a href="<?= e($base) ?>/dashboard"
                style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                My pay (today) &rarr;
+            </a>
+            &nbsp;
+            <a href="<?= e($base) ?>/locations"
+               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
                 Manage locations &rarr;
             </a>
             &nbsp;
