@@ -143,6 +143,7 @@ final class DriverLoad extends Model
             SELECT
                 frtl, date,
                 load_type, pickup_city, delivery_city,
+                end_empty_city, end_empty_miles,
                 empty_miles, is_split, is_weekend,
                 extra_pay, dem_minutes, break_minutes,
                 out_of_route_miles,
@@ -177,6 +178,7 @@ final class DriverLoad extends Model
                 COALESCE(SUM(
                     COALESCE(empty_miles, 0)
                   + COALESCE(begin_empty_miles, 0)
+                  + COALESCE(end_empty_miles, 0)
                   + COALESCE(out_of_route_miles, 0)
                 ), 0)                                                   AS miles_total
             FROM ' . self::ident(self::$table) . '
@@ -276,6 +278,7 @@ final class DriverLoad extends Model
         $sql = 'SELECT
                     driver_id, frtl,
                     load_type, empty_miles, pickup_city, delivery_city,
+                    end_empty_city, end_empty_miles,
                     is_split, is_weekend, begin_empty_miles,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles, terminal_pcola,
@@ -429,6 +432,7 @@ final class DriverLoad extends Model
                     driver_id, frtl, date,
                     variables, loadinfo, paid, notPaid, notes, np, op, pay_breakdown,
                     load_type, empty_miles, pickup_city, delivery_city,
+                    end_empty_city, end_empty_miles,
                     is_split, is_weekend, begin_empty_miles, used_google_maps,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles, terminal_pcola
@@ -436,6 +440,7 @@ final class DriverLoad extends Model
                     ?, ?, NOW(),
                     ?, ?, ?, 0, ?, ?, ?, ?,
                     ?, ?, ?, ?,
+                    ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, 0
@@ -458,6 +463,7 @@ final class DriverLoad extends Model
                     $variables, $loadinfo, $paid, $data['notes'] ?? null,
                     $np, $op, $payBreakdown,
                     $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
+                    $data['end_empty_city'] ?? null, (int) ($data['end_empty_miles'] ?? 0),
                     $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
                     number_format($data['extra_pay'], 2, '.', ''),
                     $data['dem_minutes'], $data['break_minutes'],
@@ -519,6 +525,7 @@ final class DriverLoad extends Model
         $sql = 'SELECT
                     driver_id, frtl, date,
                     load_type, pickup_city, delivery_city,
+                    end_empty_city, end_empty_miles,
                     empty_miles, begin_empty_miles, is_split, is_weekend,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles,
@@ -571,6 +578,7 @@ final class DriverLoad extends Model
         $sql = 'UPDATE `driver_loads` SET
                     load_type = ?, empty_miles = ?,
                     pickup_city = ?, delivery_city = ?,
+                    end_empty_city = ?, end_empty_miles = ?,
                     is_split = ?, is_weekend = ?,
                     extra_pay = ?, dem_minutes = ?, break_minutes = ?,
                     notes = ?,
@@ -581,6 +589,7 @@ final class DriverLoad extends Model
         $this->prepared($sql, [
             $data['load_type'], $data['empty_miles'],
             $data['pickup_city'], $data['delivery_city'],
+            $data['end_empty_city'] ?? null, (int) ($data['end_empty_miles'] ?? 0),
             $data['is_split'], $data['is_weekend'],
             number_format($data['extra_pay'], 2, '.', ''),
             $data['dem_minutes'], $data['break_minutes'],

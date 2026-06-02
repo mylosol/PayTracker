@@ -204,7 +204,13 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                                             <?php endif; ?>
                                             <?php if ((float) ($bd['empty_pay'] ?? 0) !== 0.0): ?>
                                                 <tr>
-                                                    <td style="padding:.2rem .8rem;color:#475569;">Empty miles</td>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">
+                                                        Empty Pay:
+                                                        <?php if ((int) ($bd['empty_miles'] ?? 0) > 0): ?>
+                                                            <?= (int) $bd['empty_miles'] ?> Miles
+                                                            <span class="muted">@ $<?= number_format((float) ($bd['empty_rate'] ?? 0), 4) ?></span>
+                                                        <?php endif; ?>
+                                                    </td>
                                                     <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
                                                         <?= e($money((float) $bd['empty_pay'])) ?>
                                                     </td>

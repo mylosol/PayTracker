@@ -121,7 +121,8 @@ final class PayCalculator
      *   trip_label: string,
      *   tenure_band: string, shift: string,
      *   base_miles: int, base_rate: float,
-     *   base_pay: float, empty_pay: float,
+     *   base_pay: float,
+     *   empty_miles: int, empty_rate: float, empty_pay: float,
      *   seniority_pct: float, seniority_pay: float,
      *   shift_pct: float,    shift_pay: float,
      *   weekend_pct: float,  weekend_pay: float,
@@ -166,7 +167,9 @@ final class PayCalculator
                 tripLabel: 'Trainer',
                 tenureBand: $tenure, shift: $shift,
                 baseMiles: 0, baseRate: 0.0,
-                basePay: round($trainer, 2), emptyPay: 0.0,
+                basePay: round($trainer, 2),
+                emptyMiles: 0, emptyRate: 0.0,
+                emptyPay: 0.0,
                 seniorityPct: 0.0, seniorityPay: 0.0,
                 shiftPct: 0.0, shiftPay: 0.0,
                 weekendPct: 0.0, weekendPay: 0.0,
@@ -188,6 +191,7 @@ final class PayCalculator
 
         $basePay     = 0.0;
         $emptyPay    = 0.0;
+        $emptyMiles  = max(0, $load->empty_miles + $load->begin_empty_miles);
         $seniority   = 0.0;
         $shiftPay    = 0.0;
         $weekendPay  = 0.0;
@@ -219,8 +223,7 @@ final class PayCalculator
                     $baseRate = $oneWay / $effectiveMiles;
                 }
             }
-            $emptyMilesTotal = max(0, $load->empty_miles + $load->begin_empty_miles);
-            $empty           = $emptyMilesTotal * $mt;
+            $empty           = $emptyMiles * $mt;
 
             if ($oneWay === 0.0 && $empty > 0.0) {
                 // Empty-only: no overlay applies in the legacy formula.
@@ -243,7 +246,9 @@ final class PayCalculator
             tripLabel: $load->load_type === 1 ? 'Round-trip' : 'One-way',
             tenureBand: $tenure, shift: $shift,
             baseMiles: $effectiveMiles, baseRate: round($baseRate, 4),
-            basePay: $basePay, emptyPay: $emptyPay,
+            basePay: $basePay,
+            emptyMiles: $emptyMiles, emptyRate: $mt,
+            emptyPay: $emptyPay,
             seniorityPct: $newBump, seniorityPay: $seniority,
             shiftPct: $nightOn, shiftPay: $shiftPay,
             weekendPct: $weekendOn, weekendPay: $weekendPay,
@@ -272,7 +277,9 @@ final class PayCalculator
         float $np, float $op, string $tripLabel,
         string $tenureBand, string $shift,
         int $baseMiles, float $baseRate,
-        float $basePay, float $emptyPay,
+        float $basePay,
+        int $emptyMiles, float $emptyRate,
+        float $emptyPay,
         float $seniorityPct, float $seniorityPay,
         float $shiftPct, float $shiftPay,
         float $weekendPct, float $weekendPay,
@@ -287,6 +294,8 @@ final class PayCalculator
             'base_miles'    => $baseMiles,
             'base_rate'     => $baseRate,
             'base_pay'      => $basePay,
+            'empty_miles'   => $emptyMiles,
+            'empty_rate'    => $emptyRate,
             'empty_pay'     => $emptyPay,
             'seniority_pct' => $seniorityPct,
             'seniority_pay' => $seniorityPay,

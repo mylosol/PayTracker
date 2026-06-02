@@ -10,7 +10,7 @@
  *   frtl:string, pickup:string, delivery:string, load_type:string,
  *   dem:string, break:string, extra:string,
  *   split:string, weekend:string,
- *   notes?:string,
+ *   notes?:string, end_empty?:string,
  * } $old
  * @var string $mode      'create' (default) or 'edit'
  * @var int    $editFrtl  Only set when mode === 'edit'
@@ -72,6 +72,19 @@ $formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
             <input list="city-options" id="delivery_city" name="delivery_city" type="text" required
                    value="<?= e((string) $old['delivery']) ?>"
                    style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+        </p>
+
+        <p>
+            <label for="end_empty_city"><strong>End Empty location</strong>
+                <span class="muted">(one-way only)</span>
+            </label><br>
+            <input list="city-options" id="end_empty_city" name="end_empty_city" type="text"
+                   value="<?= e((string) ($old['end_empty'] ?? '')) ?>"
+                   style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+            <small class="muted">
+                Where you ended after the delivery (typically the terminal you returned to).
+                Empty leg = delivery &rarr; here. Leave blank for round-trip.
+            </small>
         </p>
 
         <datalist id="city-options">

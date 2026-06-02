@@ -91,10 +91,14 @@ final class PayRecomputer
         $compute = function (array $row) use ($resolve, $profileBlob): array {
             $miles    = $resolve((string) $row['pickup_city'], (string) $row['delivery_city']);
             $useBlob  = $profileBlob ?? (string) ($row['variables'] ?? '6-day--0');
+            // The legacy `empty_miles` column actually stores the LOADED
+            // leg distance; the real empty leg (delivery → end_empty)
+            // is in `end_empty_miles`. We feed the calculator the
+            // correctly-named values.
             $load     = new LoadInputs(
                 load_type:          (int) $row['load_type'],
                 load_miles:         $miles,
-                empty_miles:        (int) $row['empty_miles'],
+                empty_miles:        (int) ($row['end_empty_miles'] ?? 0),
                 begin_empty_miles:  (int) $row['begin_empty_miles'],
                 is_split:           (int) $row['is_split'],
                 is_weekend:         (int) $row['is_weekend'],

@@ -89,15 +89,16 @@ final class LoadEntryController extends Controller
             'mode'      => 'create',
             'editFrtl'  => 0,
             'old'       => [
-                'frtl'      => $this->session->get('_old_frtl')     ?? '',
-                'pickup'    => $this->session->get('_old_pickup')   ?? '',
-                'delivery'  => $this->session->get('_old_delivery') ?? '',
-                'load_type' => $this->session->get('_old_type')     ?? '0',
-                'dem'       => $this->session->get('_old_dem')      ?? '0',
-                'break'     => $this->session->get('_old_break')    ?? '0',
-                'extra'     => $this->session->get('_old_extra')    ?? '0',
-                'split'     => $this->session->get('_old_split')    ?? '0',
-                'weekend'   => $this->session->get('_old_weekend')  ?? '0',
+                'frtl'      => $this->session->get('_old_frtl')      ?? '',
+                'pickup'    => $this->session->get('_old_pickup')    ?? '',
+                'delivery'  => $this->session->get('_old_delivery')  ?? '',
+                'load_type' => $this->session->get('_old_type')      ?? '0',
+                'dem'       => $this->session->get('_old_dem')       ?? '0',
+                'break'     => $this->session->get('_old_break')     ?? '0',
+                'extra'     => $this->session->get('_old_extra')     ?? '0',
+                'split'     => $this->session->get('_old_split')     ?? '0',
+                'weekend'   => $this->session->get('_old_weekend')   ?? '0',
+                'end_empty' => $this->session->get('_old_end_empty') ?? '',
                 'notes'     => '',
             ],
         ]);
@@ -119,20 +120,22 @@ final class LoadEntryController extends Controller
         }
 
         // --- pull + preserve old input ----------------------------------
-        $frtlRaw  = trim((string) $request->input('frtl', ''));
-        $pickup   = trim((string) $request->input('pickup_city', ''));
-        $delivery = trim((string) $request->input('delivery_city', ''));
-        $typeRaw  = (string) $request->input('load_type', '');
-        $splitRaw = (string) $request->input('is_split', '0');
-        $wkRaw    = (string) $request->input('is_weekend', '0');
-        $demRaw   = (string) $request->input('dem_minutes', '0');
-        $brkRaw   = (string) $request->input('break_minutes', '0');
-        $extraRaw = (string) $request->input('extra_pay', '0');
-        $notes    = trim((string) $request->input('notes', ''));
+        $frtlRaw   = trim((string) $request->input('frtl', ''));
+        $pickup    = trim((string) $request->input('pickup_city', ''));
+        $delivery  = trim((string) $request->input('delivery_city', ''));
+        $endEmpty  = trim((string) $request->input('end_empty_city', ''));
+        $typeRaw   = (string) $request->input('load_type', '');
+        $splitRaw  = (string) $request->input('is_split', '0');
+        $wkRaw     = (string) $request->input('is_weekend', '0');
+        $demRaw    = (string) $request->input('dem_minutes', '0');
+        $brkRaw    = (string) $request->input('break_minutes', '0');
+        $extraRaw  = (string) $request->input('extra_pay', '0');
+        $notes     = trim((string) $request->input('notes', ''));
 
         $this->session->put('_old_frtl', $frtlRaw);
         $this->session->put('_old_pickup', $pickup);
         $this->session->put('_old_delivery', $delivery);
+        $this->session->put('_old_end_empty', $endEmpty);
         $this->session->put('_old_type', $typeRaw);
         $this->session->put('_old_dem', $demRaw);
         $this->session->put('_old_break', $brkRaw);
@@ -198,6 +201,9 @@ final class LoadEntryController extends Controller
         }
 
         // --- mile lookup -----------------------------------------------
+        // The legacy column name is misleading: $emptyMiles here is the
+        // pickup → delivery LOADED leg distance. The actual empty leg
+        // (delivery → end_empty) lands in $endEmptyMiles below.
         $milesBefore = $this->distances->between($pickup, $delivery);
         $emptyMiles  = $this->distances->lookupOrFetch($pickup, $delivery);
         if ($emptyMiles === null) {
@@ -211,6 +217,27 @@ final class LoadEntryController extends Controller
             );
         }
         $usedGoogleMaps = count($milesBefore) === 0 ? 1 : 0;
+
+        // End-empty leg: only meaningful for one-way (load_type=0). For
+        // round-trip we silently ignore even if a value was typed.
+        $endEmptyMiles = 0;
+        if ($loadType === 0 && $endEmpty !== '') {
+            if ($endEmpty === $delivery) {
+                return $this->failBack($request, 'End Empty must differ from the delivery city.');
+            }
+            $resolved = $this->distances->lookupOrFetch($delivery, $endEmpty);
+            if ($resolved === null) {
+                return $this->failBack(
+                    $request,
+                    sprintf(
+                        'Could not find an empty-leg mileage for %s → %s.',
+                        $delivery,
+                        $endEmpty
+                    )
+                );
+            }
+            $endEmptyMiles = $resolved;
+        }
 
         // --- compute pay -------------------------------------------------
         // Run PayCalculator now so the dashboard's totals are accurate
@@ -238,7 +265,7 @@ final class LoadEntryController extends Controller
         $payInput = new LoadInputs(
             load_type:          $loadType,
             load_miles:         $emptyMiles,
-            empty_miles:        0,
+            empty_miles:        $endEmptyMiles,
             begin_empty_miles:  0,
             is_split:           $isSplit,
             is_weekend:         $isWeekend,
@@ -258,6 +285,8 @@ final class LoadEntryController extends Controller
             'load_type'          => $loadType,
             'pickup_city'        => $pickup,
             'delivery_city'      => $delivery,
+            'end_empty_city'     => $loadType === 0 && $endEmpty !== '' ? $endEmpty : null,
+            'end_empty_miles'    => $endEmptyMiles,
             'empty_miles'        => $emptyMiles,
             'begin_empty_miles'  => 0,
             'is_split'           => $isSplit,
@@ -276,7 +305,7 @@ final class LoadEntryController extends Controller
         ]);
 
         // Clear preserved input on success.
-        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend'] as $k) {
+        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_end_empty', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend'] as $k) {
             $this->session->forget($k);
         }
 
@@ -331,15 +360,16 @@ final class LoadEntryController extends Controller
             'editFrtl'  => $frtlInt,
             'old'       => [
                 'frtl'      => (string) $frtlInt,
-                'pickup'    => (string) ($row['pickup_city']  ?? ''),
-                'delivery'  => (string) ($row['delivery_city'] ?? ''),
-                'load_type' => (string) ($row['load_type']    ?? '0'),
-                'dem'       => (string) ($row['dem_minutes']  ?? '0'),
-                'break'     => (string) ($row['break_minutes'] ?? '0'),
-                'extra'     => (string) ($row['extra_pay']    ?? '0'),
-                'split'     => (string) ($row['is_split']     ?? '0'),
-                'weekend'   => (string) ($row['is_weekend']   ?? '0'),
-                'notes'     => (string) ($row['notes']        ?? ''),
+                'pickup'    => (string) ($row['pickup_city']    ?? ''),
+                'delivery'  => (string) ($row['delivery_city']  ?? ''),
+                'end_empty' => (string) ($row['end_empty_city'] ?? ''),
+                'load_type' => (string) ($row['load_type']      ?? '0'),
+                'dem'       => (string) ($row['dem_minutes']    ?? '0'),
+                'break'     => (string) ($row['break_minutes']  ?? '0'),
+                'extra'     => (string) ($row['extra_pay']      ?? '0'),
+                'split'     => (string) ($row['is_split']       ?? '0'),
+                'weekend'   => (string) ($row['is_weekend']     ?? '0'),
+                'notes'     => (string) ($row['notes']          ?? ''),
             ],
         ]);
     }
@@ -372,15 +402,16 @@ final class LoadEntryController extends Controller
             return $this->redirect($request->basePath() . '/dashboard');
         }
 
-        $pickup   = trim((string) $request->input('pickup_city', ''));
-        $delivery = trim((string) $request->input('delivery_city', ''));
-        $typeRaw  = (string) $request->input('load_type', '');
-        $splitRaw = (string) $request->input('is_split', '0');
-        $wkRaw    = (string) $request->input('is_weekend', '0');
-        $demRaw   = (string) $request->input('dem_minutes', '0');
-        $brkRaw   = (string) $request->input('break_minutes', '0');
-        $extraRaw = (string) $request->input('extra_pay', '0');
-        $notes    = trim((string) $request->input('notes', ''));
+        $pickup    = trim((string) $request->input('pickup_city', ''));
+        $delivery  = trim((string) $request->input('delivery_city', ''));
+        $endEmpty  = trim((string) $request->input('end_empty_city', ''));
+        $typeRaw   = (string) $request->input('load_type', '');
+        $splitRaw  = (string) $request->input('is_split', '0');
+        $wkRaw     = (string) $request->input('is_weekend', '0');
+        $demRaw    = (string) $request->input('dem_minutes', '0');
+        $brkRaw    = (string) $request->input('break_minutes', '0');
+        $extraRaw  = (string) $request->input('extra_pay', '0');
+        $notes     = trim((string) $request->input('notes', ''));
 
         if ($pickup === '' || $delivery === '') {
             return $this->failBackEdit($request, $frtl, 'Pick-up and delivery cities are required.');
@@ -396,6 +427,9 @@ final class LoadEntryController extends Controller
         }
         if ($this->cities->findByName($delivery) === null) {
             return $this->failBackEdit($request, $frtl, sprintf('Delivery city "%s" is not in the city list. Add it first.', $delivery));
+        }
+        if ($endEmpty !== '' && $this->cities->findByName($endEmpty) === null) {
+            return $this->failBackEdit($request, $frtl, sprintf('End Empty "%s" is not in the city list.', $endEmpty));
         }
         if (! is_numeric($demRaw) || (int) $demRaw < 0 || (int) $demRaw > self::MAX_MINUTES) {
             return $this->failBackEdit($request, $frtl, 'Demurrage minutes must be between 0 and ' . self::MAX_MINUTES . '.');
@@ -419,6 +453,25 @@ final class LoadEntryController extends Controller
                 sprintf('Could not find a mileage for %s → %s.', $pickup, $delivery)
             );
         }
+        // End-empty leg: only meaningful for one-way. Round-trip
+        // submissions with End Empty filled in get the value silently
+        // dropped (legacy behaviour) so the form's End-Empty value
+        // doesn't mysteriously vanish without explanation.
+        $endEmptyMiles = 0;
+        if ($loadType === 0 && $endEmpty !== '') {
+            if ($endEmpty === $delivery) {
+                return $this->failBackEdit($request, $frtl, 'End Empty must differ from the delivery city.');
+            }
+            $resolved = $this->distances->lookupOrFetch($delivery, $endEmpty);
+            if ($resolved === null) {
+                return $this->failBackEdit(
+                    $request,
+                    $frtl,
+                    sprintf('Could not find an empty-leg mileage for %s → %s.', $delivery, $endEmpty)
+                );
+            }
+            $endEmptyMiles = $resolved;
+        }
 
         // Recompute pay using the driver's CURRENT profile. Consistent
         // with the Refresh-my-pay path: if a driver's tenure/shift has
@@ -428,7 +481,7 @@ final class LoadEntryController extends Controller
         $payInput = new LoadInputs(
             load_type:          $loadType,
             load_miles:         $miles,
-            empty_miles:        0,
+            empty_miles:        $endEmptyMiles,
             begin_empty_miles:  0,
             is_split:           $isSplit,
             is_weekend:         $isWeekend,
@@ -443,20 +496,22 @@ final class LoadEntryController extends Controller
 
         try {
             $this->loads->updateOne((int) $account['id'], $frtlInt, [
-                'load_type'     => $loadType,
-                'pickup_city'   => $pickup,
-                'delivery_city' => $delivery,
-                'empty_miles'   => $miles,
-                'is_split'      => $isSplit,
-                'is_weekend'    => $isWeekend,
-                'extra_pay'     => (float) $extraRaw,
-                'dem_minutes'   => (int) $demRaw,
-                'break_minutes' => (int) $brkRaw,
-                'notes'         => $notes !== '' ? $notes : null,
-                'np'            => $pay['np'],
-                'op'            => $pay['op'],
-                'variables'     => $variablesBlob,
-                'pay_breakdown' => $pay,
+                'load_type'       => $loadType,
+                'pickup_city'     => $pickup,
+                'delivery_city'   => $delivery,
+                'end_empty_city'  => $loadType === 0 && $endEmpty !== '' ? $endEmpty : null,
+                'end_empty_miles' => $endEmptyMiles,
+                'empty_miles'     => $miles,
+                'is_split'        => $isSplit,
+                'is_weekend'      => $isWeekend,
+                'extra_pay'       => (float) $extraRaw,
+                'dem_minutes'     => (int) $demRaw,
+                'break_minutes'   => (int) $brkRaw,
+                'notes'           => $notes !== '' ? $notes : null,
+                'np'              => $pay['np'],
+                'op'              => $pay['op'],
+                'variables'       => $variablesBlob,
+                'pay_breakdown'   => $pay,
             ]);
         } catch (\Throwable $e) {
             return $this->failBackEdit($request, $frtl, 'Could not save load: ' . $e->getMessage());
