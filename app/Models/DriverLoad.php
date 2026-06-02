@@ -287,9 +287,15 @@ final class DriverLoad extends Model
             return ['considered' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0];
         }
 
+        // The variables column is rewritten alongside np/op when the
+        // closure surfaces an `_variables` blob — covers the driver-
+        // refresh path where the snapshot was wrong at insert time
+        // and needs to be corrected from the current profile. Admin
+        // recompute leaves the blob untouched, in which case the new
+        // value equals the old value and the column write is a no-op.
         $update = $this->connection->pdo()->prepare(
             'UPDATE `driver_loads`
-             SET np = ?, op = ?, pay_breakdown = ?
+             SET np = ?, op = ?, pay_breakdown = ?, variables = ?
              WHERE driver_id = ? AND frtl = ?'
         );
 
@@ -302,25 +308,34 @@ final class DriverLoad extends Model
                 $stats['skipped']++;
                 continue;
             }
-            $newNp = (float) $result['np'];
-            $newOp = (float) $result['op'];
-            $oldNp = (float) $row['np'];
-            $oldOp = (float) $row['op'];
-            // Unchanged short-circuit: same totals AND we already have a
-            // breakdown stored. If breakdown is null we still need to
-            // backfill it even when np/op match, so the dashboard's
-            // expander has data to show.
+            $newNp        = (float) $result['np'];
+            $newOp        = (float) $result['op'];
+            $newVariables = isset($result['_variables']) && is_string($result['_variables'])
+                ? $result['_variables']
+                : (string) ($row['variables'] ?? '');
+            $oldNp        = (float) $row['np'];
+            $oldOp        = (float) $row['op'];
+            $oldVariables = (string) ($row['variables'] ?? '');
+            // Unchanged short-circuit: same totals AND same variables blob
+            // AND we already have a breakdown stored. Any mismatch (even
+            // just the blob) means we re-write so the stored snapshot
+            // stays consistent with what the calculator was fed.
             $sameTotals      = abs($newNp - $oldNp) < 0.005 && abs($newOp - $oldOp) < 0.005;
+            $sameVariables   = $newVariables === $oldVariables;
             $haveBreakdown   = isset($row['pay_breakdown']) && $row['pay_breakdown'] !== null && $row['pay_breakdown'] !== '';
-            if ($sameTotals && $haveBreakdown) {
+            if ($sameTotals && $sameVariables && $haveBreakdown) {
                 $stats['unchanged']++;
                 continue;
             }
+            // Strip the recompute-only sentinel before encoding so the
+            // stored JSON matches the calculator's published shape.
+            unset($result['_variables']);
             $breakdownJson = json_encode($result, JSON_THROW_ON_ERROR);
             $update->execute([
                 number_format($newNp, 2, '.', ''),
                 number_format($newOp, 2, '.', ''),
                 $breakdownJson,
+                $newVariables,
                 (int) $row['driver_id'],
                 (int) $row['frtl'],
             ]);

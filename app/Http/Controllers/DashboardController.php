@@ -143,7 +143,13 @@ final class DashboardController extends Controller
         $since   = date('Y-m-d', strtotime($dateRaw . ' -30 days'));
 
         try {
-            $stats = $this->recomputer->run($driverId, $since);
+            // Driver-initiated refresh OVERRIDES each load's snapshotted
+            // variables blob with one derived from the driver's CURRENT
+            // profile. That's the "I just set my hire date, fix my old
+            // loads" use case — the snapshot was wrong at insert time
+            // and the driver wants it corrected. The admin path stays
+            // snapshot-preserving (no $applyProfile passed).
+            $stats = $this->recomputer->run($driverId, $since, $account);
         } catch (\Throwable $e) {
             $this->session->put('_flash', 'Refresh failed: ' . $e->getMessage());
             return $this->redirect($request->basePath() . '/dashboard?date=' . urlencode($dateRaw));
