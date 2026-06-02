@@ -497,29 +497,37 @@ spec exercises.
 
 **Expected:**
 - Heading "Add a load".
-- Pick-up and delivery fields both render with the city autocompletion
-  datalist.
+- **Pick-up terminal** renders as a dropdown restricted to the
+  dispatch terminals (`terminal` ∪ `pcola_terminal`) — e.g. Panama
+  City FL, Niceville FL, Freeport FL, Pelham GA, Pensacola FL,
+  Montgomery AL, Birmingham AL, DeFuniak Springs FL, Bainbridge GA.
+- **Delivery city** is a free-text input backed by the full city
+  autocompletion datalist.
 - A hidden `_csrf` input is present (inspect the form HTML).
 - Load-type radios default to "Loaded one-way".
 
 ### 9c. Empty submission rejected
-1. From `/loads/new`, leave pick-up and delivery blank, click **Add load**.
+1. From `/loads/new`, leave pick-up unselected and delivery blank,
+   click **Add load**.
 
 **Expected:** flash banner "Pick-up and delivery cities are required."
 
 ### 9d. Same pickup and delivery rejected
-1. Fill both fields with `Panama City, FL`, submit.
+1. Select Pick-up = `Panama City, FL`.
+2. Type Delivery = `Panama City, FL`. Submit.
 
 **Expected:** flash banner "Pick-up and delivery cannot be the same city."
 
-### 9e. Unknown city rejected
-1. Fill pickup with `Nowhereville, ZZ`, delivery with `Panama City, FL`,
-   submit.
+### 9e. Unknown delivery city rejected
+1. Select Pick-up = `Panama City, FL`.
+2. Type Delivery = `Nowhereville, ZZ`. Submit.
 
 **Expected:** flash banner "...is not in the city list. Add it first."
+(Pick-up is structurally constrained by the dropdown — there's no
+analogous "unknown pickup" case to test now.)
 
 ### 9f. Valid submission inserts and shows assigned frtl
-1. Fill pickup with `Panama City, FL`, delivery with `Lynn Haven, FL`.
+1. Select Pick-up = `Panama City, FL`, type Delivery = `Lynn Haven, FL`.
 2. Notes: `QA TEST manual walk` (the `QA TEST ` prefix is what lets
    `scripts/qa-cleanup.php --loads` sweep it later).
 3. Submit.

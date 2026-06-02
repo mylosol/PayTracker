@@ -42,17 +42,21 @@ test.describe('load entry (write path)', () => {
     test('9d — same pickup and delivery rejected', async ({ page }) => {
         await signIn(page);
         await page.goto('loads/new');
-        await page.locator('#pickup_city').fill('Panama City, FL');
+        // pickup_city is now a <select> restricted to terminals.
+        await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Panama City, FL');
         await page.getByRole('button', { name: /add load/i }).click();
         await expect(page.getByText(/cannot be the same city/i)).toBeVisible();
     });
 
-    test('9e — unknown pickup city rejected', async ({ page }) => {
+    test('9e — unknown delivery city rejected', async ({ page }) => {
+        // Pickup is now a constrained <select>, so the "unknown pickup"
+        // case is structurally impossible. Cover the delivery-side check
+        // instead — same controller branch, just the other input.
         await signIn(page);
         await page.goto('loads/new');
-        await page.locator('#pickup_city').fill('Nowhereville, ZZ');
-        await page.locator('#delivery_city').fill('Panama City, FL');
+        await page.locator('#pickup_city').selectOption('Panama City, FL');
+        await page.locator('#delivery_city').fill('Nowhereville, ZZ');
         await page.getByRole('button', { name: /add load/i }).click();
         await expect(page.getByText(/not in the city list/i)).toBeVisible();
     });
@@ -64,7 +68,7 @@ test.describe('load entry (write path)', () => {
         // Use a pair we KNOW is in city_distances (the backfill loaded
         // both of these). If the deploy ever regresses this assumption
         // the test will surface it.
-        await page.locator('#pickup_city').fill('Panama City, FL');
+        await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Lynn Haven, FL');
         await page.locator('input[name="load_type"][value="0"]').check();
         await page.locator('#extra_pay').fill('0');

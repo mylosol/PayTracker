@@ -10,6 +10,7 @@ use PayTracker\Http\Response;
 use PayTracker\Models\City;
 use PayTracker\Models\CityDistance;
 use PayTracker\Models\DriverLoad;
+use PayTracker\Models\Terminal;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 
@@ -59,6 +60,7 @@ final class LoadEntryController extends Controller
         private readonly City $cities,
         private readonly CityDistance $distances,
         private readonly DriverLoad $loads,
+        private readonly Terminal $terminals,
     ) {
     }
 
@@ -76,6 +78,7 @@ final class LoadEntryController extends Controller
             'csrfToken' => $this->csrf->token(),
             'base'      => $request->basePath(),
             'cities'    => $this->cities->allForPicker(),
+            'terminals' => $this->terminals->all(),
             'driver'    => $account,
             'flash'     => $this->popFlash(),
             'old'       => [
@@ -151,12 +154,15 @@ final class LoadEntryController extends Controller
             return $this->failBack($request, 'Extra pay must be between 0 and ' . self::MAX_EXTRA_PAY . '.');
         }
 
-        // Verify both cities exist in our list. Loads can only reference
-        // cities the matrix knows about — the add-city flow is the proper
-        // way to introduce a new one.
-        if ($this->cities->findByName($pickup) === null) {
-            return $this->failBack($request, sprintf('Pick-up city "%s" is not in the city list. Add it first.', $pickup));
+        // Pick-up MUST be a known terminal — drivers fuel at terminals and
+        // load there. This is a stricter check than "is this a known city"
+        // because the city list is much larger than the terminal list.
+        if (! $this->terminals->isKnown($pickup)) {
+            return $this->failBack($request, sprintf('Pick-up "%s" is not a known terminal. Pick from the list.', $pickup));
         }
+
+        // Delivery can be any city the matrix knows about. The add-city
+        // flow is the proper way to introduce a new one.
         if ($this->cities->findByName($delivery) === null) {
             return $this->failBack($request, sprintf('Delivery city "%s" is not in the city list. Add it first.', $delivery));
         }
