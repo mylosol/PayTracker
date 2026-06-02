@@ -217,7 +217,9 @@ final class PayCalculator
                 $base = $this->rates->lookup('pensacola', 'long_haul', $effectiveMiles);
                 if ($base !== null) {
                     $oneWay   = $base * (1 + $raise);
-                    $baseRate = $effectiveMiles > 0 ? $oneWay / $effectiveMiles : 0.0;
+                    // $effectiveMiles is already > 0 from the outer guard;
+                    // the per-mile rate is safe to compute unconditionally.
+                    $baseRate = $oneWay / $effectiveMiles;
                 }
             }
             $emptyMilesTotal = max(0, $load->empty_miles + $load->begin_empty_miles);
