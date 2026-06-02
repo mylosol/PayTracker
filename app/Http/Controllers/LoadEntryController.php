@@ -271,6 +271,7 @@ final class LoadEntryController extends Controller
             'np'                 => $pay['np'],
             'op'                 => $pay['op'],
             'variables'          => $variablesBlob,
+            'pay_breakdown'      => $pay,
         ]);
 
         // Clear preserved input on success.

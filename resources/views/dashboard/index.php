@@ -12,11 +12,12 @@
  *   load_type:?int, pickup_city:?string, delivery_city:?string,
  *   empty_miles:?int, is_split:?int, is_weekend:?int,
  *   extra_pay:?string, dem_minutes:?int, break_minutes:?int,
- *   out_of_route_miles:?int, np:string, op:string,
+ *   out_of_route_miles:?int, np:string, op:string, pay_breakdown:?string,
  * }> $rows
  * @var array{count:int, np_total:string, op_total:string, miles_total:int} $totals
  * @var string $csrfToken
  * @var string|null $flash
+ * @var array{band:string, shift:string} $effective Current tenure/shift readout.
  */
 layout('layouts/app');
 
@@ -31,6 +32,26 @@ $loadTypeLabel = static function (?int $t): string {
     if ($t === 4)    return 'Trainer';
     return (string) $t;
 };
+
+/**
+ * Decode a row's pay_breakdown JSON. Returns null when the breakdown
+ * is missing (legacy rows backfilled before the column existed) or
+ * unparseable.
+ *
+ * @return array<string,mixed>|null
+ */
+$decodeBreakdown = static function (?string $json): ?array {
+    if ($json === null || $json === '') return null;
+    try {
+        $arr = json_decode($json, true, 32, JSON_THROW_ON_ERROR);
+    } catch (\Throwable) {
+        return null;
+    }
+    return is_array($arr) ? $arr : null;
+};
+
+$money = static fn (float $v): string => '$' . number_format($v, 2);
+$pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
 ?>
 <?php if ($flash !== null): ?>
     <div class="card" style="background:#dcfce7;color:#166534;">
@@ -47,6 +68,10 @@ $loadTypeLabel = static function (?int $t): string {
         <a href="<?= e($base) ?>/pay-admin">pay-admin recompute</a>.
     </p>
     <p style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <span class="pill"
+              style="background:#0f172a;color:#e2e8f0;padding:.35rem .8rem;font-size:12px;letter-spacing:.04em;text-transform:uppercase;border-radius:6px;">
+            <?= e($effective['band']) ?>&nbsp;M &nbsp;|&nbsp; <?= e(ucfirst($effective['shift'])) ?> Shift
+        </span>
         <a href="<?= e($base) ?>/dashboard?date=<?= e($prevDate) ?>"
            style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem .8rem;border-radius:6px;text-decoration:none;">
             &larr; <?= e($prevDate) ?>
@@ -115,28 +140,27 @@ $loadTypeLabel = static function (?int $t): string {
         <table style="border-collapse:collapse;font-size:13px;width:100%;">
             <thead>
                 <tr style="text-align:left;border-bottom:1px solid #e4e8ee;">
+                    <th style="padding:.3rem .5rem;width:1.5rem;"></th>
                     <th style="padding:.3rem .5rem;">FRTL</th>
                     <th style="padding:.3rem .5rem;">Time</th>
                     <th style="padding:.3rem .5rem;">Type</th>
                     <th style="padding:.3rem .5rem;">Pickup &rarr; Delivery</th>
-                    <th style="padding:.3rem .5rem;text-align:right;">Empty mi</th>
-                    <th style="padding:.3rem .5rem;text-align:center;">Split</th>
-                    <th style="padding:.3rem .5rem;text-align:center;">Weekend</th>
-                    <th style="padding:.3rem .5rem;text-align:right;">Extras</th>
                     <th style="padding:.3rem .5rem;text-align:right;">NP</th>
                     <th style="padding:.3rem .5rem;text-align:right;">OP</th>
                 </tr>
             </thead>
             <tbody>
                 <?php foreach ($rows as $row):
-                    // Sum the easily-visible "extras" amount surfaces — extras
-                    // already roll into np/op via PayCalculator, so this is a
-                    // sanity readout, not a separate column.
-                    $extras = (float) ($row['extra_pay'] ?? 0)
-                            + ((int) ($row['dem_minutes']   ?? 0)) * 0.391667
-                            + ((int) ($row['break_minutes'] ?? 0)) * 0.391667;
+                    $bd = $decodeBreakdown($row['pay_breakdown'] ?? null);
                 ?>
-                    <tr style="border-bottom:1px solid #f0f2f6;">
+                    <tr style="border-bottom:1px solid #f0f2f6;vertical-align:top;">
+                        <td style="padding:.25rem .5rem;text-align:center;">
+                            <?php if ($bd !== null): ?>
+                                <details><summary
+                                    style="list-style:none;cursor:pointer;color:var(--accent);font-weight:600;display:inline-block;"
+                                    title="Show pay breakdown">&#x25B8;</summary></details>
+                            <?php endif; ?>
+                        </td>
                         <td style="padding:.25rem .5rem;"><code><?= (int) $row['frtl'] ?></code></td>
                         <td style="padding:.25rem .5rem;"><code><?= e(substr((string) $row['date'], 11, 5)) ?></code></td>
                         <td style="padding:.25rem .5rem;"><?= e($loadTypeLabel($row['load_type'])) ?></td>
@@ -145,13 +169,111 @@ $loadTypeLabel = static function (?int $t): string {
                             &nbsp;&rarr;&nbsp;
                             <?= e((string) ($row['delivery_city'] ?? '?')) ?>
                         </td>
-                        <td style="padding:.25rem .5rem;text-align:right;"><code><?= (int) ($row['empty_miles'] ?? 0) ?></code></td>
-                        <td style="padding:.25rem .5rem;text-align:center;"><?= ((int) ($row['is_split']   ?? 0)) === 1 ? '✓' : '' ?></td>
-                        <td style="padding:.25rem .5rem;text-align:center;"><?= ((int) ($row['is_weekend'] ?? 0)) === 1 ? '✓' : '' ?></td>
-                        <td style="padding:.25rem .5rem;text-align:right;"><code>$<?= number_format($extras, 2) ?></code></td>
                         <td style="padding:.25rem .5rem;text-align:right;"><code>$<?= number_format((float) $row['np'], 2) ?></code></td>
                         <td style="padding:.25rem .5rem;text-align:right;"><code>$<?= number_format((float) $row['op'], 2) ?></code></td>
                     </tr>
+                    <?php if ($bd !== null): ?>
+                        <tr style="background:#f8fafc;border-bottom:1px solid #f0f2f6;">
+                            <td colspan="7" style="padding:.6rem 1.2rem;">
+                                <details>
+                                    <summary style="cursor:pointer;color:var(--accent);font-weight:600;">
+                                        Pay breakdown &mdash; <?= e((string) ($bd['trip_label'] ?? '?')) ?>
+                                        (<?= e((string) ($bd['tenure_band'] ?? '?')) ?>&nbsp;M&nbsp;|&nbsp;<?= e(ucfirst((string) ($bd['shift'] ?? '?'))) ?>)
+                                    </summary>
+                                    <table style="border-collapse:collapse;font-size:13px;margin-top:.4rem;">
+                                        <tbody>
+                                            <?php if ((float) ($bd['base_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">
+                                                        <?= (int) ($bd['base_miles'] ?? 0) ?> Miles Base
+                                                    </td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['base_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['empty_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">Empty miles</td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['empty_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['shift_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">
+                                                        Shift Pay <span style="color:#ec4899;">(<?= e($pct((float) $bd['shift_pct'])) ?>)</span>
+                                                    </td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['shift_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['seniority_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">
+                                                        Seniority Pay <span style="color:#a855f7;">(<?= e($pct((float) $bd['seniority_pct'])) ?>)</span>
+                                                    </td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['seniority_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['weekend_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">
+                                                        Weekend <span style="color:#f59e0b;">(<?= e($pct((float) $bd['weekend_pct'])) ?>)</span>
+                                                    </td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['weekend_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['split_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">Split Pay</td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['split_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['dem_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">Demurrage</td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['dem_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['break_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">Breakdown</td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['break_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <?php if ((float) ($bd['extra_pay'] ?? 0) !== 0.0): ?>
+                                                <tr>
+                                                    <td style="padding:.2rem .8rem;color:#475569;">Extra Pay</td>
+                                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                                        <?= e($money((float) $bd['extra_pay'])) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
+                                            <tr style="border-top:1px solid #cbd5e1;">
+                                                <td style="padding:.3rem .8rem;font-weight:700;">Total Load Pay</td>
+                                                <td style="padding:.3rem .8rem;text-align:right;font-weight:700;color:#f59e0b;">
+                                                    <?= e($money((float) ($bd['np'] ?? 0))) ?>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </details>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
                 <?php endforeach; ?>
             </tbody>
         </table>
@@ -160,6 +282,8 @@ $loadTypeLabel = static function (?int $t): string {
     <p class="muted" style="margin-top:1rem;font-size:12px;">
         Showing typed-column rows from <code>driver_loads</code>. For the
         backfill diagnostic surface (legacy blob strings, all drivers),
-        see <a href="<?= e($base) ?>/loads">/loads</a>.
+        see <a href="<?= e($base) ?>/loads">/loads</a>. Rows without a
+        breakdown were created before pay_breakdown was tracked &mdash;
+        click <strong>Refresh my pay</strong> to backfill them.
     </p>
 </div>

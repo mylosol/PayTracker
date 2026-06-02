@@ -11,6 +11,7 @@ use PayTracker\Models\DriverLoad;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 use PayTracker\Services\Pay\PayRecomputer;
+use PayTracker\Services\Pay\VariableBlobBuilder;
 
 /**
  * DashboardController — modern replacement for the signed-in portion of
@@ -43,6 +44,7 @@ final class DashboardController extends Controller
         private readonly Csrf $csrf,
         private readonly Session $session,
         private readonly PayRecomputer $recomputer,
+        private readonly VariableBlobBuilder $blobBuilder,
     ) {
     }
 
@@ -75,6 +77,19 @@ final class DashboardController extends Controller
         $nextDate = date('Y-m-d', strtotime($dateRaw . ' +1 day'));
         $today    = date('Y-m-d');
 
+        // The driver's CURRENT effective band + shift. Shown as a pill
+        // at the top of the dashboard so they know what pay parameters
+        // a new load will be computed against. Per-load rows in the
+        // breakdown show their own snapshotted band — those can differ
+        // from this readout when the driver has crossed a band edge
+        // since the load was created.
+        $blob       = $this->blobBuilder->build($account);
+        $blobParts  = explode('-', $blob);
+        $effective  = [
+            'band'  => (string) ($blobParts[0] ?? '6'),
+            'shift' => (string) ($blobParts[1] ?? 'day'),
+        ];
+
         return $this->view('dashboard/index', [
             'base'      => $request->basePath(),
             'driver'    => $account,
@@ -87,6 +102,7 @@ final class DashboardController extends Controller
             'totals'    => $totals,
             'csrfToken' => $this->csrf->token(),
             'flash'     => is_string($flash) ? $flash : null,
+            'effective' => $effective,
         ]);
     }
 

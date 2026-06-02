@@ -74,7 +74,7 @@ final class PayRecomputer
                 extra_pay:          (float) $row['extra_pay'],
                 dem_minutes:        (int) $row['dem_minutes'],
                 break_minutes:      (int) $row['break_minutes'],
-                variables_blob:     (string) ($row['variables'] ?? '168-night--0'),
+                variables_blob:     (string) ($row['variables'] ?? '6-day--0'),
                 out_of_route_ind:   (int) ($row['out_of_route_ind']   ?? 0),
                 out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
                 terminal_pcola:     (int) ($row['terminal_pcola']     ?? 0),

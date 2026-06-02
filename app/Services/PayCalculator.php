@@ -110,9 +110,27 @@ final class PayCalculator
     }
 
     /**
-     * Compute np/op for one load. Returns floats rounded to 2 decimals.
+     * Compute np/op + a full breakdown for one load. The returned array
+     * is intentionally rich: alongside the legacy `np`/`op` totals, we
+     * expose every intermediate the legacy load card surfaces (base mi,
+     * base $, seniority pct + $, shift pct + $, weekend, split, dem,
+     * break, extra), so the dashboard can render the per-row breakdown
+     * without re-deriving anything.
      *
-     * @return array{np: float, op: float}
+     * Existing callers reading $result['np'] / $result['op'] keep
+     * working — the extra fields are additive.
+     *
+     * @return array{
+     *   np: float, op: float,
+     *   trip_label: string,
+     *   tenure_band: string, shift: string,
+     *   base_miles: int, base_rate: float,
+     *   base_pay: float, empty_pay: float,
+     *   seniority_pct: float, seniority_pay: float,
+     *   shift_pct: float,    shift_pay: float,
+     *   weekend_pct: float,  weekend_pay: float,
+     *   split_pay: float, extra_pay: float, dem_pay: float, break_pay: float,
+     * }
      */
     public function computeFor(LoadInputs $load): array
     {
@@ -131,16 +149,33 @@ final class PayCalculator
         $demRate = (float) $this->vars->get('demurrage', '0');
         $brkRate = (float) $this->vars->get('breakdown', '0');
 
+        // Two views of "extras":
+        //   $extras (float, unrounded) goes into the np sum — legacy
+        //     does one final round at the end, not per-component.
+        //   $extrasBreakdown (each component rounded) is the display
+        //     form for the dashboard. Op = round($extras, 2) so it
+        //     matches the legacy op value bit-for-bit.
+        $extras          = $this->extrasUnrounded($load, $demRate, $brkRate);
+        $extrasBreakdown = $this->extrasBreakdown($load, $demRate, $brkRate);
+
+        // Trainer path: np = op = trainer_pay + extras. No base/seniority/
+        // shift/weekend overlay applies. We zero those fields so the
+        // breakdown view renders only the trainer base + any extras.
         if ($load->load_type === 4) {
             $trainer = (float) $this->vars->get('trainer_pay', '0');
-            $extras  = $this->extras($load, $demRate, $brkRate);
-            return [
-                'np' => round($trainer + $extras, 2),
-                'op' => round($trainer + $extras, 2),
-            ];
+            $total   = round($trainer + $extras, 2);
+            return $this->buildResult(
+                np: $total, op: $total,
+                tripLabel: 'Trainer',
+                tenureBand: $tenure, shift: $shift,
+                baseMiles: 0, baseRate: 0.0,
+                basePay: round($trainer, 2), emptyPay: 0.0,
+                seniorityPct: 0.0, seniorityPay: 0.0,
+                shiftPct: 0.0, shiftPay: 0.0,
+                weekendPct: 0.0, weekendPay: 0.0,
+                extras: $extrasBreakdown,
+            );
         }
-
-        $np = 0.0;
 
         // Out-of-route rewrite (legacy include/outofroute.php):
         //   if out_of_route_ind > 0 AND out_of_route_miles > load_miles + 3:
@@ -154,63 +189,143 @@ final class PayCalculator
             $effectiveMiles = $load->out_of_route_miles;
         }
 
+        $basePay     = 0.0;
+        $emptyPay    = 0.0;
+        $seniority   = 0.0;
+        $shiftPay    = 0.0;
+        $weekendPay  = 0.0;
+        $baseRate    = 0.0;
+
         if ($load->load_type === 1) {
+            // Round-trip: base = rate-table lookup × (1 + raise). All
+            // overlays scale off base alone.
             $base = $this->rates->lookup('pensacola', 'round_trip', $effectiveMiles);
             if ($base !== null) {
-                $base    = $base * (1 + $raise);
-                $rtBase  = round($base, 2);
-                $rtSen   = round($base * $newBump, 2);
-                $rtNight = round($base * $nightOn, 2);
-                $rtWk    = round($base * $weekendOn, 2);
-                $np      = $rtBase + $rtSen + $rtNight + $rtWk;
+                $base       = $base * (1 + $raise);
+                $basePay    = round($base, 2);
+                $seniority  = round($base * $newBump, 2);
+                $shiftPay   = round($base * $nightOn, 2);
+                $weekendPay = round($base * $weekendOn, 2);
+                $baseRate   = $effectiveMiles > 0 ? $base / $effectiveMiles : 0.0;
             }
         } elseif ($load->load_type === 0) {
+            // One-way: split into a loaded leg (rate-table) and an empty
+            // leg (mt × miles). Overlays scale off the COMBINED total so
+            // a long deadhead lifts seniority/shift/weekend pay too.
             $oneWay = 0.0;
-            // Effective miles (out-of-route rewrite) only matters when the
-            // loaded leg is > 0; an "empty-only" load skips the rate-table
-            // lookup entirely.
             if ($effectiveMiles > 0) {
                 $base = $this->rates->lookup('pensacola', 'long_haul', $effectiveMiles);
                 if ($base !== null) {
-                    $oneWay = $base * (1 + $raise);
+                    $oneWay   = $base * (1 + $raise);
+                    $baseRate = $effectiveMiles > 0 ? $oneWay / $effectiveMiles : 0.0;
                 }
             }
             $emptyMilesTotal = max(0, $load->empty_miles + $load->begin_empty_miles);
-            $empty = $emptyMilesTotal * $mt;
+            $empty           = $emptyMilesTotal * $mt;
 
-            if ($oneWay > 0.0 || $empty > 0.0) {
-                if ($oneWay === 0.0) {
-                    $np = round($empty, 2);
-                } else {
-                    $combined = $oneWay + $empty;
-                    $sen      = round($combined * $newBump, 2);
-                    $night    = round($combined * $nightOn, 2);
-                    $weekend  = round($combined * $weekendOn, 2);
-                    $np       = round($oneWay, 2) + round($empty, 2) + $sen + $night + $weekend;
-                }
+            if ($oneWay === 0.0 && $empty > 0.0) {
+                // Empty-only: no overlay applies in the legacy formula.
+                $emptyPay = round($empty, 2);
+            } elseif ($oneWay > 0.0) {
+                $combined   = $oneWay + $empty;
+                $basePay    = round($oneWay, 2);
+                $emptyPay   = round($empty, 2);
+                $seniority  = round($combined * $newBump, 2);
+                $shiftPay   = round($combined * $nightOn, 2);
+                $weekendPay = round($combined * $weekendOn, 2);
             }
         }
 
-        $extras = $this->extras($load, $demRate, $brkRate);
-        $np    += $extras;
+        $np = $basePay + $emptyPay + $seniority + $shiftPay + $weekendPay + $extras;
 
+        return $this->buildResult(
+            np: round($np, 2),
+            op: round($extras, 2),
+            tripLabel: $load->load_type === 1 ? 'Round-trip' : 'One-way',
+            tenureBand: $tenure, shift: $shift,
+            baseMiles: $effectiveMiles, baseRate: round($baseRate, 4),
+            basePay: $basePay, emptyPay: $emptyPay,
+            seniorityPct: $newBump, seniorityPay: $seniority,
+            shiftPct: $nightOn, shiftPay: $shiftPay,
+            weekendPct: $weekendOn, weekendPay: $weekendPay,
+            extras: $extrasBreakdown,
+        );
+    }
+
+    /**
+     * Assemble the public result array. Centralised so every code path
+     * returns the same shape — the dashboard view trusts every key to
+     * exist.
+     *
+     * @param array{split_pay:float, extra_pay:float, dem_pay:float, break_pay:float} $extras
+     * @return array{
+     *   np: float, op: float, trip_label: string,
+     *   tenure_band: string, shift: string,
+     *   base_miles: int, base_rate: float,
+     *   base_pay: float, empty_pay: float,
+     *   seniority_pct: float, seniority_pay: float,
+     *   shift_pct: float, shift_pay: float,
+     *   weekend_pct: float, weekend_pay: float,
+     *   split_pay: float, extra_pay: float, dem_pay: float, break_pay: float,
+     * }
+     */
+    private function buildResult(
+        float $np, float $op, string $tripLabel,
+        string $tenureBand, string $shift,
+        int $baseMiles, float $baseRate,
+        float $basePay, float $emptyPay,
+        float $seniorityPct, float $seniorityPay,
+        float $shiftPct, float $shiftPay,
+        float $weekendPct, float $weekendPay,
+        array $extras,
+    ): array {
         return [
-            'np' => round($np, 2),
-            'op' => round($extras, 2),
+            'np'            => $np,
+            'op'            => $op,
+            'trip_label'    => $tripLabel,
+            'tenure_band'   => $tenureBand,
+            'shift'         => $shift,
+            'base_miles'    => $baseMiles,
+            'base_rate'     => $baseRate,
+            'base_pay'      => $basePay,
+            'empty_pay'     => $emptyPay,
+            'seniority_pct' => $seniorityPct,
+            'seniority_pay' => $seniorityPay,
+            'shift_pct'     => $shiftPct,
+            'shift_pay'     => $shiftPay,
+            'weekend_pct'   => $weekendPct,
+            'weekend_pay'   => $weekendPay,
+            'split_pay'     => $extras['split_pay'],
+            'extra_pay'     => $extras['extra_pay'],
+            'dem_pay'       => $extras['dem_pay'],
+            'break_pay'     => $extras['break_pay'],
         ];
     }
 
     /**
-     * Compute the "extras" sum: split flat $15 + extra_pay + dem×CPM
-     * + break×CPM. Used by both np and op.
+     * @return array{split_pay:float, extra_pay:float, dem_pay:float, break_pay:float}
      */
-    private function extras(LoadInputs $load, float $demRate, float $brkRate): float
+    private function extrasBreakdown(LoadInputs $load, float $demRate, float $brkRate): array
+    {
+        return [
+            'split_pay' => $load->is_split > 0 ? 15.0 : 0.0,
+            'extra_pay' => round($load->extra_pay, 2),
+            'dem_pay'   => round($load->dem_minutes   * $demRate, 2),
+            'break_pay' => round($load->break_minutes * $brkRate, 2),
+        ];
+    }
+
+    /**
+     * Unrounded extras sum for use in the np total. Legacy adds extras
+     * to np at full precision and rounds the np ONCE at the end; doing
+     * it any other way drifts by a cent on rows with non-zero dem/break.
+     */
+    private function extrasUnrounded(LoadInputs $load, float $demRate, float $brkRate): float
     {
         $split = $load->is_split > 0 ? 15.0 : 0.0;
-        $extra = $load->extra_pay;
-        $dem   = $load->dem_minutes   * $demRate;
-        $brk   = $load->break_minutes * $brkRate;
-        return $split + $extra + $dem + $brk;
+        return $split + $load->extra_pay
+             + $load->dem_minutes   * $demRate
+             + $load->break_minutes * $brkRate;
     }
 
     /**

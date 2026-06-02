@@ -146,7 +146,7 @@ final class DriverLoad extends Model
                 empty_miles, is_split, is_weekend,
                 extra_pay, dem_minutes, break_minutes,
                 out_of_route_miles,
-                np, op
+                np, op, pay_breakdown
             FROM ' . self::ident(self::$table) . '
             WHERE driver_id = ?
               AND date >= ?
@@ -248,7 +248,13 @@ final class DriverLoad extends Model
      * so admins can re-run pay for one week without touching the whole
      * history.
      *
-     * @param callable(array<string,mixed>): array{np:float, op:float} $compute
+     * The compute callable now returns the full PayCalculator breakdown
+     * (keyed by np, op, base_pay, shift_pay, etc.). We only diff on
+     * np/op to decide "changed", but we ALWAYS rewrite pay_breakdown
+     * when there's an np/op change, so the dashboard breakdown card
+     * stays in sync.
+     *
+     * @param callable(array<string,mixed>): array<string,mixed> $compute
      * @return array{considered:int, updated:int, unchanged:int, skipped:int}
      */
     public function recomputePay(
@@ -274,7 +280,7 @@ final class DriverLoad extends Model
                     is_split, is_weekend, begin_empty_miles,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles, terminal_pcola,
-                    variables, np, op
+                    variables, np, op, pay_breakdown
                 FROM `driver_loads` ' . $whereSql . '
                 ORDER BY driver_id ASC, frtl ASC';
         $rows = $this->prepared($sql, $params)->fetchAll();
@@ -283,7 +289,9 @@ final class DriverLoad extends Model
         }
 
         $update = $this->connection->pdo()->prepare(
-            'UPDATE `driver_loads` SET np = ?, op = ? WHERE driver_id = ? AND frtl = ?'
+            'UPDATE `driver_loads`
+             SET np = ?, op = ?, pay_breakdown = ?
+             WHERE driver_id = ? AND frtl = ?'
         );
 
         $stats = ['considered' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0];
@@ -299,13 +307,21 @@ final class DriverLoad extends Model
             $newOp = (float) $result['op'];
             $oldNp = (float) $row['np'];
             $oldOp = (float) $row['op'];
-            if (abs($newNp - $oldNp) < 0.005 && abs($newOp - $oldOp) < 0.005) {
+            // Unchanged short-circuit: same totals AND we already have a
+            // breakdown stored. If breakdown is null we still need to
+            // backfill it even when np/op match, so the dashboard's
+            // expander has data to show.
+            $sameTotals      = abs($newNp - $oldNp) < 0.005 && abs($newOp - $oldOp) < 0.005;
+            $haveBreakdown   = isset($row['pay_breakdown']) && $row['pay_breakdown'] !== null && $row['pay_breakdown'] !== '';
+            if ($sameTotals && $haveBreakdown) {
                 $stats['unchanged']++;
                 continue;
             }
+            $breakdownJson = json_encode($result, JSON_THROW_ON_ERROR);
             $update->execute([
                 number_format($newNp, 2, '.', ''),
                 number_format($newOp, 2, '.', ''),
+                $breakdownJson,
                 (int) $row['driver_id'],
                 (int) $row['frtl'],
             ]);
@@ -380,16 +396,25 @@ final class DriverLoad extends Model
         $np = number_format((float) ($data['np'] ?? 0), 2, '.', '');
         $op = number_format((float) ($data['op'] ?? 0), 2, '.', '');
 
+        // pay_breakdown: the structured PayCalculator result, JSON-encoded.
+        // Optional — older callers that haven't been updated still work
+        // and the dashboard renders a "no breakdown" placeholder for
+        // rows where it's NULL.
+        $payBreakdown = null;
+        if (isset($data['pay_breakdown']) && is_array($data['pay_breakdown'])) {
+            $payBreakdown = json_encode($data['pay_breakdown'], JSON_THROW_ON_ERROR);
+        }
+
         $sql = 'INSERT INTO `driver_loads` (
                     driver_id, frtl, date,
-                    variables, loadinfo, paid, notPaid, notes, np, op,
+                    variables, loadinfo, paid, notPaid, notes, np, op, pay_breakdown,
                     load_type, empty_miles, pickup_city, delivery_city,
                     is_split, is_weekend, begin_empty_miles, used_google_maps,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles, terminal_pcola
                 ) VALUES (
                     ?, ?, NOW(),
-                    ?, ?, ?, 0, ?, ?, ?,
+                    ?, ?, ?, 0, ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?,
@@ -411,7 +436,7 @@ final class DriverLoad extends Model
                 $this->prepared($sql, [
                     $data['driver_id'], $frtl,
                     $variables, $loadinfo, $paid, $data['notes'] ?? null,
-                    $np, $op,
+                    $np, $op, $payBreakdown,
                     $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
                     $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
                     number_format($data['extra_pay'], 2, '.', ''),
