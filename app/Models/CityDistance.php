@@ -6,7 +6,9 @@ namespace PayTracker\Models;
 
 use PayTracker\Database\Connection;
 use PayTracker\Database\Model;
+use PayTracker\Logging\Logger;
 use PayTracker\Services\GoogleMapsService;
+use RuntimeException;
 
 /**
  * `city_distances` — relational replacement for the legacy column-per-city
@@ -34,6 +36,7 @@ final class CityDistance extends Model
         Connection $connection,
         private readonly City $cities,
         private readonly GoogleMapsService $maps,
+        private readonly Logger $logger,
     ) {
         parent::__construct($connection);
     }
@@ -156,7 +159,23 @@ final class CityDistance extends Model
         if (! $this->maps->isConfigured()) {
             return null;
         }
-        $miles = $this->maps->distanceMiles($fromName, $toName);
+        // GoogleMapsService throws RuntimeException on transport, HTTP,
+        // JSON, and non-OK top-status responses (e.g. REQUEST_DENIED
+        // when the API key is missing/wrong/restricted, OVER_QUERY_LIMIT
+        // when billing is suspended). Those are admin-side configuration
+        // problems, not driver-facing errors — log them with enough
+        // context for triage and fall through to the controller's
+        // friendly "could not find a mileage" message.
+        try {
+            $miles = $this->maps->distanceMiles($fromName, $toName);
+        } catch (RuntimeException $e) {
+            $this->logger->info('CityDistance: Google Maps lookup failed', [
+                'from'  => $fromName,
+                'to'    => $toName,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
         if ($miles === null) {
             return null;
         }
