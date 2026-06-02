@@ -72,7 +72,7 @@ final class PayCalculatorTest extends TestCase
     {
         $calc = $this->makeCalculator();
         // Single tier at miles=100 rate=$50.00 — load_miles=50 will hit it.
-        $calc->setRateTiersForTest('pensacola', 'round_trip', [
+        $calc->setRateTiersForTest('round_trip', [
             ['miles' => 100, 'rate' => 50.0],
         ]);
 
@@ -100,7 +100,7 @@ final class PayCalculatorTest extends TestCase
     public function test_round_trip_weekend_on(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'round_trip', [
+        $calc->setRateTiersForTest('round_trip', [
             ['miles' => 100, 'rate' => 50.0],
         ]);
 
@@ -127,7 +127,7 @@ final class PayCalculatorTest extends TestCase
     public function test_round_trip_day_shift_zeroes_night_component(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'round_trip', [
+        $calc->setRateTiersForTest('round_trip', [
             ['miles' => 100, 'rate' => 50.0],
         ]);
 
@@ -153,7 +153,7 @@ final class PayCalculatorTest extends TestCase
     public function test_round_trip_extras_sum_into_np_and_op(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'round_trip', [
+        $calc->setRateTiersForTest('round_trip', [
             ['miles' => 100, 'rate' => 50.0],
         ]);
 
@@ -180,7 +180,7 @@ final class PayCalculatorTest extends TestCase
     public function test_one_way_loaded_plus_empty_full_overlay(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'long_haul', [
+        $calc->setRateTiersForTest('long_haul', [
             ['miles' => 100, 'rate' => 40.0],
         ]);
 
@@ -212,7 +212,7 @@ final class PayCalculatorTest extends TestCase
     {
         $calc = $this->makeCalculator();
         // No long_haul tier match — rate lookup returns null.
-        $calc->setRateTiersForTest('pensacola', 'long_haul', []);
+        $calc->setRateTiersForTest('long_haul', []);
 
         $load = new LoadInputs(
             load_type:         0,
@@ -238,7 +238,7 @@ final class PayCalculatorTest extends TestCase
     public function test_out_of_route_rewrites_load_miles_when_greater_than_plus_three(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'long_haul', [
+        $calc->setRateTiersForTest('long_haul', [
             ['miles' => 10,  'rate' => 5.0],
             ['miles' => 100, 'rate' => 40.0],
         ]);
@@ -270,7 +270,7 @@ final class PayCalculatorTest extends TestCase
     public function test_out_of_route_ignored_when_not_greater_than_plus_three(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'long_haul', [
+        $calc->setRateTiersForTest('long_haul', [
             ['miles' => 10,  'rate' => 5.0],
         ]);
 
@@ -324,7 +324,7 @@ final class PayCalculatorTest extends TestCase
     public function test_tenure_band_picks_correct_variable_set(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'round_trip', [
+        $calc->setRateTiersForTest('round_trip', [
             ['miles' => 100, 'rate' => 50.0],
         ]);
 
@@ -352,7 +352,7 @@ final class PayCalculatorTest extends TestCase
     public function test_op_is_zero_when_no_extras(): void
     {
         $calc = $this->makeCalculator();
-        $calc->setRateTiersForTest('pensacola', 'round_trip', [
+        $calc->setRateTiersForTest('round_trip', [
             ['miles' => 100, 'rate' => 50.0],
         ]);
 

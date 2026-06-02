@@ -12,27 +12,29 @@ use PayTracker\Models\PayRate;
  *
  * Resolution: "first tier whose miles ≥ load_miles". Matches the legacy
  * "SELECT rate FROM ... WHERE miles >= $loadMiles LIMIT 1" semantics.
+ *
+ * The terminal dimension is gone — see PayRate's docblock. We cache
+ * per trip_type only.
  */
 final class RateLookup
 {
-    /** @var array<string, list<array{miles:int, rate:float}>> cache keyed by "terminal|trip_type" */
+    /** @var array<string, list<array{miles:int, rate:float}>> cache keyed by trip_type */
     private array $tierCache = [];
 
     public function __construct(private readonly PayRate $rates)
     {
     }
 
-    public function lookup(string $terminal, string $tripType, int $loadMiles): ?float
+    public function lookup(string $tripType, int $loadMiles): ?float
     {
-        $key = "{$terminal}|{$tripType}";
-        if (! isset($this->tierCache[$key])) {
-            $tiers = $this->rates->tiers($terminal, $tripType, 'current');
-            $this->tierCache[$key] = array_map(
+        if (! isset($this->tierCache[$tripType])) {
+            $tiers = $this->rates->tiers($tripType, 'current');
+            $this->tierCache[$tripType] = array_map(
                 static fn (array $t): array => ['miles' => $t['miles'], 'rate' => (float) $t['rate']],
                 $tiers,
             );
         }
-        foreach ($this->tierCache[$key] as $tier) {
+        foreach ($this->tierCache[$tripType] as $tier) {
             if ($tier['miles'] >= $loadMiles) {
                 return $tier['rate'];
             }
@@ -46,8 +48,8 @@ final class RateLookup
      *
      * @param list<array{miles:int, rate:float}> $tiers
      */
-    public function setTiersForTest(string $terminal, string $tripType, array $tiers): void
+    public function setTiersForTest(string $tripType, array $tiers): void
     {
-        $this->tierCache["{$terminal}|{$tripType}"] = $tiers;
+        $this->tierCache[$tripType] = $tiers;
     }
 }

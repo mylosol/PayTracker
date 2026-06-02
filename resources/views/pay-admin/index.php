@@ -5,10 +5,10 @@
  * @var array{
  *   total_rows:int,
  *   by_stage: array<string,int>,
- *   by_terminal_trip: list<array{terminal:string, trip_type:string, default_n:int, current_n:int, draft_n:int}>
+ *   by_trip: list<array{trip_type:string, default_n:int, current_n:int, draft_n:int}>
  * } $summary
  * @var list<array{
- *   terminal:string, trip_type:string, label:string, has_draft:bool,
+ *   trip_type:string, label:string, has_draft:bool,
  *   current: list<array{miles:int, rate:string}>,
  *   draft:   list<array{miles:int, rate:string}>,
  * }> $buckets
@@ -16,20 +16,17 @@
  */
 layout('layouts/app');
 
-/** Render a hidden (terminal, trip_type) pair into a form. */
-$bucketInputs = static function (string $terminal, string $tripType, string $csrf): string {
+/** Render a hidden trip_type into a form. */
+$bucketInputs = static function (string $tripType, string $csrf): string {
     return '<input type="hidden" name="_csrf"     value="' . e($csrf)     . '">'
-         . '<input type="hidden" name="terminal"  value="' . e($terminal) . '">'
          . '<input type="hidden" name="trip_type" value="' . e($tripType) . '">';
 };
 ?>
 <div class="card">
     <h1>Pay-rate admin</h1>
     <p class="muted">
-        Modern replacement for the legacy <code>BasePayAdminSubmit.php</code>
-        + <code>UpdatePanamaPay.php</code> + <code>UpdatePensacolaPay.php</code>
-        + <code>adminPaySelect.php</code> stack. Manages the per-mile pay
-        tiers for each terminal &times; trip-type combination.
+        Per-mile pay tiers for each trip type. Edit a draft, promote
+        it to current to publish.
         <a href="<?= e($base) ?>/">&larr; Back</a>
     </p>
 
@@ -73,7 +70,7 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem;">
         <?php if (! $bucket['has_draft']): ?>
             <form method="post" action="<?= e($base) ?>/pay-admin/draft/start" style="margin:0;">
-                <?= $bucketInputs($bucket['terminal'], $bucket['trip_type'], $csrfToken) ?>
+                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
                 <button type="submit"
                         style="background:var(--accent);color:#fff;border:0;padding:.4rem 1rem;border-radius:6px;font:inherit;cursor:pointer;">
                     Start draft from current
@@ -82,7 +79,7 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
         <?php else: ?>
             <form method="post" action="<?= e($base) ?>/pay-admin/draft/promote" style="margin:0;"
                   onsubmit="return confirm('Promote draft to current? This replaces the live rates for <?= e($bucket['label']) ?>.');">
-                <?= $bucketInputs($bucket['terminal'], $bucket['trip_type'], $csrfToken) ?>
+                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
                 <button type="submit"
                         style="background:#16a34a;color:#fff;border:0;padding:.4rem 1rem;border-radius:6px;font:inherit;cursor:pointer;">
                     Promote draft &rarr; current
@@ -90,7 +87,7 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
             </form>
             <form method="post" action="<?= e($base) ?>/pay-admin/draft/start" style="margin:0;"
                   onsubmit="return confirm('Discard the current draft and start fresh from current?');">
-                <?= $bucketInputs($bucket['terminal'], $bucket['trip_type'], $csrfToken) ?>
+                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
                 <button type="submit"
                         style="background:#f59e0b;color:#fff;border:0;padding:.4rem 1rem;border-radius:6px;font:inherit;cursor:pointer;">
                     Reset draft to current
@@ -99,7 +96,7 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
         <?php endif; ?>
         <form method="post" action="<?= e($base) ?>/pay-admin/reset" style="margin:0;"
               onsubmit="return confirm('Reset current rates to factory defaults? This is irreversible from the UI.');">
-            <?= $bucketInputs($bucket['terminal'], $bucket['trip_type'], $csrfToken) ?>
+            <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
             <button type="submit"
                     style="background:#dc2626;color:#fff;border:0;padding:.4rem 1rem;border-radius:6px;font:inherit;cursor:pointer;">
                 Reset current &larr; default
@@ -119,10 +116,6 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
         </thead>
         <tbody>
             <?php
-            // Build a unified list of (miles → [current, draft]) so a row
-            // shows both columns side-by-side regardless of which stage it
-            // appears in. New draft-only tiers and dropped tiers both
-            // surface this way.
             $combined = [];
             foreach ($bucket['current'] as $r) {
                 $combined[$r['miles']] = ['current' => $r['rate'], 'draft' => null];
@@ -154,7 +147,7 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
                     <td style="padding:.25rem .5rem;">
                         <form method="post" action="<?= e($base) ?>/pay-admin/draft/upsert"
                               style="margin:0;display:inline-flex;gap:.3rem;align-items:center;">
-                            <?= $bucketInputs($bucket['terminal'], $bucket['trip_type'], $csrfToken) ?>
+                            <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
                             <input type="hidden" name="miles" value="<?= $milesInt ?>">
                             <input type="text" name="rate" inputmode="decimal" required
                                    value="<?= e((string) ($vals['draft'] ?? $vals['current'] ?? '')) ?>"
@@ -167,7 +160,7 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
                         <form method="post" action="<?= e($base) ?>/pay-admin/draft/delete"
                               style="display:inline;margin:0 0 0 .3rem;"
                               onsubmit="return confirm('Delete tier <?= $milesInt ?> from the <?= e($bucket['label']) ?> draft?');">
-                            <?= $bucketInputs($bucket['terminal'], $bucket['trip_type'], $csrfToken) ?>
+                            <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
                             <input type="hidden" name="miles" value="<?= $milesInt ?>">
                             <button type="submit"
                                     style="background:#6b7280;color:#fff;border:0;padding:.25rem .6rem;border-radius:4px;font:inherit;cursor:pointer;">
@@ -184,7 +177,7 @@ $bucketInputs = static function (string $terminal, string $tripType, string $csr
     <h3 style="margin-top:1.2rem;">Add tier</h3>
     <form method="post" action="<?= e($base) ?>/pay-admin/draft/upsert"
           style="display:flex;gap:.5rem;align-items:center;">
-        <?= $bucketInputs($bucket['terminal'], $bucket['trip_type'], $csrfToken) ?>
+        <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
         <label>Miles
             <input type="number" name="miles" min="1" max="65535" step="1" required
                    style="width:6rem;padding:.4rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;">

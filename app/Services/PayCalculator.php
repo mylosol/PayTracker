@@ -100,9 +100,9 @@ final class PayCalculator
      *
      * @param list<array{miles:int, rate:float}> $tiers
      */
-    public function setRateTiersForTest(string $terminal, string $tripType, array $tiers): void
+    public function setRateTiersForTest(string $tripType, array $tiers): void
     {
-        $this->rates->setTiersForTest($terminal, $tripType, $tiers);
+        $this->rates->setTiersForTest($tripType, $tiers);
     }
 
     /**
@@ -196,7 +196,7 @@ final class PayCalculator
         if ($load->load_type === 1) {
             // Round-trip: base = rate-table lookup × (1 + raise). All
             // overlays scale off base alone.
-            $base = $this->rates->lookup('pensacola', 'round_trip', $effectiveMiles);
+            $base = $this->rates->lookup('round_trip', $effectiveMiles);
             if ($base !== null) {
                 $base       = $base * (1 + $raise);
                 $basePay    = round($base, 2);
@@ -211,7 +211,7 @@ final class PayCalculator
             // a long deadhead lifts seniority/shift/weekend pay too.
             $oneWay = 0.0;
             if ($effectiveMiles > 0) {
-                $base = $this->rates->lookup('pensacola', 'long_haul', $effectiveMiles);
+                $base = $this->rates->lookup('long_haul', $effectiveMiles);
                 if ($base !== null) {
                     $oneWay   = $base * (1 + $raise);
                     // $effectiveMiles is already > 0 from the outer guard;
