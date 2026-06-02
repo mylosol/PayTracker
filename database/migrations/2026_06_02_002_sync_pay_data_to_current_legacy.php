@@ -28,7 +28,7 @@ declare(strict_types=1);
  * until a Refresh-my-pay or /pay-admin/recompute runs over them.
  */
 
-/** @var PDO $pdo */
+return static function (PDO $pdo): void {
 
 // --- 1. Pay rates (round_trip only) ----------------------------------
 // Source: live legacy `PensacolaPayCurrent`, exported 2026-06-02.
@@ -144,3 +144,5 @@ try {
     $pdo->rollBack();
     throw $e;
 }
+
+};
