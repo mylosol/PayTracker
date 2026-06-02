@@ -1,0 +1,40 @@
+# Front controller rewrite — every request that doesn't map to an actual
+# file or directory on disk is routed through index.php so the modern Router
+# can dispatch it. Static assets (css/js/images) still serve directly.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # If the request maps to a real file or directory, serve it as-is.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Otherwise hand the request to the front controller. QSA keeps any
+    # existing query string intact.
+    RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+# --- Security headers ---------------------------------------------------------
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set Referrer-Policy "same-origin"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    Header set Permissions-Policy "geolocation=(),microphone=(),camera=(),payment=()"
+</IfModule>
+
+# --- Cache control ------------------------------------------------------------
+<IfModule mod_headers.c>
+    <FilesMatch "\.(jpg|jpeg|png|gif|ico|svg|webp)$">
+        Header set Cache-Control "max-age=2628000, public"
+    </FilesMatch>
+    <FilesMatch "\.(html|htm|php)$">
+        Header set Cache-Control "max-age=0, private, no-store, no-cache, must-revalidate"
+    </FilesMatch>
+</IfModule>
+
+# Block direct access to dotfiles (e.g. .env, .git) just in case they ever
+# end up under the docroot during a misconfigured deploy.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
