@@ -15,6 +15,8 @@
  *   out_of_route_miles:?int, np:string, op:string,
  * }> $rows
  * @var array{count:int, np_total:string, op_total:string, miles_total:int} $totals
+ * @var string $csrfToken
+ * @var string|null $flash
  */
 layout('layouts/app');
 
@@ -30,6 +32,12 @@ $loadTypeLabel = static function (?int $t): string {
     return (string) $t;
 };
 ?>
+<?php if ($flash !== null): ?>
+    <div class="card" style="background:#dcfce7;color:#166534;">
+        <?= e($flash) ?>
+    </div>
+<?php endif; ?>
+
 <div class="card">
     <h1>My pay &mdash; <?= e($date) ?><?= $isToday ? ' <span class="pill ok">today</span>' : '' ?></h1>
     <p class="muted">
@@ -75,12 +83,24 @@ $loadTypeLabel = static function (?int $t): string {
     <?php if ($totals['count'] > 0 && (float) $totals['np_total'] === 0.0): ?>
         <p class="muted" style="background:#fef3c7;color:#92400e;border-radius:6px;padding:.5rem .8rem;margin-top:.8rem;">
             <strong>Heads up:</strong> there are <?= (int) $totals['count'] ?> load(s) on
-            this date but np total is $0.00 &mdash; the stored pay columns may not
-            have been computed yet. Ask the admin to run
-            <a href="<?= e($base) ?>/pay-admin">/pay-admin &rarr; Recompute np/op</a>
-            scoped to this date.
+            this date but np total is $0.00 &mdash; the stored pay columns
+            may not have been computed yet. Click <strong>Refresh my pay</strong>
+            below to recompute.
         </p>
     <?php endif; ?>
+
+    <form method="post" action="<?= e($base) ?>/dashboard/recompute" style="margin-top:1rem;">
+        <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+        <input type="hidden" name="date"  value="<?= e($date) ?>">
+        <button type="submit"
+                style="background:#16a34a;color:#fff;border:0;padding:.4rem 1rem;border-radius:6px;font:inherit;cursor:pointer;">
+            Refresh my pay
+        </button>
+        <small class="muted">
+            Recomputes np/op for your loads since <?= e(date('Y-m-d', strtotime($date . ' -30 days'))) ?>.
+            Safe to click repeatedly &mdash; the math is deterministic.
+        </small>
+    </form>
 </div>
 
 <div class="card">

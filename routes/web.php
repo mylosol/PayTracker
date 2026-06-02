@@ -34,7 +34,8 @@ return static function (Router $router): void {
     // --- Driver dashboard (signed-in) ---------------------------------
     // "My pay" page: the signed-in driver's loads for a date window
     // (default = today in APP_TIMEZONE) plus the day's pay totals.
-    $router->get('/dashboard',     [DashboardController::class, 'index']);
+    $router->get('/dashboard',            [DashboardController::class, 'index']);
+    $router->post('/dashboard/recompute', [DashboardController::class, 'recompute']);
 
     // --- Locations (signed-in) ----------------------------------------
     $router->get('/locations',     [LocationController::class, 'index']);

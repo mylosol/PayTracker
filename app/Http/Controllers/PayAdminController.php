@@ -7,13 +7,10 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
-use PayTracker\Models\CityDistance;
-use PayTracker\Models\DriverLoad;
 use PayTracker\Models\PayRate;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
-use PayTracker\Services\Pay\LoadInputs;
-use PayTracker\Services\PayCalculator;
+use PayTracker\Services\Pay\PayRecomputer;
 
 /**
  * PayAdminController — modern replacement for BasePayAdminSubmit.php +
@@ -53,9 +50,7 @@ final class PayAdminController extends Controller
         private readonly Csrf $csrf,
         private readonly Session $session,
         private readonly PayRate $rates,
-        private readonly PayCalculator $calculator,
-        private readonly DriverLoad $loads,
-        private readonly CityDistance $distances,
+        private readonly PayRecomputer $recomputer,
     ) {
     }
 
@@ -181,55 +176,24 @@ final class PayAdminController extends Controller
         }
 
         $sinceRaw = (string) $request->input('since', '');
-        $since = $sinceRaw !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $sinceRaw)
-            ? $sinceRaw . ' 00:00:00'
-            : date('Y-m-d', strtotime('-30 days')) . ' 00:00:00';
-
         $driverRaw = (string) $request->input('driver_id', '');
         $driverFilter = ctype_digit($driverRaw) && (int) $driverRaw > 0 ? (int) $driverRaw : null;
 
-        // Closure resolves miles via city_distances and runs PayCalculator
-        // on each row. Cache mile lookups by (pickup, delivery) so a busy
-        // driver doesn't hit the matrix 50 times for the same pair.
-        $milesCache = [];
-        $resolve = function (string $from, string $to) use (&$milesCache): int {
-            $k = "{$from}|{$to}";
-            if (! array_key_exists($k, $milesCache)) {
-                $rows = $this->distances->between($from, $to);
-                $milesCache[$k] = $rows !== [] ? (int) $rows[0]['miles'] : 0;
-            }
-            return $milesCache[$k];
-        };
-
-        $compute = function (array $row) use ($resolve): array {
-            $miles = $resolve((string) $row['pickup_city'], (string) $row['delivery_city']);
-            $load  = new LoadInputs(
-                load_type:          (int) $row['load_type'],
-                load_miles:         $miles,
-                empty_miles:        (int) $row['empty_miles'],
-                begin_empty_miles:  (int) $row['begin_empty_miles'],
-                is_split:           (int) $row['is_split'],
-                is_weekend:         (int) $row['is_weekend'],
-                extra_pay:          (float) $row['extra_pay'],
-                dem_minutes:        (int) $row['dem_minutes'],
-                break_minutes:      (int) $row['break_minutes'],
-                variables_blob:     (string) ($row['variables'] ?? '168-night--0'),
-                out_of_route_ind:   (int) ($row['out_of_route_ind']   ?? 0),
-                out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
-                terminal_pcola:     (int) ($row['terminal_pcola']     ?? 0),
-            );
-            return $this->calculator->computeFor($load);
-        };
-
         try {
-            $stats = $this->loads->recomputePay($compute, $driverFilter, $since);
+            $stats = $this->recomputer->run($driverFilter, $sinceRaw);
         } catch (\Throwable $e) {
             return $this->failBack('Recompute failed: ' . $e->getMessage(), $request);
         }
 
+        // Reconstruct the effective window for the flash banner — the
+        // service applies the same fallback (30 days ago) but doesn't
+        // surface what it landed on.
+        $effectiveSince = $sinceRaw !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $sinceRaw)
+            ? $sinceRaw
+            : date('Y-m-d', strtotime('-30 days'));
         $scopeNote = $driverFilter !== null
-            ? sprintf(' driver_id=%d, since %s', $driverFilter, substr($since, 0, 10))
-            : sprintf(' since %s', substr($since, 0, 10));
+            ? sprintf(' driver_id=%d, since %s', $driverFilter, $effectiveSince)
+            : sprintf(' since %s', $effectiveSince);
         $this->session->put('_flash', sprintf(
             'Recompute complete (%s): considered=%d, updated=%d, unchanged=%d, skipped=%d.',
             trim($scopeNote),
