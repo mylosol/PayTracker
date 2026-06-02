@@ -15,14 +15,20 @@
  *   out_of_route_miles:?int, np:string, op:string, pay_breakdown:?string,
  * }> $rows
  * @var array{count:int, np_total:string, op_total:string, miles_total:int} $totals
+ * @var array{count:int, np_total:string, op_total:string, miles_total:int} $weekTotals
+ * @var string $weekStartDate  Sunday in YYYY-MM-DD format
+ * @var string $weekEndDate    Saturday in YYYY-MM-DD format (inclusive end)
  * @var string $csrfToken
  * @var string|null $flash
  * @var array{band:string, shift:string} $effective Current tenure/shift readout.
  */
 layout('layouts/app');
 
-$npTotalF    = number_format((float) $totals['np_total'], 2);
-$milesTotalF = number_format((int)   $totals['miles_total']);
+$npTotalF       = number_format((float) $totals['np_total'], 2);
+$milesTotalF    = number_format((int)   $totals['miles_total']);
+$weekNpTotalF   = number_format((float) $weekTotals['np_total'], 2);
+$weekMilesF     = number_format((int)   $weekTotals['miles_total']);
+$weekRangeLabel = date('M j', strtotime($weekStartDate)) . ' – ' . date('M j', strtotime($weekEndDate));
 
 $loadTypeLabel = static function (?int $t): string {
     if ($t === null) return '?';
@@ -97,12 +103,33 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
     </p>
 </div>
 
+<div class="card" style="background:linear-gradient(180deg,#f0fdf4,#fff);">
+    <h2 style="margin-bottom:.4rem;">
+        This Week
+        <span class="muted" style="font-weight:400;font-size:14px;">
+            (<?= e($weekRangeLabel) ?>)
+        </span>
+    </h2>
+    <table style="border-collapse:collapse;font-size:14px;">
+        <tbody>
+            <tr><td style="padding:.3rem .8rem;"><strong>Loads</strong></td><td style="padding:.3rem .8rem;"><code><?= (int) $weekTotals['count'] ?></code></td></tr>
+            <tr><td style="padding:.3rem .8rem;"><strong>Net Pay</strong></td><td style="padding:.3rem .8rem;"><code style="background:#dcfce7;color:#166534;font-weight:600;padding:2px 8px;">$<?= e($weekNpTotalF) ?></code></td></tr>
+            <tr><td style="padding:.3rem .8rem;"><strong>Miles</strong></td><td style="padding:.3rem .8rem;"><code><?= e($weekMilesF) ?></code></td></tr>
+        </tbody>
+    </table>
+    <p class="muted" style="margin-top:.6rem;font-size:12px;">
+        Pay week runs Sunday → Saturday. The weekly total stays anchored
+        to the week containing the viewed date — use the day-jump nav
+        above to walk through it.
+    </p>
+</div>
+
 <div class="card">
-    <h2>Totals</h2>
+    <h2>Today <span class="muted" style="font-weight:400;font-size:14px;">(<?= e($date) ?>)</span></h2>
     <table style="border-collapse:collapse;font-size:14px;">
         <tbody>
             <tr><td style="padding:.3rem .8rem;"><strong>Loads</strong></td><td style="padding:.3rem .8rem;"><code><?= (int) $totals['count'] ?></code></td></tr>
-            <tr><td style="padding:.3rem .8rem;"><strong>Net pay</strong></td><td style="padding:.3rem .8rem;"><code>$<?= e($npTotalF) ?></code></td></tr>
+            <tr><td style="padding:.3rem .8rem;"><strong>Net Pay</strong></td><td style="padding:.3rem .8rem;"><code>$<?= e($npTotalF) ?></code></td></tr>
             <tr><td style="padding:.3rem .8rem;"><strong>Miles</strong></td><td style="padding:.3rem .8rem;"><code><?= e($milesTotalF) ?></code></td></tr>
         </tbody>
     </table>

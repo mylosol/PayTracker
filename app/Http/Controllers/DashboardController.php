@@ -66,6 +66,22 @@ final class DashboardController extends Controller
         $rows   = $this->loads->forDriverInWindow($driverId, $since, $until);
         $totals = $this->loads->totalsForDriverInWindow($driverId, $since, $until);
 
+        // Pay-week boundaries containing the viewed date. Sunday → Saturday
+        // matches the US convention most carriers use for weekly settlement.
+        // We store this as the week-START datestamp so navigation jumps are
+        // intuitive. The end of the window is the NEXT Sunday at midnight
+        // (exclusive), giving us a full 7-day inclusive window.
+        $weekStartDate = date('Y-m-d', strtotime("last sunday {$dateRaw}"));
+        // strtotime("last sunday") on a Sunday returns the PREVIOUS Sunday,
+        // not the same day — so when the viewed date IS a Sunday, snap to it.
+        if (date('w', strtotime($dateRaw)) === '0') {
+            $weekStartDate = $dateRaw;
+        }
+        $weekEndDate = date('Y-m-d', strtotime($weekStartDate . ' +6 days'));
+        $weekSince   = $weekStartDate . ' 00:00:00';
+        $weekUntil   = date('Y-m-d 00:00:00', strtotime($weekStartDate . ' +7 days'));
+        $weekTotals  = $this->loads->totalsForDriverInWindow($driverId, $weekSince, $weekUntil);
+
         $this->session->start();
         $flash = $this->session->get('_flash');
         $this->session->forget('_flash');
@@ -98,11 +114,14 @@ final class DashboardController extends Controller
             'today'     => $today,
             'prevDate'  => $prevDate,
             'nextDate'  => $nextDate,
-            'rows'      => $rows,
-            'totals'    => $totals,
-            'csrfToken' => $this->csrf->token(),
-            'flash'     => is_string($flash) ? $flash : null,
-            'effective' => $effective,
+            'rows'           => $rows,
+            'totals'         => $totals,
+            'csrfToken'      => $this->csrf->token(),
+            'flash'          => is_string($flash) ? $flash : null,
+            'effective'      => $effective,
+            'weekTotals'     => $weekTotals,
+            'weekStartDate'  => $weekStartDate,
+            'weekEndDate'    => $weekEndDate,
         ]);
     }
 
