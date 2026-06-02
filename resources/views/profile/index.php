@@ -16,9 +16,11 @@ layout('layouts/app');
 // over-pays).
 $bandPreview = '6 (junior fallback — set your hire date for the correct band)';
 if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
-    $hire = DateTimeImmutable::createFromFormat('Y-m-d', $hireDate);
+    // '!' resets unspecified time fields to 00:00:00 so the diff isn't
+    // skewed by the current wall clock — see VariableBlobBuilder for why.
+    $hire = DateTimeImmutable::createFromFormat('!Y-m-d', $hireDate);
     if ($hire !== false) {
-        $now    = new DateTimeImmutable('now');
+        $now    = new DateTimeImmutable('today');
         if ($hire >= $now) {
             $months = 0;
         } else {

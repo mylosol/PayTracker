@@ -87,7 +87,12 @@ final class VariableBlobBuilder
         if (! is_string($hireDate) || $hireDate === '') {
             return (string) self::BANDS[0];
         }
-        $hire = \DateTimeImmutable::createFromFormat('Y-m-d', $hireDate);
+        // The leading '!' resets all non-specified fields to the Unix
+        // epoch (00:00:00) instead of inheriting the wall clock. Without
+        // it, a hire date parsed at 13:05 UTC would carry that time
+        // forward and a same-day-anniversary diff would short by ~14h,
+        // pushing the month count down by 1 right at every band edge.
+        $hire = \DateTimeImmutable::createFromFormat('!Y-m-d', $hireDate);
         if ($hire === false) {
             return (string) self::BANDS[0];
         }
