@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Tests\Unit\Services\Pay;
+namespace PayTracker\Tests\Unit\Services\Pay;
 
 use PayTracker\Services\Pay\VariableBlobBuilder;
 use PHPUnit\Framework\TestCase;
