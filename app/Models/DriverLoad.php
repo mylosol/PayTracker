@@ -355,59 +355,54 @@ final class DriverLoad extends Model
         // "submitted, unpaid" state — first slot 1, rest 0.
         $paid = '1-0-0-0-0-0-0-0';
 
-        // Retry loop to survive concurrent insertions for the same driver.
-        // The race is extremely narrow (a single driver double-clicking
-        // submit) but the composite PK leaves no room for ambiguity if it
-        // happens — better to retry than to silently overwrite.
-        $maxAttempts = 5;
-        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
-            $pdo->beginTransaction();
-            try {
-                /** @var int|false $maxFrtl */
-                $maxFrtl = $pdo->query(
-                    'SELECT MAX(frtl) FROM `driver_loads` WHERE driver_id = ' . (int) $data['driver_id']
-                )->fetchColumn();
-                $nextFrtl = $maxFrtl === false || $maxFrtl === null ? 1 : ((int) $maxFrtl) + 1;
-
-                $sql = 'INSERT INTO `driver_loads` (
-                            driver_id, frtl, date,
-                            variables, loadinfo, paid, notPaid, notes, np, op,
-                            load_type, empty_miles, pickup_city, delivery_city,
-                            is_split, is_weekend, begin_empty_miles, used_google_maps,
-                            extra_pay, dem_minutes, break_minutes,
-                            out_of_route_ind, out_of_route_miles, terminal_pcola
-                        ) VALUES (
-                            ?, ?, NOW(),
-                            ?, ?, ?, 0, ?, 0.00, 0.00,
-                            ?, ?, ?, ?,
-                            ?, ?, ?, ?,
-                            ?, ?, ?,
-                            ?, ?, ?
-                        )';
-                $this->prepared($sql, [
-                    $data['driver_id'], $nextFrtl,
-                    $variables, $loadinfo, $paid, $data['notes'] ?? null,
-                    $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
-                    $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
-                    number_format($data['extra_pay'], 2, '.', ''),
-                    $data['dem_minutes'], $data['break_minutes'],
-                    $data['out_of_route_ind'], $data['out_of_route_miles'], $data['terminal_pcola'],
-                ]);
-                $pdo->commit();
-                return $nextFrtl;
-            } catch (Throwable $e) {
-                $pdo->rollBack();
-                // PDO error code 23000 == integrity constraint violation
-                // (duplicate key). Retry to pick up a fresh MAX(frtl).
-                if ($e instanceof \PDOException && $e->getCode() === '23000' && $attempt < $maxAttempts) {
-                    continue;
-                }
-                throw $e;
-            }
+        // FRTL is a USER-PROVIDED dispatch identifier, not a synthetic
+        // surrogate. The caller MUST pass it in $data['frtl']. We range-
+        // check (positive, fits in INT) and let the composite PK reject
+        // duplicates — a collision here means the driver already has a
+        // load with this FRTL on file, which we surface as a 1062 that
+        // the controller translates to a user-facing error.
+        $frtl = (int) ($data['frtl'] ?? 0);
+        if ($frtl <= 0) {
+            throw new InvalidArgumentException(
+                'frtl must be a positive integer (the dispatch number from your paperwork)'
+            );
         }
 
-        throw new \RuntimeException(
-            "DriverLoad::insertOne exhausted {$maxAttempts} retries for driver_id={$data['driver_id']}"
-        );
+        $sql = 'INSERT INTO `driver_loads` (
+                    driver_id, frtl, date,
+                    variables, loadinfo, paid, notPaid, notes, np, op,
+                    load_type, empty_miles, pickup_city, delivery_city,
+                    is_split, is_weekend, begin_empty_miles, used_google_maps,
+                    extra_pay, dem_minutes, break_minutes,
+                    out_of_route_ind, out_of_route_miles, terminal_pcola
+                ) VALUES (
+                    ?, ?, NOW(),
+                    ?, ?, ?, 0, ?, 0.00, 0.00,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?
+                )';
+        $this->prepared($sql, [
+            $data['driver_id'], $frtl,
+            $variables, $loadinfo, $paid, $data['notes'] ?? null,
+            $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
+            $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
+            number_format($data['extra_pay'], 2, '.', ''),
+            $data['dem_minutes'], $data['break_minutes'],
+            $data['out_of_route_ind'], $data['out_of_route_miles'], $data['terminal_pcola'],
+        ]);
+        return $frtl;
+    }
+
+    /**
+     * True if (driver_id, frtl) is already taken. Used by the controller
+     * to pre-flight check and produce a friendlier error than letting
+     * the PK collision bubble up as a PDOException.
+     */
+    public function frtlExists(int $driverId, int $frtl): bool
+    {
+        $sql = 'SELECT 1 FROM `driver_loads` WHERE driver_id = ? AND frtl = ? LIMIT 1';
+        return $this->prepared($sql, [$driverId, $frtl])->fetchColumn() !== false;
     }
 }

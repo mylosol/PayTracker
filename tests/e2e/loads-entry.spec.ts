@@ -36,13 +36,20 @@ test.describe('load entry (write path)', () => {
         await page.goto('loads/new');
         await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.getByRole('button', { name: /add load/i }).click();
-        await expect(page.getByText(/pick-up and delivery cities are required/i)).toBeVisible();
+        // FRTL is the first required check now — reaching the
+        // pickup/delivery validation requires a valid FRTL first.
+        await expect(page.getByText(/frtl must be a positive number/i)).toBeVisible();
     });
+
+    // Pick a FRTL well above the existing-data range so reruns don't collide
+    // with rows already on file. The cleanup script sweeps these after
+    // every Playwright pass via the notes-prefix marker.
+    const qaFrtl = () => 999_000_000 + Math.floor(Math.random() * 999_999);
 
     test('9d — same pickup and delivery rejected', async ({ page }) => {
         await signIn(page);
         await page.goto('loads/new');
-        // pickup_city is now a <select> restricted to terminals.
+        await page.locator('#frtl').fill(String(qaFrtl()));
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Panama City, FL');
         await page.getByRole('button', { name: /add load/i }).click();
@@ -50,11 +57,9 @@ test.describe('load entry (write path)', () => {
     });
 
     test('9e — unknown delivery city rejected', async ({ page }) => {
-        // Pickup is now a constrained <select>, so the "unknown pickup"
-        // case is structurally impossible. Cover the delivery-side check
-        // instead — same controller branch, just the other input.
         await signIn(page);
         await page.goto('loads/new');
+        await page.locator('#frtl').fill(String(qaFrtl()));
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Nowhereville, ZZ');
         await page.getByRole('button', { name: /add load/i }).click();
@@ -65,6 +70,8 @@ test.describe('load entry (write path)', () => {
         await signIn(page);
         await page.goto('loads/new');
 
+        const frtl = qaFrtl();
+        await page.locator('#frtl').fill(String(frtl));
         // Use a pair we KNOW is in city_distances (the backfill loaded
         // both of these). If the deploy ever regresses this assumption
         // the test will surface it.
@@ -75,9 +82,10 @@ test.describe('load entry (write path)', () => {
         await page.locator('#notes').fill('QA TEST automated load-entry — safe to clean up');
         await page.getByRole('button', { name: /add load/i }).click();
 
-        // PRG completes on /loads with a flash that includes "frtl=NNN".
+        // PRG completes on /loads with a flash that includes the FRTL
+        // the user typed (NOT a synthetic one).
         await expect(page).toHaveURL(/\/loads$/);
-        await expect(page.getByText(/added load frtl=\d+/i)).toBeVisible();
+        await expect(page.getByText(new RegExp(`added load frtl=${frtl}\\b`, 'i'))).toBeVisible();
         await expect(page.getByText(/Panama City, FL.*Lynn Haven, FL/i)).toBeVisible();
     });
 });

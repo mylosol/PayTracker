@@ -497,6 +497,8 @@ spec exercises.
 
 **Expected:**
 - Heading "Add a load".
+- **FRTL #** is a required numeric field — the driver types in their
+  dispatch number from paperwork. It is NOT auto-generated.
 - **Pick-up terminal** renders as a dropdown restricted to the
   dispatch terminals (`terminal` ∪ `pcola_terminal`) — e.g. Panama
   City FL, Niceville FL, Freeport FL, Pelham GA, Pensacola FL,
@@ -507,27 +509,38 @@ spec exercises.
 - Load-type radios default to "Loaded one-way".
 
 ### 9c. Empty submission rejected
-1. From `/loads/new`, leave pick-up unselected and delivery blank,
-   click **Add load**.
+1. From `/loads/new`, leave FRTL blank and click **Add load**.
 
-**Expected:** flash banner "Pick-up and delivery cities are required."
+**Expected:** flash banner "FRTL must be a positive number from your
+dispatch paperwork." (FRTL is the first field validated, so a fully
+empty form trips this check first.)
 
 ### 9d. Same pickup and delivery rejected
-1. Select Pick-up = `Panama City, FL`.
-2. Type Delivery = `Panama City, FL`. Submit.
+1. FRTL = a fresh 9-digit number (e.g. `999100001`).
+2. Select Pick-up = `Panama City, FL`.
+3. Type Delivery = `Panama City, FL`. Submit.
 
 **Expected:** flash banner "Pick-up and delivery cannot be the same city."
 
 ### 9e. Unknown delivery city rejected
-1. Select Pick-up = `Panama City, FL`.
-2. Type Delivery = `Nowhereville, ZZ`. Submit.
+1. FRTL = a fresh number (e.g. `999100002`).
+2. Select Pick-up = `Panama City, FL`.
+3. Type Delivery = `Nowhereville, ZZ`. Submit.
 
 **Expected:** flash banner "...is not in the city list. Add it first."
-(Pick-up is structurally constrained by the dropdown — there's no
-analogous "unknown pickup" case to test now.)
 
-### 9f. Valid submission inserts and shows assigned frtl
-1. Select Pick-up = `Panama City, FL`, type Delivery = `Lynn Haven, FL`.
+### 9e2. Duplicate FRTL rejected (new)
+
+1. FRTL = the SAME number you used in a previous successful test
+   submission for this driver.
+2. Fill the rest with any valid values. Submit.
+
+**Expected:** flash banner "FRTL N is already on file for this driver."
+The form preserves your typed inputs so you can correct the FRTL.
+
+### 9f. Valid submission inserts and shows the FRTL you typed
+1. FRTL = a fresh number (e.g. `999100099`).
+2. Select Pick-up = `Panama City, FL`, type Delivery = `Lynn Haven, FL`.
 2. Notes: `QA TEST manual walk` (the `QA TEST ` prefix is what lets
    `scripts/qa-cleanup.php --loads` sweep it later).
 3. Submit.

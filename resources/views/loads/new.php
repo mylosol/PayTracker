@@ -7,7 +7,7 @@
  * @var array<string,mixed>                                     $driver
  * @var string|null                                             $flash
  * @var array{
- *   pickup:string, delivery:string, load_type:string,
+ *   frtl:string, pickup:string, delivery:string, load_type:string,
  *   dem:string, break:string, extra:string,
  *   split:string, weekend:string,
  * } $old
@@ -27,6 +27,14 @@ layout('layouts/app');
 
     <form method="post" action="<?= e($base) ?>/loads" novalidate autocomplete="off">
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+
+        <p>
+            <label for="frtl"><strong>FRTL #</strong></label><br>
+            <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]+" required
+                   value="<?= e((string) $old['frtl']) ?>"
+                   style="width:14rem;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+            <small class="muted">From your dispatch paperwork. Must be unique per driver.</small>
+        </p>
 
         <p>
             <label for="pickup_city"><strong>Pick-up terminal</strong></label><br>

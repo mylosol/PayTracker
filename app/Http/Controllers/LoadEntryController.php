@@ -82,6 +82,7 @@ final class LoadEntryController extends Controller
             'driver'    => $account,
             'flash'     => $this->popFlash(),
             'old'       => [
+                'frtl'      => $this->session->get('_old_frtl')     ?? '',
                 'pickup'    => $this->session->get('_old_pickup')   ?? '',
                 'delivery'  => $this->session->get('_old_delivery') ?? '',
                 'load_type' => $this->session->get('_old_type')     ?? '0',
@@ -110,6 +111,7 @@ final class LoadEntryController extends Controller
         }
 
         // --- pull + preserve old input ----------------------------------
+        $frtlRaw  = trim((string) $request->input('frtl', ''));
         $pickup   = trim((string) $request->input('pickup_city', ''));
         $delivery = trim((string) $request->input('delivery_city', ''));
         $typeRaw  = (string) $request->input('load_type', '');
@@ -120,6 +122,7 @@ final class LoadEntryController extends Controller
         $extraRaw = (string) $request->input('extra_pay', '0');
         $notes    = trim((string) $request->input('notes', ''));
 
+        $this->session->put('_old_frtl', $frtlRaw);
         $this->session->put('_old_pickup', $pickup);
         $this->session->put('_old_delivery', $delivery);
         $this->session->put('_old_type', $typeRaw);
@@ -130,6 +133,20 @@ final class LoadEntryController extends Controller
         $this->session->put('_old_weekend', $wkRaw);
 
         // --- validate ---------------------------------------------------
+        // FRTL is the driver's dispatch number — typed in from paperwork.
+        // The (driver_id, frtl) PK guarantees uniqueness per driver; we
+        // pre-flight check so the error message is friendly.
+        if ($frtlRaw === '' || ! ctype_digit($frtlRaw) || (int) $frtlRaw <= 0) {
+            return $this->failBack($request, 'FRTL must be a positive number from your dispatch paperwork.');
+        }
+        $frtl = (int) $frtlRaw;
+        if ($frtl > 2147483647) {
+            return $this->failBack($request, 'FRTL is too large to be valid.');
+        }
+        if ($this->loads->frtlExists((int) $account['id'], $frtl)) {
+            return $this->failBack($request, sprintf('FRTL %d is already on file for this driver.', $frtl));
+        }
+
         if ($pickup === '' || $delivery === '') {
             return $this->failBack($request, 'Pick-up and delivery cities are required.');
         }
@@ -185,6 +202,7 @@ final class LoadEntryController extends Controller
         // --- insert -----------------------------------------------------
         $frtl = $this->loads->insertOne([
             'driver_id'          => (int) $account['id'],
+            'frtl'               => $frtl,
             'load_type'          => $loadType,
             'pickup_city'        => $pickup,
             'delivery_city'      => $delivery,
@@ -203,7 +221,7 @@ final class LoadEntryController extends Controller
         ]);
 
         // Clear preserved input on success.
-        foreach (['_old_pickup', '_old_delivery', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend'] as $k) {
+        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend'] as $k) {
             $this->session->forget($k);
         }
 
