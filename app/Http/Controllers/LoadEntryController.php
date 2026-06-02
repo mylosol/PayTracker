@@ -136,18 +136,23 @@ final class LoadEntryController extends Controller
         $this->session->put('_old_weekend', $wkRaw);
 
         // --- validate ---------------------------------------------------
-        // FRTL is the driver's dispatch number — typed in from paperwork.
-        // The (driver_id, frtl) PK guarantees uniqueness per driver; we
-        // pre-flight check so the error message is friendly.
-        if ($frtlRaw === '' || ! ctype_digit($frtlRaw) || (int) $frtlRaw <= 0) {
-            return $this->failBack($request, 'FRTL must be a positive number from your dispatch paperwork.');
-        }
-        $frtl = (int) $frtlRaw;
-        if ($frtl > 2147483647) {
-            return $this->failBack($request, 'FRTL is too large to be valid.');
-        }
-        if ($this->loads->frtlExists((int) $account['id'], $frtl)) {
-            return $this->failBack($request, sprintf('FRTL %d is already on file for this driver.', $frtl));
+        // FRTL is the driver's dispatch number — typed in from paperwork
+        // when available. It's OPTIONAL: a driver who doesn't have the
+        // number handy can leave it blank and we'll auto-assign MAX+1
+        // for their account in DriverLoad::insertOne. When supplied,
+        // it must be a positive int unique per driver.
+        $frtl = 0; // 0 = "let the model auto-assign"
+        if ($frtlRaw !== '') {
+            if (! ctype_digit($frtlRaw) || (int) $frtlRaw <= 0) {
+                return $this->failBack($request, 'FRTL must be a positive number, or left blank to auto-assign.');
+            }
+            $frtl = (int) $frtlRaw;
+            if ($frtl > 2147483647) {
+                return $this->failBack($request, 'FRTL is too large to be valid.');
+            }
+            if ($this->loads->frtlExists((int) $account['id'], $frtl)) {
+                return $this->failBack($request, sprintf('FRTL %d is already on file for this driver.', $frtl));
+            }
         }
 
         if ($pickup === '' || $delivery === '') {
@@ -263,9 +268,11 @@ final class LoadEntryController extends Controller
         }
 
         $sourceNote = $usedGoogleMaps ? ' (via Google Maps, now cached)' : '';
+        $frtlNote   = $frtlRaw === '' ? ' (auto-assigned)' : '';
         $this->session->put('_flash', sprintf(
-            'Added load frtl=%d: %s → %s, %d miles%s. Pay: $%s.',
+            'Added load frtl=%d%s: %s → %s, %d miles%s. Pay: $%s.',
             $frtl,
+            $frtlNote,
             $pickup,
             $delivery,
             $emptyMiles,

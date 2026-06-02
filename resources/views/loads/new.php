@@ -29,11 +29,11 @@ layout('layouts/app');
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
 
         <p>
-            <label for="frtl"><strong>FRTL #</strong></label><br>
-            <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]+" required
+            <label for="frtl"><strong>FRTL #</strong> <span class="muted">(optional)</span></label><br>
+            <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]*"
                    value="<?= e((string) $old['frtl']) ?>"
                    style="width:14rem;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-            <small class="muted">From your dispatch paperwork. Must be unique per driver.</small>
+            <small class="muted">From your dispatch paperwork. Leave blank to auto-assign the next number.</small>
         </p>
 
         <p>

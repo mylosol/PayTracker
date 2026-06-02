@@ -355,18 +355,17 @@ final class DriverLoad extends Model
         // "submitted, unpaid" state — first slot 1, rest 0.
         $paid = '1-0-0-0-0-0-0-0';
 
-        // FRTL is a USER-PROVIDED dispatch identifier, not a synthetic
-        // surrogate. The caller MUST pass it in $data['frtl']. We range-
-        // check (positive, fits in INT) and let the composite PK reject
-        // duplicates — a collision here means the driver already has a
-        // load with this FRTL on file, which we surface as a 1062 that
-        // the controller translates to a user-facing error.
+        // FRTL is normally a USER-PROVIDED dispatch identifier, but the
+        // form makes it optional — drivers who don't have the paperwork
+        // handy can submit and we synthesise the next-available number
+        // per driver. When the caller passes a positive int, we use it
+        // verbatim and let the composite PK reject duplicates (the
+        // controller pre-flights via frtlExists() for a friendly error).
+        // When the caller passes 0/missing, we compute MAX(frtl)+1 with
+        // a small retry loop in case two submissions race for the same
+        // slot.
         $frtl = (int) ($data['frtl'] ?? 0);
-        if ($frtl <= 0) {
-            throw new InvalidArgumentException(
-                'frtl must be a positive integer (the dispatch number from your paperwork)'
-            );
-        }
+        $autoAssign = $frtl <= 0;
 
         // np / op default to 0.00 when the caller doesn't pass them. The
         // load-entry controller computes them via PayCalculator before
@@ -391,17 +390,59 @@ final class DriverLoad extends Model
                     ?, ?, ?,
                     ?, ?, ?
                 )';
-        $this->prepared($sql, [
-            $data['driver_id'], $frtl,
-            $variables, $loadinfo, $paid, $data['notes'] ?? null,
-            $np, $op,
-            $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
-            $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
-            number_format($data['extra_pay'], 2, '.', ''),
-            $data['dem_minutes'], $data['break_minutes'],
-            $data['out_of_route_ind'], $data['out_of_route_miles'], $data['terminal_pcola'],
-        ]);
-        return $frtl;
+
+        // When auto-assigning, retry on PK collision so two concurrent
+        // submissions for the same driver don't both claim MAX+1. Bounded
+        // to a small number of attempts — a sustained collision rate would
+        // indicate a runaway client and is better surfaced as an error
+        // than silently absorbed.
+        $maxAttempts = $autoAssign ? 5 : 1;
+        $lastError   = null;
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            if ($autoAssign) {
+                $frtl = $this->nextFrtlFor((int) $data['driver_id']);
+            }
+            try {
+                $this->prepared($sql, [
+                    $data['driver_id'], $frtl,
+                    $variables, $loadinfo, $paid, $data['notes'] ?? null,
+                    $np, $op,
+                    $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
+                    $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
+                    number_format($data['extra_pay'], 2, '.', ''),
+                    $data['dem_minutes'], $data['break_minutes'],
+                    $data['out_of_route_ind'], $data['out_of_route_miles'], $data['terminal_pcola'],
+                ]);
+                return $frtl;
+            } catch (\PDOException $e) {
+                // 23000 / 1062 = duplicate PK. On auto-assign we loop and
+                // try the next number; on user-supplied frtl we re-throw
+                // (controller pre-flights but a race could still land here).
+                $isDupe = $e->getCode() === '23000'
+                    || (isset($e->errorInfo[1]) && (int) $e->errorInfo[1] === 1062);
+                if (! $isDupe || ! $autoAssign) {
+                    throw $e;
+                }
+                $lastError = $e;
+            }
+        }
+        throw new \RuntimeException(
+            'Could not assign a free FRTL after ' . $maxAttempts . ' attempts',
+            0,
+            $lastError
+        );
+    }
+
+    /**
+     * Compute the next-available FRTL for a driver: MAX(frtl)+1, or 1 if
+     * the driver has no rows yet. Not collision-safe on its own; callers
+     * that race must wrap with a retry loop on PK violations.
+     */
+    private function nextFrtlFor(int $driverId): int
+    {
+        $sql = 'SELECT COALESCE(MAX(frtl), 0) + 1 FROM `driver_loads` WHERE driver_id = ?';
+        $next = $this->prepared($sql, [$driverId])->fetchColumn();
+        return (int) $next > 0 ? (int) $next : 1;
     }
 
     /**

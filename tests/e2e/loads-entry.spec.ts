@@ -36,9 +36,9 @@ test.describe('load entry (write path)', () => {
         await page.goto('loads/new');
         await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.getByRole('button', { name: /add load/i }).click();
-        // FRTL is the first required check now — reaching the
-        // pickup/delivery validation requires a valid FRTL first.
-        await expect(page.getByText(/frtl must be a positive number/i)).toBeVisible();
+        // FRTL is optional now — the first required check is pickup
+        // terminal / delivery city.
+        await expect(page.getByText(/pick-up and delivery cities are required/i)).toBeVisible();
     });
 
     // Pick a FRTL well above the existing-data range so reruns don't collide
@@ -87,5 +87,21 @@ test.describe('load entry (write path)', () => {
         await expect(page).toHaveURL(/\/loads$/);
         await expect(page.getByText(new RegExp(`added load frtl=${frtl}\\b`, 'i'))).toBeVisible();
         await expect(page.getByText(/Panama City, FL.*Lynn Haven, FL/i)).toBeVisible();
+    });
+
+    test('9g — blank FRTL auto-assigns next available number', async ({ page }) => {
+        await signIn(page);
+        await page.goto('loads/new');
+
+        // Leave #frtl untouched — the model assigns MAX+1 per driver.
+        await page.locator('#pickup_city').selectOption('Panama City, FL');
+        await page.locator('#delivery_city').fill('Lynn Haven, FL');
+        await page.locator('input[name="load_type"][value="0"]').check();
+        await page.locator('#extra_pay').fill('0');
+        await page.locator('#notes').fill('QA TEST automated load-entry (auto-frtl) — safe to clean up');
+        await page.getByRole('button', { name: /add load/i }).click();
+
+        await expect(page).toHaveURL(/\/loads$/);
+        await expect(page.getByText(/added load frtl=\d+ \(auto-assigned\)/i)).toBeVisible();
     });
 });
