@@ -245,7 +245,6 @@ final class LoadEntryController extends Controller
             variables_blob:     $variablesBlob,
             out_of_route_ind:   0,
             out_of_route_miles: 0,
-            terminal_pcola:     0,
         );
         $pay = $this->calculator->computeFor($payInput);
 
@@ -266,7 +265,6 @@ final class LoadEntryController extends Controller
             'out_of_route_ind'   => 0,
             'out_of_route_miles' => 0,
             'used_google_maps'   => $usedGoogleMaps,
-            'terminal_pcola'     => 0,
             'notes'              => $notes !== '' ? $notes : null,
             'np'                 => $pay['np'],
             'op'                 => $pay['op'],

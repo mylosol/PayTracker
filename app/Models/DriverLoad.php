@@ -230,7 +230,6 @@ final class DriverLoad extends Model
      *   out_of_route_ind:int,
      *   out_of_route_miles:int,
      *   used_google_maps:int,
-     *   terminal_pcola:int,
      *   notes?:string|null,
      * } $data
      *
@@ -405,6 +404,12 @@ final class DriverLoad extends Model
             $payBreakdown = json_encode($data['pay_breakdown'], JSON_THROW_ON_ERROR);
         }
 
+        // terminal_pcola is a legacy column with no remaining read-side —
+        // the legacy formula had a branch that referenced it, but both
+        // sides of the branch were identical (it was dead). The column
+        // stays on driver_loads (additive-only migration policy) and is
+        // written as a literal 0 here so we don't need to thread it
+        // through the calling code.
         $sql = 'INSERT INTO `driver_loads` (
                     driver_id, frtl, date,
                     variables, loadinfo, paid, notPaid, notes, np, op, pay_breakdown,
@@ -418,7 +423,7 @@ final class DriverLoad extends Model
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?,
-                    ?, ?, ?
+                    ?, ?, 0
                 )';
 
         // When auto-assigning, retry on PK collision so two concurrent
@@ -441,7 +446,7 @@ final class DriverLoad extends Model
                     $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
                     number_format($data['extra_pay'], 2, '.', ''),
                     $data['dem_minutes'], $data['break_minutes'],
-                    $data['out_of_route_ind'], $data['out_of_route_miles'], $data['terminal_pcola'],
+                    $data['out_of_route_ind'], $data['out_of_route_miles'],
                 ]);
                 return $frtl;
             } catch (\PDOException $e) {

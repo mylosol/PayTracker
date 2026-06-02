@@ -77,7 +77,6 @@ final class PayRecomputer
                 variables_blob:     (string) ($row['variables'] ?? '6-day--0'),
                 out_of_route_ind:   (int) ($row['out_of_route_ind']   ?? 0),
                 out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
-                terminal_pcola:     (int) ($row['terminal_pcola']     ?? 0),
             );
             return $this->calculator->computeFor($load);
         };

@@ -11,56 +11,52 @@ use PayTracker\Services\Pay\RateLookup;
 use PayTracker\Services\Pay\VariableBag;
 
 /**
- * PayCalculator — modern port of the legacy index.php np/op formula
- * (lines 568–684).
+ * PayCalculator — computes net pay (np) and op for one load.
  *
- * Faithful reproduction of the legacy math, including the specific
- * round-each-component-then-sum behaviour that produces values consistent
- * with what's stored in driver_loads.np / .op.
+ * Inputs come through LoadInputs (a DTO built from the form or from
+ * a stored driver_loads row); rates and per-band variables come from
+ * the pay_rates / pay_variables tables. Result is a structured array
+ * with the np/op totals plus every component the dashboard breakdown
+ * card renders (base mi/$, shift %/$, seniority %/$, weekend, split,
+ * dem, break, extra).
  *
- * INPUTS  (\PayTracker\Services\Pay\LoadInputs DTO)
- *   load_type:          0 = one-way, 1 = round-trip, 4 = trainer
- *   load_miles:         resolved pickup→delivery distance
- *   empty_miles:        return-leg empty miles
- *   begin_empty_miles:  deadhead miles before pickup
- *   is_split:           1 → flat +$15 to both np and op
- *   is_weekend:         1 → enables wk multiplier on np
- *   extra_pay:          flat $ added to both np and op
- *   dem_minutes:        × demurrage per-minute → adds to both np and op
- *   break_minutes:      × breakdown per-minute → adds to both np and op
- *   variables_blob:     "tenure-shift-slip-?" from driver_loads.variables
- *   terminal_pcola:     unused by formula (legacy dead branch), kept
- *                       in the DTO for future use.
+ * Formula:
  *
- * OUTPUTS
- *   np: float — total pay (base + seniority + shift + weekend + extras)
- *   op: float — side-extras only (split + extra_pay + dem + break)
- *
- * The op formula was reverse-engineered from sampler fixtures:
- *   frtl=9556333  split=1 extra=5 break=90  → op = 15 + 5 + 90×0.391667 ≈ 55.25 ✓
- *   frtl=9550429  split=1 dem=75            → op = 15 + 75×0.391667    ≈ 44.38 ✓
- *
- * The np formula:
  *   round-trip (load_type=1):
- *     base = lookupTier(round_trip, load_miles) × (1 + raise)
- *     np   = round(base,2) + round(base×newBump,2) + round(base×night,2)
- *          + round(base×wk,2 if weekend else 0)
- *          + extras
+ *     base      = lookupTier(round_trip, load_miles) × (1 + raise)
+ *     base_pay  = round(base, 2)
+ *     seniority = round(base × newBump, 2)
+ *     shift     = round(base × night, 2)  // night-shift only
+ *     weekend   = round(base × wk, 2)     // when is_weekend
+ *     np        = base_pay + seniority + shift + weekend + extras
  *
  *   one-way (load_type=0):
- *     oneWay = lookupTier(long_haul, load_miles) × (1 + raise)
- *     empty  = (empty_miles + begin_empty_miles) × mt
- *     if oneWay > 0:
- *       np = round(oneWay,2) + round(empty,2)
- *          + round((oneWay+empty)×newBump,2)
- *          + round((oneWay+empty)×night,2)
- *          + round((oneWay+empty)×wk,2 if weekend else 0)
- *          + extras
- *     elif empty > 0:
- *       np = round(empty,2) + extras  (no overlay)
+ *     oneWay   = lookupTier(long_haul, load_miles) × (1 + raise)
+ *     empty    = (empty_miles + begin_empty_miles) × mt
+ *     base_pay = round(oneWay, 2)
+ *     empty_pay = round(empty, 2)
+ *     combined = oneWay + empty
+ *     seniority = round(combined × newBump, 2)
+ *     shift     = round(combined × night, 2)
+ *     weekend   = round(combined × wk, 2)
+ *     if oneWay == 0 && empty > 0: np = empty_pay + extras (no overlay)
+ *     else: np = base_pay + empty_pay + seniority + shift + weekend + extras
  *
  *   trainer (load_type=4):
  *     np = op = round(trainer_pay + extras, 2)
+ *
+ * Extras (the op total, also added to np):
+ *   split (flat $15 if is_split) + extra_pay + dem×CPM + break×CPM
+ *
+ * Rounding doctrine: every component is rounded to 2 decimals, and
+ * the totals are the sums of those rounded components. The breakdown
+ * shown to the driver sums exactly to the np they see — no off-by-
+ * a-cent drift between the row-by-row card and the total.
+ *
+ * Out-of-route rewrite: when out_of_route_ind > 0 and out_of_route_miles
+ * exceeds load_miles + 3, the rate-table lookup uses the longer mileage
+ * (a Panama→Panama 0-mile loop with a 10-mile detour bills at the
+ * 10-mile tier).
  */
 final class PayCalculator
 {
@@ -149,14 +145,15 @@ final class PayCalculator
         $demRate = (float) $this->vars->get('demurrage', '0');
         $brkRate = (float) $this->vars->get('breakdown', '0');
 
-        // Two views of "extras":
-        //   $extras (float, unrounded) goes into the np sum — legacy
-        //     does one final round at the end, not per-component.
-        //   $extrasBreakdown (each component rounded) is the display
-        //     form for the dashboard. Op = round($extras, 2) so it
-        //     matches the legacy op value bit-for-bit.
-        $extras          = $this->extrasUnrounded($load, $demRate, $brkRate);
+        // Single view of extras: every component rounded to 2 decimals,
+        // then summed. The breakdown shown to the driver sums exactly
+        // to op (and to the extras portion of np) — no off-by-a-cent
+        // drift between the row-by-row card and the totals.
         $extrasBreakdown = $this->extrasBreakdown($load, $demRate, $brkRate);
+        $extras          = $extrasBreakdown['split_pay']
+                         + $extrasBreakdown['extra_pay']
+                         + $extrasBreakdown['dem_pay']
+                         + $extrasBreakdown['break_pay'];
 
         // Trainer path: np = op = trainer_pay + extras. No base/seniority/
         // shift/weekend overlay applies. We zero those fields so the
@@ -317,37 +314,29 @@ final class PayCalculator
         ];
     }
 
-    /**
-     * Unrounded extras sum for use in the np total. Legacy adds extras
-     * to np at full precision and rounds the np ONCE at the end; doing
-     * it any other way drifts by a cent on rows with non-zero dem/break.
-     */
-    private function extrasUnrounded(LoadInputs $load, float $demRate, float $brkRate): float
-    {
-        $split = $load->is_split > 0 ? 15.0 : 0.0;
-        return $split + $load->extra_pay
-             + $load->dem_minutes   * $demRate
-             + $load->break_minutes * $brkRate;
-    }
 
     /**
      * Map driver tenure (months) onto a tenure band and return the
-     * per-band variables.
+     * per-band multipliers the formula uses.
      *
-     * Bands match the legacy variables.php branches exactly:
-     *   tenure ==  6           → '6_*'
-     *   tenure == 12           → '12_*'
-     *   tenure ∈ {13, 24}      → '24_*'
-     *   tenure ∈ (24..60]      → '60_*'
-     *   tenure ∈ (60..108]     → '108_*'
-     *   tenure ∈ (108..168]    → '168_*'
-     *   tenure == 'max'        → 'max_*'
+     * Bands are months-since-hire:
+     *   tenure <=  6   → '6'
+     *   tenure <= 12   → '12'
+     *   tenure <= 24   → '24'
+     *   tenure <= 60   → '60'
+     *   tenure <= 108  → '108'
+     *   tenure <= 168  → '168'
+     *   tenure  > 168  → '168' (caps at the top band; 'max' would be a
+     *                            manual senior-override path we don't
+     *                            currently model)
      *
-     * Anything else falls back to '168_*' — the senior band. We prefer
-     * '168' over the legacy "stay at zero" because the sampler showed
-     * 1353 rows on '168' and that's the practical default.
+     * Anything unparseable falls back to '168' — the senior band.
      *
-     * @return array{mt:string, wk:string, newBump:string, night:string, tb:string}
+     * The legacy pay_variables table also defines a `{band}_tb` value
+     * per band, but it isn't read by any formula path; we don't surface
+     * it here.
+     *
+     * @return array{mt:string, wk:string, newBump:string, night:string}
      */
     private function bandVariables(string $tenure): array
     {
@@ -358,7 +347,6 @@ final class PayCalculator
             ctype_digit($tenure) && (int) $tenure > 24  && (int) $tenure <= 60  => '60',
             ctype_digit($tenure) && (int) $tenure > 60  && (int) $tenure <= 108 => '108',
             ctype_digit($tenure) && (int) $tenure > 108 && (int) $tenure <= 168 => '168',
-            $tenure === 'max'                                                   => 'max',
             default                                                             => '168',
         };
         return [
@@ -366,7 +354,6 @@ final class PayCalculator
             'wk'      => $this->vars->get("{$band}_wk",      '0'),
             'newBump' => $this->vars->get("{$band}_newBump", '0'),
             'night'   => $this->vars->get("{$band}_night",   '0'),
-            'tb'      => $this->vars->get("{$band}_tb",      '0'),
         ];
     }
 }

@@ -23,7 +23,6 @@ final class LoadInputs
         public readonly string $variables_blob,
         public readonly int    $out_of_route_ind   = 0,
         public readonly int    $out_of_route_miles = 0,
-        public readonly int    $terminal_pcola     = 0,
     ) {
     }
 }
