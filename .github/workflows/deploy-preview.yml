@@ -91,6 +91,14 @@ jobs:
       - name: Static analysis (phpstan)
         run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress --error-format=github
 
+      # Unit tests. These run BEFORE deploy so a regression in pure-PHP
+      # logic (PayCalculator, model behaviour) fails fast rather than
+      # waiting for the Playwright suite to surface it. The suite is
+      # intentionally small (PHPUnit on tests/Unit only) — DB-touching
+      # tests are covered by Playwright against the live preview.
+      - name: PHP unit tests
+        run: vendor/bin/phpunit --colors=never
+
       # Strip dev dependencies before rsync so the deployed vendor/ tree
       # doesn't carry phpstan, phpunit, and their transitive deps. We
       # already proved the build is clean above; reinstalling without dev
@@ -206,17 +214,6 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
             "cd /home/robshe48/paytracker/preview && php scripts/migrate.php"
-
-      # TEMP — sample driver_loads with stored np/op + variablesCurrent/
-      # variablesDefault so the PayCalculator port can be validated against
-      # real legacy-computed values. Same pattern as PR #10 / PR #11 samplers;
-      # revert this step in a follow-up commit once captured.
-      - name: TEMP — sample pay-formula inputs
-        env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/sample-pay-formula-inputs.php"
 
       # Sync the QA test account's password from GH secrets so the Playwright
       # suite below can log in with a known-good credential. The password
