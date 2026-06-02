@@ -47,37 +47,36 @@ test.describe('driver profile', () => {
         await signIn(page);
         await page.goto('profile');
 
-        // ~40 months ago → should map to the 60-month band on the preview
-        // (months > 24 and <= 60).
-        const date = new Date();
-        date.setMonth(date.getMonth() - 40);
-        const isoDate = date.toISOString().slice(0, 10);
+        // Snapshot the driver's existing values so we can restore them
+        // after the test. The preview DB is shared with whoever's
+        // logged in as QA_TEST_USER (often a real user during dogfooding),
+        // and clobbering their profile every deploy is a real bug.
+        const originalHireDate = await page.locator('#hire_date').inputValue();
+        const originalShift    = await page.locator('input[name="shift"]:checked').getAttribute('value') ?? 'day';
+        const originalPayWeek  = await page.locator('select[name="pay_week_start_day"]').inputValue();
 
-        await page.locator('#hire_date').fill(isoDate);
-        await page.locator('input[name="shift"][value="day"]').check();
-        await page.getByRole('button', { name: /save profile/i }).click();
-
-        await expect(page).toHaveURL(/\/profile$/);
-        await expect(page.getByText(/profile saved/i)).toBeVisible();
-        // Reload and verify the band preview reflects the saved date.
-        await page.goto('profile');
-        await expect(page.getByText(/band 60/i)).toBeVisible();
-    });
-
-    // Cleanup — reset to legacy defaults so subsequent runs of other
-    // specs (especially loads-entry, which inserts and checks np) see
-    // a consistent baseline.
-    test.afterAll(async ({ browser }) => {
-        const context = await browser.newContext();
-        const page = await context.newPage();
         try {
-            await signIn(page);
-            await page.goto('profile');
-            await page.locator('#hire_date').fill('');
+            // ~40 months ago → should map to the 60-month band.
+            const date = new Date();
+            date.setMonth(date.getMonth() - 40);
+            const isoDate = date.toISOString().slice(0, 10);
+
+            await page.locator('#hire_date').fill(isoDate);
             await page.locator('input[name="shift"][value="day"]').check();
             await page.getByRole('button', { name: /save profile/i }).click();
+
+            await expect(page).toHaveURL(/\/profile$/);
+            await expect(page.getByText(/profile saved/i)).toBeVisible();
+            await page.goto('profile');
+            await expect(page.getByText(/band 60/i)).toBeVisible();
         } finally {
-            await context.close();
+            // Restore — even on test failure, so a fresh deploy doesn't
+            // strand the QA user with stale test values.
+            await page.goto('profile');
+            await page.locator('#hire_date').fill(originalHireDate);
+            await page.locator(`input[name="shift"][value="${originalShift}"]`).check();
+            await page.locator('select[name="pay_week_start_day"]').selectOption(originalPayWeek);
+            await page.getByRole('button', { name: /save profile/i }).click();
         }
     });
 });
