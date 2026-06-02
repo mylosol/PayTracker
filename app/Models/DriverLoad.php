@@ -505,4 +505,104 @@ final class DriverLoad extends Model
         $sql = 'SELECT 1 FROM `driver_loads` WHERE driver_id = ? AND frtl = ? LIMIT 1';
         return $this->prepared($sql, [$driverId, $frtl])->fetchColumn() !== false;
     }
+
+    /**
+     * Fetch a single load by (driver_id, frtl). Used by the edit flow
+     * to pre-populate the form. Returns null if the row doesn't exist
+     * — the controller then surfaces a 404-style flash so a driver
+     * never sees another driver's loads even by URL guessing.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function findForDriver(int $driverId, int $frtl): ?array
+    {
+        $sql = 'SELECT
+                    driver_id, frtl, date,
+                    load_type, pickup_city, delivery_city,
+                    empty_miles, begin_empty_miles, is_split, is_weekend,
+                    extra_pay, dem_minutes, break_minutes,
+                    out_of_route_ind, out_of_route_miles,
+                    used_google_maps, notes,
+                    variables, np, op, pay_breakdown
+                FROM `driver_loads`
+                WHERE driver_id = ? AND frtl = ?
+                LIMIT 1';
+        $row = $this->prepared($sql, [$driverId, $frtl])->fetch();
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Update the editable fields on an existing load. The (driver_id,
+     * frtl) pair is enforced in the WHERE clause so a malicious POST
+     * with someone else's frtl can't modify their row.
+     *
+     * pay_breakdown is JSON-encoded by the caller (the controller has
+     * the freshly computed breakdown array on hand).
+     *
+     * @param array{
+     *   load_type:int, pickup_city:string, delivery_city:string,
+     *   empty_miles:int, is_split:int, is_weekend:int,
+     *   extra_pay:float, dem_minutes:int, break_minutes:int,
+     *   notes:?string,
+     *   np:float, op:float,
+     *   variables:string,
+     *   pay_breakdown:array<string,mixed>,
+     * } $data
+     */
+    public function updateOne(int $driverId, int $frtl, array $data): void
+    {
+        $loadinfo = implode('-', [
+            $data['load_type'],
+            $data['empty_miles'],
+            $data['pickup_city'],
+            $data['delivery_city'],
+            $data['is_split'],
+            $data['is_weekend'],
+            '2',
+            0, // begin_empty_miles — edit form doesn't expose it
+            0, // used_google_maps — keep on edit (already cached)
+            number_format($data['extra_pay'], 0, '.', ''),
+            $data['dem_minutes'],
+            $data['break_minutes'],
+            0, // out_of_route_ind
+            0, // out_of_route_miles
+        ]);
+
+        $sql = 'UPDATE `driver_loads` SET
+                    load_type = ?, empty_miles = ?,
+                    pickup_city = ?, delivery_city = ?,
+                    is_split = ?, is_weekend = ?,
+                    extra_pay = ?, dem_minutes = ?, break_minutes = ?,
+                    notes = ?,
+                    np = ?, op = ?,
+                    variables = ?, loadinfo = ?,
+                    pay_breakdown = ?
+                WHERE driver_id = ? AND frtl = ?';
+        $this->prepared($sql, [
+            $data['load_type'], $data['empty_miles'],
+            $data['pickup_city'], $data['delivery_city'],
+            $data['is_split'], $data['is_weekend'],
+            number_format($data['extra_pay'], 2, '.', ''),
+            $data['dem_minutes'], $data['break_minutes'],
+            $data['notes'],
+            number_format($data['np'], 2, '.', ''),
+            number_format($data['op'], 2, '.', ''),
+            $data['variables'], $loadinfo,
+            json_encode($data['pay_breakdown'], JSON_THROW_ON_ERROR),
+            $driverId, $frtl,
+        ]);
+    }
+
+    /**
+     * Delete a load. Driver-scoped — the WHERE clause guarantees a
+     * driver can only ever delete their own rows. Returns true if a
+     * row was actually deleted (false if (driver_id, frtl) didn't
+     * match anything).
+     */
+    public function deleteOne(int $driverId, int $frtl): bool
+    {
+        $sql = 'DELETE FROM `driver_loads` WHERE driver_id = ? AND frtl = ?';
+        $stmt = $this->prepared($sql, [$driverId, $frtl]);
+        return $stmt->rowCount() > 0;
+    }
 }

@@ -10,12 +10,20 @@
  *   frtl:string, pickup:string, delivery:string, load_type:string,
  *   dem:string, break:string, extra:string,
  *   split:string, weekend:string,
+ *   notes?:string,
  * } $old
+ * @var string $mode      'create' (default) or 'edit'
+ * @var int    $editFrtl  Only set when mode === 'edit'
  */
 layout('layouts/app');
+
+$mode      = $mode      ?? 'create';
+$editFrtl  = $editFrtl  ?? 0;
+$isEdit    = $mode === 'edit';
+$formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
 ?>
 <div class="card">
-    <h1>Add a load</h1>
+    <h1><?= $isEdit ? 'Edit load #' . (int) $editFrtl : 'Add a load' ?></h1>
 
     <p class="muted">Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong> (driver id <?= (int) ($driver['id'] ?? 0) ?>).</p>
 
@@ -25,15 +33,24 @@ layout('layouts/app');
         </p>
     <?php endif; ?>
 
-    <form method="post" action="<?= e($base) ?>/loads" novalidate autocomplete="off">
+    <form method="post" action="<?= e($formAction) ?>" novalidate autocomplete="off">
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
 
         <p>
-            <label for="frtl"><strong>FRTL #</strong> <span class="muted">(optional)</span></label><br>
+            <label for="frtl"><strong>FRTL #</strong>
+                <?= $isEdit ? '' : '<span class="muted">(optional)</span>' ?>
+            </label><br>
             <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]*"
                    value="<?= e((string) $old['frtl']) ?>"
-                   style="width:14rem;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-            <small class="muted">From your dispatch paperwork. Leave blank to auto-assign the next number.</small>
+                   <?= $isEdit ? 'readonly' : '' ?>
+                   style="width:14rem;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;<?= $isEdit ? 'background:#f1f5f9;color:#475569;' : '' ?>">
+            <small class="muted">
+                <?php if ($isEdit): ?>
+                    The FRTL number is locked. To change it, delete this load and re-add.
+                <?php else: ?>
+                    From your dispatch paperwork. Leave blank to auto-assign the next number.
+                <?php endif; ?>
+            </small>
         </p>
 
         <p>
@@ -113,15 +130,15 @@ layout('layouts/app');
         <p>
             <label for="notes"><strong>Notes (optional)</strong></label><br>
             <textarea id="notes" name="notes" rows="2" maxlength="900"
-                      style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;"></textarea>
+                      style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;"><?= e((string) ($old['notes'] ?? '')) ?></textarea>
         </p>
 
         <p>
             <button type="submit"
                     style="background:var(--accent);color:#fff;border:0;padding:.6rem 1.4rem;border-radius:6px;font:inherit;cursor:pointer;">
-                Add load
+                <?= $isEdit ? 'Save changes' : 'Add load' ?>
             </button>
-            &nbsp;<a href="<?= e($base) ?>/loads">Cancel</a>
+            &nbsp;<a href="<?= e($base) ?>/<?= $isEdit ? 'dashboard' : 'loads' ?>">Cancel</a>
         </p>
     </form>
 

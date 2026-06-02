@@ -86,6 +86,8 @@ final class LoadEntryController extends Controller
             'terminals' => $this->terminals->all(),
             'driver'    => $account,
             'flash'     => $this->popFlash(),
+            'mode'      => 'create',
+            'editFrtl'  => 0,
             'old'       => [
                 'frtl'      => $this->session->get('_old_frtl')     ?? '',
                 'pickup'    => $this->session->get('_old_pickup')   ?? '',
@@ -96,6 +98,7 @@ final class LoadEntryController extends Controller
                 'extra'     => $this->session->get('_old_extra')    ?? '0',
                 'split'     => $this->session->get('_old_split')    ?? '0',
                 'weekend'   => $this->session->get('_old_weekend')  ?? '0',
+                'notes'     => '',
             ],
         ]);
     }
@@ -292,10 +295,225 @@ final class LoadEntryController extends Controller
         return $this->redirect($request->basePath() . '/loads');
     }
 
+    /**
+     * GET /loads/{frtl}/edit — render the entry form pre-populated
+     * with this load's stored values. Scoped to the signed-in driver
+     * — passing another driver's frtl returns a 404-flavoured flash
+     * rather than leaking the row.
+     */
+    public function edit(Request $request, string $frtl): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        $this->session->start();
+
+        if (! ctype_digit($frtl) || (int) $frtl <= 0) {
+            $this->session->put('_flash', 'That FRTL is not valid.');
+            return $this->redirect($request->basePath() . '/dashboard');
+        }
+        $frtlInt = (int) $frtl;
+        $row     = $this->loads->findForDriver((int) $account['id'], $frtlInt);
+        if ($row === null) {
+            $this->session->put('_flash', sprintf('Load %d not found on your account.', $frtlInt));
+            return $this->redirect($request->basePath() . '/dashboard');
+        }
+
+        return $this->view('loads/new', [
+            'csrfToken' => $this->csrf->token(),
+            'base'      => $request->basePath(),
+            'cities'    => $this->cities->allForPicker(),
+            'terminals' => $this->terminals->all(),
+            'driver'    => $account,
+            'flash'     => $this->popFlash(),
+            'mode'      => 'edit',
+            'editFrtl'  => $frtlInt,
+            'old'       => [
+                'frtl'      => (string) $frtlInt,
+                'pickup'    => (string) ($row['pickup_city']  ?? ''),
+                'delivery'  => (string) ($row['delivery_city'] ?? ''),
+                'load_type' => (string) ($row['load_type']    ?? '0'),
+                'dem'       => (string) ($row['dem_minutes']  ?? '0'),
+                'break'     => (string) ($row['break_minutes'] ?? '0'),
+                'extra'     => (string) ($row['extra_pay']    ?? '0'),
+                'split'     => (string) ($row['is_split']     ?? '0'),
+                'weekend'   => (string) ($row['is_weekend']   ?? '0'),
+                'notes'     => (string) ($row['notes']        ?? ''),
+            ],
+        ]);
+    }
+
+    /**
+     * POST /loads/{frtl} — validate, look up miles (using the
+     * potentially-changed cities), recompute pay, UPDATE the row.
+     * Driver-scoped: a malicious POST with someone else's frtl
+     * silently fails because the WHERE clause in updateOne includes
+     * the driver_id.
+     */
+    public function update(Request $request, string $frtl): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        $this->session->start();
+        if (! $this->csrf->verify($request->input('_csrf'))) {
+            return $this->failBackEdit($request, $frtl, 'Your session expired. Please try again.');
+        }
+        if (! ctype_digit($frtl) || (int) $frtl <= 0) {
+            $this->session->put('_flash', 'That FRTL is not valid.');
+            return $this->redirect($request->basePath() . '/dashboard');
+        }
+        $frtlInt = (int) $frtl;
+        $existing = $this->loads->findForDriver((int) $account['id'], $frtlInt);
+        if ($existing === null) {
+            $this->session->put('_flash', sprintf('Load %d not found on your account.', $frtlInt));
+            return $this->redirect($request->basePath() . '/dashboard');
+        }
+
+        $pickup   = trim((string) $request->input('pickup_city', ''));
+        $delivery = trim((string) $request->input('delivery_city', ''));
+        $typeRaw  = (string) $request->input('load_type', '');
+        $splitRaw = (string) $request->input('is_split', '0');
+        $wkRaw    = (string) $request->input('is_weekend', '0');
+        $demRaw   = (string) $request->input('dem_minutes', '0');
+        $brkRaw   = (string) $request->input('break_minutes', '0');
+        $extraRaw = (string) $request->input('extra_pay', '0');
+        $notes    = trim((string) $request->input('notes', ''));
+
+        if ($pickup === '' || $delivery === '') {
+            return $this->failBackEdit($request, $frtl, 'Pick-up and delivery cities are required.');
+        }
+        if ($pickup === $delivery) {
+            return $this->failBackEdit($request, $frtl, 'Pick-up and delivery cannot be the same city.');
+        }
+        if (! is_numeric($typeRaw) || ! in_array((int) $typeRaw, self::ALLOWED_LOAD_TYPES, true)) {
+            return $this->failBackEdit($request, $frtl, 'Load type must be loaded one-way or round-trip.');
+        }
+        if (! $this->terminals->isKnown($pickup)) {
+            return $this->failBackEdit($request, $frtl, sprintf('Pick-up "%s" is not a known terminal. Pick from the list.', $pickup));
+        }
+        if ($this->cities->findByName($delivery) === null) {
+            return $this->failBackEdit($request, $frtl, sprintf('Delivery city "%s" is not in the city list. Add it first.', $delivery));
+        }
+        if (! is_numeric($demRaw) || (int) $demRaw < 0 || (int) $demRaw > self::MAX_MINUTES) {
+            return $this->failBackEdit($request, $frtl, 'Demurrage minutes must be between 0 and ' . self::MAX_MINUTES . '.');
+        }
+        if (! is_numeric($brkRaw) || (int) $brkRaw < 0 || (int) $brkRaw > self::MAX_MINUTES) {
+            return $this->failBackEdit($request, $frtl, 'Breakdown minutes must be between 0 and ' . self::MAX_MINUTES . '.');
+        }
+        if (! is_numeric($extraRaw) || (float) $extraRaw < 0 || (float) $extraRaw > self::MAX_EXTRA_PAY) {
+            return $this->failBackEdit($request, $frtl, 'Extra pay must be between 0 and ' . self::MAX_EXTRA_PAY . '.');
+        }
+
+        $loadType  = (int) $typeRaw;
+        $isSplit   = $splitRaw === '1' ? 1 : 0;
+        $isWeekend = $wkRaw === '1' ? 1 : 0;
+
+        $miles = $this->distances->lookupOrFetch($pickup, $delivery);
+        if ($miles === null) {
+            return $this->failBackEdit(
+                $request,
+                $frtl,
+                sprintf('Could not find a mileage for %s → %s.', $pickup, $delivery)
+            );
+        }
+
+        // Recompute pay using the driver's CURRENT profile. Consistent
+        // with the Refresh-my-pay path: if a driver's tenure/shift has
+        // moved since the original load was entered, the edit
+        // recomputes against today's truth.
+        $variablesBlob = $this->blobBuilder->build($account);
+        $payInput = new LoadInputs(
+            load_type:          $loadType,
+            load_miles:         $miles,
+            empty_miles:        0,
+            begin_empty_miles:  0,
+            is_split:           $isSplit,
+            is_weekend:         $isWeekend,
+            extra_pay:          (float) $extraRaw,
+            dem_minutes:        (int) $demRaw,
+            break_minutes:      (int) $brkRaw,
+            variables_blob:     $variablesBlob,
+            out_of_route_ind:   0,
+            out_of_route_miles: 0,
+        );
+        $pay = $this->calculator->computeFor($payInput);
+
+        try {
+            $this->loads->updateOne((int) $account['id'], $frtlInt, [
+                'load_type'     => $loadType,
+                'pickup_city'   => $pickup,
+                'delivery_city' => $delivery,
+                'empty_miles'   => $miles,
+                'is_split'      => $isSplit,
+                'is_weekend'    => $isWeekend,
+                'extra_pay'     => (float) $extraRaw,
+                'dem_minutes'   => (int) $demRaw,
+                'break_minutes' => (int) $brkRaw,
+                'notes'         => $notes !== '' ? $notes : null,
+                'np'            => $pay['np'],
+                'op'            => $pay['op'],
+                'variables'     => $variablesBlob,
+                'pay_breakdown' => $pay,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->failBackEdit($request, $frtl, 'Could not save load: ' . $e->getMessage());
+        }
+
+        $this->session->put('_flash', sprintf(
+            'Updated load frtl=%d: %s → %s, %d miles. Pay: $%s.',
+            $frtlInt, $pickup, $delivery, $miles, number_format($pay['np'], 2)
+        ));
+        return $this->redirect($request->basePath() . '/dashboard');
+    }
+
+    /**
+     * POST /loads/{frtl}/delete — driver-scoped delete. The (driver_id,
+     * frtl) clause in the DELETE means a malicious POST with someone
+     * else's frtl no-ops silently.
+     */
+    public function destroy(Request $request, string $frtl): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        $this->session->start();
+        if (! $this->csrf->verify($request->input('_csrf'))) {
+            $this->session->put('_flash', 'Your session expired. Please try again.');
+            return $this->redirect($request->basePath() . '/dashboard');
+        }
+        if (! ctype_digit($frtl) || (int) $frtl <= 0) {
+            $this->session->put('_flash', 'That FRTL is not valid.');
+            return $this->redirect($request->basePath() . '/dashboard');
+        }
+        $frtlInt = (int) $frtl;
+
+        try {
+            $deleted = $this->loads->deleteOne((int) $account['id'], $frtlInt);
+        } catch (\Throwable $e) {
+            $this->session->put('_flash', 'Could not delete load: ' . $e->getMessage());
+            return $this->redirect($request->basePath() . '/dashboard');
+        }
+        $this->session->put('_flash', $deleted
+            ? sprintf('Deleted load frtl=%d.', $frtlInt)
+            : sprintf('Load %d was not on your account; nothing to delete.', $frtlInt)
+        );
+        return $this->redirect($request->basePath() . '/dashboard');
+    }
+
     private function failBack(Request $request, string $message): Response
     {
         $this->session->put('_flash', $message);
         return $this->redirect($request->basePath() . '/loads/new');
+    }
+
+    private function failBackEdit(Request $request, string $frtl, string $message): Response
+    {
+        $this->session->put('_flash', $message);
+        return $this->redirect($request->basePath() . '/loads/' . urlencode($frtl) . '/edit');
     }
 
     private function popFlash(): ?string

@@ -147,6 +147,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                     <th style="padding:.3rem .5rem;">Pickup &rarr; Delivery</th>
                     <th style="padding:.3rem .5rem;text-align:right;">NP</th>
                     <th style="padding:.3rem .5rem;text-align:right;">OP</th>
+                    <th style="padding:.3rem .5rem;text-align:right;">&nbsp;</th>
                 </tr>
             </thead>
             <tbody>
@@ -171,10 +172,23 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                         </td>
                         <td style="padding:.25rem .5rem;text-align:right;"><code>$<?= number_format((float) $row['np'], 2) ?></code></td>
                         <td style="padding:.25rem .5rem;text-align:right;"><code>$<?= number_format((float) $row['op'], 2) ?></code></td>
+                        <td style="padding:.25rem .5rem;text-align:right;white-space:nowrap;">
+                            <a href="<?= e($base) ?>/loads/<?= (int) $row['frtl'] ?>/edit"
+                               style="color:var(--accent);text-decoration:none;font-size:12px;margin-right:.3rem;"
+                               title="Edit this load">Edit</a>
+                            <form method="post" action="<?= e($base) ?>/loads/<?= (int) $row['frtl'] ?>/delete"
+                                  style="display:inline;margin:0;"
+                                  onsubmit="return confirm('Delete load #<?= (int) $row['frtl'] ?>? This cannot be undone.');">
+                                <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+                                <button type="submit"
+                                        style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;padding:0;font:inherit;text-decoration:underline;"
+                                        title="Delete this load">Delete</button>
+                            </form>
+                        </td>
                     </tr>
                     <?php if ($bd !== null): ?>
                         <tr style="background:#f8fafc;border-bottom:1px solid #f0f2f6;">
-                            <td colspan="7" style="padding:.6rem 1.2rem;">
+                            <td colspan="8" style="padding:.6rem 1.2rem;">
                                 <details>
                                     <summary style="cursor:pointer;color:var(--accent);font-weight:600;">
                                         Pay breakdown &mdash; <?= e((string) ($bd['trip_label'] ?? '?')) ?>

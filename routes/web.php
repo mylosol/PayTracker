@@ -55,9 +55,12 @@ return static function (Router $router): void {
     // --- Driver loads -------------------------------------------------
     // Read-only summary surface + the modern write form (one load per
     // submit; legacy multi-load cookie batch is intentionally not ported).
-    $router->get('/loads',         [LoadsController::class,     'index']);
-    $router->get('/loads/new',     [LoadEntryController::class, 'create']);
-    $router->post('/loads',        [LoadEntryController::class, 'store']);
+    $router->get('/loads',                 [LoadsController::class,     'index']);
+    $router->get('/loads/new',             [LoadEntryController::class, 'create']);
+    $router->post('/loads',                [LoadEntryController::class, 'store']);
+    $router->get('/loads/{frtl}/edit',     [LoadEntryController::class, 'edit']);
+    $router->post('/loads/{frtl}',         [LoadEntryController::class, 'update']);
+    $router->post('/loads/{frtl}/delete',  [LoadEntryController::class, 'destroy']);
 
     // --- Pay-rate admin (signed-in) -----------------------------------
     // Modern replacement for the four legacy pay-admin pages. Manages
