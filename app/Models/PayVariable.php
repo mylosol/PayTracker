@@ -25,7 +25,7 @@ use PayTracker\Database\Model;
  * defaults (zero), which is the same behaviour the legacy SQL would
  * produce when a SELECT found nothing.
  */
-final class PayVariable extends Model
+class PayVariable extends Model
 {
     protected static string $table = 'pay_variables';
 
