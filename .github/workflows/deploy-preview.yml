@@ -273,17 +273,22 @@ jobs:
           QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
         run: npx playwright test --reporter=github,list
 
-      # Always-run cleanup. The load-entry spec inserts real rows into
-      # driver_loads each pass (notes prefixed "QA TEST "). This sweep
-      # removes them so the table doesn't accumulate orphan QA artefacts.
+      # Always-run cleanup. Sweeps QA-test rows across cities (Qa Test %),
+      # account lockouts, and driver_loads (notes prefixed "QA TEST ") so
+      # the preview DB doesn't accumulate orphan artefacts across runs.
       # `if: always()` ensures we still tidy when Playwright itself failed.
+      # Running with no scope flag cleans all three; we used to pass
+      # --loads but that left stale QA test cities behind whenever an
+      # earlier deploy failed, which then made the locations.spec
+      # "valid submission" test trip the duplicate-rejected path on
+      # the next run.
       - name: Sweep QA test data from preview DB
         if: always()
         env:
           REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
         run: |
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/qa-cleanup.php --apply --loads"
+            "cd /home/robshe48/paytracker/preview && php scripts/qa-cleanup.php --apply"
 
       # Upload the HTML report on failure so we can inspect screenshots,
       # traces, and timings without re-running the suite locally.
