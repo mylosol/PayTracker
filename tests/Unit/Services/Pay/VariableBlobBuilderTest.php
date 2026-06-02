@@ -33,9 +33,9 @@ final class VariableBlobBuilderTest extends TestCase
         $this->assertSame('6-night--0', $blob);
     }
 
-    public function testHiredFourWeeksAgoMapsToBand6(): void
+    public function testHiredThreeMonthsAgoMapsToBand6(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P28D'));
+        $hire = $this->asOf->sub(new \DateInterval('P3M'));
         $blob = $this->builder->build([
             'hire_date' => $hire->format('Y-m-d'),
             'shift'     => 'day',
@@ -43,56 +43,81 @@ final class VariableBlobBuilderTest extends TestCase
         $this->assertSame('6-day--0', $blob);
     }
 
-    public function testHiredTenWeeksAgoMapsToBand12(): void
+    public function testHiredTenMonthsAgoMapsToBand12(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P70D'));
+        $hire = $this->asOf->sub(new \DateInterval('P10M'));
         $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
         $this->assertSame('12-day--0', $blob);
     }
 
-    public function testHiredTwentyWeeksAgoMapsToBand24(): void
+    public function testHiredTwentyMonthsAgoMapsToBand24(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P140D'));
+        $hire = $this->asOf->sub(new \DateInterval('P20M'));
         $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
         $this->assertSame('24-day--0', $blob);
     }
 
-    public function testHiredFiftyWeeksAgoMapsToBand60(): void
+    public function testHiredFortyMonthsAgoMapsToBand60(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P350D'));
+        $hire = $this->asOf->sub(new \DateInterval('P40M'));
         $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
         $this->assertSame('60-day--0', $blob);
     }
 
-    public function testHiredOneHundredWeeksAgoMapsToBand108(): void
+    public function testHiredEightyMonthsAgoMapsToBand108(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P700D'));
+        $hire = $this->asOf->sub(new \DateInterval('P80M'));
         $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
         $this->assertSame('108-day--0', $blob);
     }
 
-    public function testHiredOneHundredFiftyWeeksAgoMapsToBand168(): void
+    public function testHiredOneHundredFiftyMonthsAgoMapsToBand168(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P1050D'));
+        $hire = $this->asOf->sub(new \DateInterval('P150M'));
         $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
         $this->assertSame('168-day--0', $blob);
     }
 
     public function testPastTopBandStaysAt168(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P3000D'));
+        // 20 years = 240 months, past the 168 cap.
+        $hire = $this->asOf->sub(new \DateInterval('P20Y'));
         $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
         $this->assertSame('168-day--0', $blob);
     }
 
     public function testNightShiftIsPreservedInBlob(): void
     {
-        $hire = $this->asOf->sub(new \DateInterval('P28D'));
+        $hire = $this->asOf->sub(new \DateInterval('P3M'));
         $blob = $this->builder->build([
             'hire_date' => $hire->format('Y-m-d'),
             'shift'     => 'night',
         ], $this->asOf);
         $this->assertSame('6-night--0', $blob);
+    }
+
+    public function testPartialMonthStaysInLowerBand(): void
+    {
+        // Hired 5 months and 28 days before asOf — still 5 months for
+        // band purposes, lands in band 6 (since 5 <= 6).
+        $hire = $this->asOf->sub(new \DateInterval('P5M28D'));
+        $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
+        $this->assertSame('6-day--0', $blob);
+    }
+
+    public function testSixMonthBoundaryStaysInBand6(): void
+    {
+        // Exactly 6 months → band 6 (the comparison is <=, not <).
+        $hire = $this->asOf->sub(new \DateInterval('P6M'));
+        $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
+        $this->assertSame('6-day--0', $blob);
+    }
+
+    public function testSevenMonthsCrossesIntoBand12(): void
+    {
+        $hire = $this->asOf->sub(new \DateInterval('P7M'));
+        $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
+        $this->assertSame('12-day--0', $blob);
     }
 
     public function testUnknownShiftFallsBackToDay(): void

@@ -47,9 +47,10 @@ test.describe('driver profile', () => {
         await signIn(page);
         await page.goto('profile');
 
-        // 30 weeks ago → should map to the 60-week band on the preview.
+        // ~40 months ago → should map to the 60-month band on the preview
+        // (months > 24 and <= 60).
         const date = new Date();
-        date.setDate(date.getDate() - 30 * 7);
+        date.setMonth(date.getMonth() - 40);
         const isoDate = date.toISOString().slice(0, 10);
 
         await page.locator('#hire_date').fill(isoDate);

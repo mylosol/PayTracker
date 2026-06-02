@@ -13,11 +13,13 @@ namespace PayTracker\Services\Pay;
  * separated fields, slip currently always empty, the trailing flag
  * currently always "0". The interesting fields are:
  *
- *   tenure: the driver's pay band, derived from weeks-since-hire and
- *           snapped to one of the legacy bands (6, 12, 24, 60, 108,
- *           168). Drivers past 168 weeks stay in the 168 band; we
- *           don't auto-promote to 'max' because legacy treats 'max'
- *           as a manual override, not a tenure ceiling.
+ *   tenure: the driver's pay band, derived from MONTHS-since-hire
+ *           and snapped to one of the legacy bands (6, 12, 24, 60,
+ *           108, 168). The bands are MONTHS, NOT weeks — matching
+ *           the legacy `169+ M` pill on the production load card.
+ *           Drivers past 168 months stay in the 168 band; we don't
+ *           auto-promote to 'max' because legacy treats 'max' as a
+ *           manual override, not a tenure ceiling.
  *           When hire_date is missing/invalid we fall back to the
  *           JUNIOR band ('6'), not the senior ('168'). Under-paying
  *           a senior whose profile is unset is recoverable: they set
@@ -31,7 +33,7 @@ namespace PayTracker\Services\Pay;
  *
  * Why snapshot at write time, not compute at read time?
  *   Tenure changes with the calendar. If we recomputed at /dashboard
- *   render time, a driver could cross a band boundary mid-week and
+ *   render time, a driver could cross a band boundary mid-month and
  *   have last week's loads silently revalue. Snapshotting into the
  *   load's variables column on insert preserves "the tenure that
  *   was in effect when this load happened" as the historical truth.
@@ -41,7 +43,7 @@ namespace PayTracker\Services\Pay;
  */
 final class VariableBlobBuilder
 {
-    /** Tenure bands, in ascending order. >168 stays at 168. */
+    /** Tenure bands in MONTHS (matches PayCalculator). >168 stays at 168. */
     private const BANDS = [6, 12, 24, 60, 108, 168];
 
     /**
@@ -69,7 +71,11 @@ final class VariableBlobBuilder
     }
 
     /**
-     * Weeks since hire_date, snapped down to the matching band.
+     * Months since hire_date, snapped down to the matching band.
+     *
+     * Months are calendar months, not 30-day buckets — a driver hired
+     * 2026-01-15 hits "1 month" on 2026-02-15, not 30 days later.
+     * \DateTimeImmutable::diff handles the calendar arithmetic.
      *
      * Returns '6' (junior floor) when hire_date is missing or
      * unparseable — the safer-by-default choice (see class docblock).
@@ -86,15 +92,20 @@ final class VariableBlobBuilder
             return (string) self::BANDS[0];
         }
 
-        $seconds = $asOf->getTimestamp() - $hire->getTimestamp();
-        if ($seconds <= 0) {
-            // Hire date in the future is nonsensical; treat as brand-new.
+        if ($hire >= $asOf) {
+            // Hire date today or in the future → brand-new driver.
             return (string) self::BANDS[0];
         }
-        $weeks = (int) floor($seconds / 604_800); // 60 * 60 * 24 * 7
+
+        // Calendar-month diff: years*12 + months. We deliberately do NOT
+        // round up on partial months — a driver hired 5 months and 28
+        // days ago is still at 5 months, which lands in band 6 (since
+        // 5 <= 6). Crossing the month boundary moves them up.
+        $diff   = $hire->diff($asOf);
+        $months = ($diff->y * 12) + $diff->m;
 
         foreach (self::BANDS as $band) {
-            if ($weeks <= $band) {
+            if ($months <= $band) {
                 return (string) $band;
             }
         }

@@ -18,12 +18,18 @@ $bandPreview = '6 (junior fallback — set your hire date for the correct band)'
 if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
     $hire = DateTimeImmutable::createFromFormat('Y-m-d', $hireDate);
     if ($hire !== false) {
-        $weeks = max(0, (int) floor((time() - $hire->getTimestamp()) / 604800));
+        $now    = new DateTimeImmutable('now');
+        if ($hire >= $now) {
+            $months = 0;
+        } else {
+            $diff   = $hire->diff($now);
+            $months = ($diff->y * 12) + $diff->m;
+        }
         $band  = '168';
         foreach ([6, 12, 24, 60, 108, 168] as $b) {
-            if ($weeks <= $b) { $band = (string) $b; break; }
+            if ($months <= $b) { $band = (string) $b; break; }
         }
-        $bandPreview = sprintf('%d weeks → band %s', $weeks, $band);
+        $bandPreview = sprintf('%d months → band %s', $months, $band);
     }
 }
 ?>
