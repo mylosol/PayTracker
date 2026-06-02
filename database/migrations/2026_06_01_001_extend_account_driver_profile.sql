@@ -11,9 +11,10 @@
 --   Driver-entered on the profile page. We compute weeks-since-hire at
 --   load-write time to slot the driver into a tenure band (6, 12, 24,
 --   60, 108, 168 weeks; >168 stays at 168, matching the calculator's
---   existing default). NULL means "not yet set" and we fall back to the
---   legacy default behavior so accounts created before this migration
---   keep working.
+--   existing top band). NULL means "not yet set" and we fall back to
+--   the JUNIOR band (6) rather than the senior — under-paying a senior
+--   whose profile is unset is recoverable via /pay-admin/recompute,
+--   over-paying a junior is much harder to claw back, so floor is safer.
 --
 -- shift: ENUM('day','night'), default 'day'
 --   Driver-entered on the profile page. Snapshotted into the load's

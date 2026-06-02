@@ -10,8 +10,11 @@
 layout('layouts/app');
 
 // Show the driver what tenure band their hire_date currently maps to,
-// so they can sanity-check the choice before saving.
-$bandPreview = '168 (senior fallback)';
+// so they can sanity-check the choice before saving. When no date is
+// set we surface the junior-band default; see VariableBlobBuilder
+// for why that's the chosen fallback (it under-pays rather than
+// over-pays).
+$bandPreview = '6 (junior fallback — set your hire date for the correct band)';
 if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
     $hire = DateTimeImmutable::createFromFormat('Y-m-d', $hireDate);
     if ($hire !== false) {
@@ -50,7 +53,7 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
             <small class="muted">
                 Current band: <strong><?= e($bandPreview) ?></strong>.
-                Leave blank to default to the senior (168) band.
+                Leave blank and we default to the junior (6) band until you set a date.
             </small>
         </p>
 

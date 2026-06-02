@@ -104,7 +104,7 @@ final class ProfileController extends Controller
 
         $this->session->put('_flash', sprintf(
             'Profile saved. Tenure date: %s. Shift: %s. New loads will use these values for pay.',
-            $hireDate ?? 'unset (senior default)',
+            $hireDate ?? 'unset (junior-band default)',
             ucfirst($shiftRaw)
         ));
         return $this->redirect($request->basePath() . '/profile');

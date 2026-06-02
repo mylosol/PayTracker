@@ -226,9 +226,10 @@ final class LoadEntryController extends Controller
         // double-billing.
         // Build the variables blob from the driver's profile (hire_date
         // → tenure band, shift → night-bonus toggle). When hire_date is
-        // unset the builder falls back to "168-day--0", which is closer
-        // to a safe-low default than the historical hardcoded
-        // "168-night--0" (which over-paid every day-shift load).
+        // unset the builder falls back to "6-day--0" (junior floor, day
+        // shift) — the under-pay side of the line, which we prefer over
+        // the historical "168-night--0" hardcode that inflated pay for
+        // every driver regardless of tenure or shift.
         $variablesBlob = $this->blobBuilder->build($account);
 
         $payInput = new LoadInputs(

@@ -18,6 +18,13 @@ namespace PayTracker\Services\Pay;
  *           168). Drivers past 168 weeks stay in the 168 band; we
  *           don't auto-promote to 'max' because legacy treats 'max'
  *           as a manual override, not a tenure ceiling.
+ *           When hire_date is missing/invalid we fall back to the
+ *           JUNIOR band ('6'), not the senior ('168'). Under-paying
+ *           a senior whose profile is unset is recoverable: they set
+ *           the date, admin re-runs /pay-admin/recompute, and the
+ *           historical np is brought up to scale. Over-paying a
+ *           junior by defaulting to senior is much harder to claw
+ *           back, so the safer default is the floor.
  *
  *   shift:  the driver's default day/night, copied straight from
  *           account.shift.
@@ -64,18 +71,19 @@ final class VariableBlobBuilder
     /**
      * Weeks since hire_date, snapped down to the matching band.
      *
-     * Returns '168' (senior fallback) when hire_date is missing or
-     * unparseable — matching the legacy default observed in every
-     * unparseable row across the production sample.
+     * Returns '6' (junior floor) when hire_date is missing or
+     * unparseable — the safer-by-default choice (see class docblock).
+     * Drivers who set their profile after submitting loads get a
+     * /pay-admin/recompute to lift np to the correct band.
      */
     private function resolveTenure(mixed $hireDate, \DateTimeInterface $asOf): string
     {
         if (! is_string($hireDate) || $hireDate === '') {
-            return '168';
+            return (string) self::BANDS[0];
         }
         $hire = \DateTimeImmutable::createFromFormat('Y-m-d', $hireDate);
         if ($hire === false) {
-            return '168';
+            return (string) self::BANDS[0];
         }
 
         $seconds = $asOf->getTimestamp() - $hire->getTimestamp();

@@ -350,11 +350,12 @@ final class DriverLoad extends Model
         // `variables` is the per-load tenure/shift snapshot. The caller
         // builds it from the driver's profile (hire_date → tenure band,
         // shift → night flag) via VariableBlobBuilder; if not supplied
-        // we fall back to the legacy-observed default so backfill/
-        // migration paths still work.
+        // we fall back to the JUNIOR band ('6') so a caller that skips
+        // the builder under-pays rather than over-pays. Matches the
+        // builder's own fallback for the same reason.
         $variables = isset($data['variables']) && is_string($data['variables']) && $data['variables'] !== ''
             ? $data['variables']
-            : '168-day--0';
+            : '6-day--0';
         // `paid` is an 8-field pay-state vector. Fresh inserts start in the
         // "submitted, unpaid" state — first slot 1, rest 0.
         $paid = '1-0-0-0-0-0-0-0';

@@ -18,16 +18,19 @@ final class VariableBlobBuilderTest extends TestCase
         $this->asOf    = new \DateTimeImmutable('2026-06-01');
     }
 
-    public function testNullHireDateFallsBackToSeniorBandAndDayShift(): void
+    public function testNullHireDateFallsBackToJuniorBandAndDayShift(): void
     {
+        // Junior-band default is the financially safer side: under-pay
+        // is recoverable via /pay-admin/recompute once the profile is
+        // set; over-pay is not.
         $blob = $this->builder->build(['hire_date' => null], $this->asOf);
-        $this->assertSame('168-day--0', $blob);
+        $this->assertSame('6-day--0', $blob);
     }
 
-    public function testInvalidHireDateFallsBackToSeniorBand(): void
+    public function testInvalidHireDateFallsBackToJuniorBand(): void
     {
         $blob = $this->builder->build(['hire_date' => 'garbage', 'shift' => 'night'], $this->asOf);
-        $this->assertSame('168-night--0', $blob);
+        $this->assertSame('6-night--0', $blob);
     }
 
     public function testHiredFourWeeksAgoMapsToBand6(): void
@@ -94,8 +97,9 @@ final class VariableBlobBuilderTest extends TestCase
 
     public function testUnknownShiftFallsBackToDay(): void
     {
+        // No hire_date supplied → junior tenure fallback; bad shift → day.
         $blob = $this->builder->build(['shift' => 'evening'], $this->asOf);
-        $this->assertSame('168-day--0', $blob);
+        $this->assertSame('6-day--0', $blob);
     }
 
     public function testFutureHireDateTreatedAsBrandNew(): void
