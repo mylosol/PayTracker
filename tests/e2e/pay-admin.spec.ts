@@ -21,9 +21,12 @@ test.describe.serial('pay-rate admin (write path)', () => {
     test.skip(!hasCredentials(), 'QA_TEST_USER / QA_TEST_PASSWORD not configured');
 
     // Each card on /pay-admin is rendered in its own .card div. We scope
-    // our assertions to the Round-trip card so changes to other buckets
-    // don't leak into the test.
-    const ROUND_TRIP = /^round-trip$/i;
+    // our assertions to the Round-trip card. The Long-haul card never
+    // mentions "round-trip" in its body, so substring matching is safe;
+    // anchored regexes don't work here because Playwright's hasText with
+    // a RegExp tests against the card's FULL text content (including
+    // tier rows and button labels).
+    const ROUND_TRIP = /round-trip/i;
 
     test('10a — anonymous /pay-admin redirects to /login', async ({ page }) => {
         await page.context().clearCookies();
@@ -37,8 +40,8 @@ test.describe.serial('pay-rate admin (write path)', () => {
         await expect(page.getByRole('heading', { name: /pay-rate admin/i })).toBeVisible();
         await expect(page.locator('div.card', { hasText: /summary/i })).toContainText(/Total rate rows/i);
         // Both editor cards present
-        await expect(page.getByRole('heading', { name: ROUND_TRIP })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /^long-haul$/i })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^Round-trip$/ })).toBeVisible();
+        await expect(page.getByRole('heading', { name: /^Long-haul$/ })).toBeVisible();
     });
 
     test('10c — start draft from current', async ({ page }) => {
