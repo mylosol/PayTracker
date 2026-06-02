@@ -43,8 +43,11 @@ namespace PayTracker\Services\Pay;
  */
 final class VariableBlobBuilder
 {
-    /** Tenure bands in MONTHS (matches PayCalculator). >168 stays at 168. */
+    /** Tenure bands in MONTHS (matches PayCalculator). >168 → 'max'. */
     private const BANDS = [6, 12, 24, 60, 108, 168];
+
+    /** Senior-tier label used when tenure exceeds the top numbered band. */
+    private const MAX_BAND = 'max';
 
     /**
      * Build a variables blob for the given account row.
@@ -114,8 +117,9 @@ final class VariableBlobBuilder
                 return (string) $band;
             }
         }
-        // Past the top band — stay there. 'max' is reserved for the
-        // manual senior-override path which we don't model yet.
-        return (string) self::BANDS[count(self::BANDS) - 1];
+        // Past the top numbered band → 'max'. The senior tier is real:
+        // legacy variablesCurrent defines distinct max_* values (notably
+        // max_newBump = 22.75% vs 168_newBump = 17.75%).
+        return self::MAX_BAND;
     }
 }

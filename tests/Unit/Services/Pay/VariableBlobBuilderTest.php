@@ -78,12 +78,20 @@ final class VariableBlobBuilderTest extends TestCase
         $this->assertSame('168-day--0', $blob);
     }
 
-    public function testPastTopBandStaysAt168(): void
+    public function testPastTopBandPromotesToMax(): void
     {
-        // 20 years = 240 months, past the 168 cap.
+        // 20 years = 240 months, past the 168 cap → senior 'max' tier.
         $hire = $this->asOf->sub(new \DateInterval('P20Y'));
         $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
-        $this->assertSame('168-day--0', $blob);
+        $this->assertSame('max-day--0', $blob);
+    }
+
+    public function testJustOverTopBandPromotesToMax(): void
+    {
+        // 169 months — one past the 168 boundary.
+        $hire = $this->asOf->sub(new \DateInterval('P169M'));
+        $blob = $this->builder->build(['hire_date' => $hire->format('Y-m-d')], $this->asOf);
+        $this->assertSame('max-day--0', $blob);
     }
 
     public function testNightShiftIsPreservedInBlob(): void

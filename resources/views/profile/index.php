@@ -27,7 +27,7 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
             $diff   = $hire->diff($now);
             $months = ($diff->y * 12) + $diff->m;
         }
-        $band  = '168';
+        $band  = 'max';
         foreach ([6, 12, 24, 60, 108, 168] as $b) {
             if ($months <= $b) { $band = (string) $b; break; }
         }

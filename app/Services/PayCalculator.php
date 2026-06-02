@@ -326,15 +326,11 @@ final class PayCalculator
      *   tenure <= 60   → '60'
      *   tenure <= 108  → '108'
      *   tenure <= 168  → '168'
-     *   tenure  > 168  → '168' (caps at the top band; 'max' would be a
-     *                            manual senior-override path we don't
-     *                            currently model)
+     *   tenure  > 168  → 'max'  (the true senior tier — its newBump
+     *                            is 22.75% vs 168's 17.75%; identical
+     *                            mt/wk/night otherwise)
      *
-     * Anything unparseable falls back to '168' — the senior band.
-     *
-     * The legacy pay_variables table also defines a `{band}_tb` value
-     * per band, but it isn't read by any formula path; we don't surface
-     * it here.
+     * Anything unparseable falls back to '168'.
      *
      * @return array{mt:string, wk:string, newBump:string, night:string}
      */
@@ -347,6 +343,7 @@ final class PayCalculator
             ctype_digit($tenure) && (int) $tenure > 24  && (int) $tenure <= 60  => '60',
             ctype_digit($tenure) && (int) $tenure > 60  && (int) $tenure <= 108 => '108',
             ctype_digit($tenure) && (int) $tenure > 108 && (int) $tenure <= 168 => '168',
+            $tenure === 'max' || (ctype_digit($tenure) && (int) $tenure > 168)  => 'max',
             default                                                             => '168',
         };
         return [
