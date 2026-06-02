@@ -11,6 +11,8 @@ use PayTracker\Models\City;
 use PayTracker\Models\CityDistance;
 use PayTracker\Models\DriverLoad;
 use PayTracker\Models\Terminal;
+use PayTracker\Services\Pay\LoadInputs;
+use PayTracker\Services\PayCalculator;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 
@@ -61,6 +63,7 @@ final class LoadEntryController extends Controller
         private readonly CityDistance $distances,
         private readonly DriverLoad $loads,
         private readonly Terminal $terminals,
+        private readonly PayCalculator $calculator,
     ) {
     }
 
@@ -199,6 +202,38 @@ final class LoadEntryController extends Controller
         }
         $usedGoogleMaps = count($milesBefore) === 0 ? 1 : 0;
 
+        // --- compute pay -------------------------------------------------
+        // Run PayCalculator now so the dashboard's totals are accurate
+        // immediately. Loads inserted with np=0 would surface the
+        // dashboard's "ask admin to recompute" stale banner; computing
+        // here avoids that for the everyday flow. The admin recompute
+        // path (/pay-admin/recompute) still exists for the bulk
+        // "rates changed, replay history" case.
+        // Naming gotcha: $emptyMiles in this controller is actually the
+        // resolved pickup→delivery distance, not the empty-return leg
+        // (it's the value CityDistance returned). For the calculator we
+        // pass it as load_miles (the loaded leg) and set empty_miles=0
+        // because the modern form has no separate empty-return field.
+        // Drivers expecting empty pay on a one-way should pick Round-trip
+        // instead; that path uses the round-trip rate table without
+        // double-billing.
+        $payInput = new LoadInputs(
+            load_type:          $loadType,
+            load_miles:         $emptyMiles,
+            empty_miles:        0,
+            begin_empty_miles:  0,
+            is_split:           $isSplit,
+            is_weekend:         $isWeekend,
+            extra_pay:          (float) $extraRaw,
+            dem_minutes:        (int) $demRaw,
+            break_minutes:      (int) $brkRaw,
+            variables_blob:     '168-night--0',
+            out_of_route_ind:   0,
+            out_of_route_miles: 0,
+            terminal_pcola:     0,
+        );
+        $pay = $this->calculator->computeFor($payInput);
+
         // --- insert -----------------------------------------------------
         $frtl = $this->loads->insertOne([
             'driver_id'          => (int) $account['id'],
@@ -218,6 +253,8 @@ final class LoadEntryController extends Controller
             'used_google_maps'   => $usedGoogleMaps,
             'terminal_pcola'     => 0,
             'notes'              => $notes !== '' ? $notes : null,
+            'np'                 => $pay['np'],
+            'op'                 => $pay['op'],
         ]);
 
         // Clear preserved input on success.
@@ -227,12 +264,13 @@ final class LoadEntryController extends Controller
 
         $sourceNote = $usedGoogleMaps ? ' (via Google Maps, now cached)' : '';
         $this->session->put('_flash', sprintf(
-            'Added load frtl=%d: %s → %s, %d miles%s.',
+            'Added load frtl=%d: %s → %s, %d miles%s. Pay: $%s.',
             $frtl,
             $pickup,
             $delivery,
             $emptyMiles,
-            $sourceNote
+            $sourceNote,
+            number_format($pay['np'], 2)
         ));
         return $this->redirect($request->basePath() . '/loads');
     }

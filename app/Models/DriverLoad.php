@@ -368,6 +368,14 @@ final class DriverLoad extends Model
             );
         }
 
+        // np / op default to 0.00 when the caller doesn't pass them. The
+        // load-entry controller computes them via PayCalculator before
+        // calling here so the dashboard's totals reflect reality on the
+        // very first render. The admin-driven /pay-admin/recompute path
+        // exists for bulk historical recomputes after a rate change.
+        $np = number_format((float) ($data['np'] ?? 0), 2, '.', '');
+        $op = number_format((float) ($data['op'] ?? 0), 2, '.', '');
+
         $sql = 'INSERT INTO `driver_loads` (
                     driver_id, frtl, date,
                     variables, loadinfo, paid, notPaid, notes, np, op,
@@ -377,7 +385,7 @@ final class DriverLoad extends Model
                     out_of_route_ind, out_of_route_miles, terminal_pcola
                 ) VALUES (
                     ?, ?, NOW(),
-                    ?, ?, ?, 0, ?, 0.00, 0.00,
+                    ?, ?, ?, 0, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?,
@@ -386,6 +394,7 @@ final class DriverLoad extends Model
         $this->prepared($sql, [
             $data['driver_id'], $frtl,
             $variables, $loadinfo, $paid, $data['notes'] ?? null,
+            $np, $op,
             $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
             $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
             number_format($data['extra_pay'], 2, '.', ''),
