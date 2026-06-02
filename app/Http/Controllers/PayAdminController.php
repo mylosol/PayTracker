@@ -7,9 +7,13 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Models\CityDistance;
+use PayTracker\Models\DriverLoad;
 use PayTracker\Models\PayRate;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
+use PayTracker\Services\Pay\LoadInputs;
+use PayTracker\Services\PayCalculator;
 
 /**
  * PayAdminController — modern replacement for BasePayAdminSubmit.php +
@@ -49,6 +53,9 @@ final class PayAdminController extends Controller
         private readonly Csrf $csrf,
         private readonly Session $session,
         private readonly PayRate $rates,
+        private readonly PayCalculator $calculator,
+        private readonly DriverLoad $loads,
+        private readonly CityDistance $distances,
     ) {
     }
 
@@ -148,6 +155,90 @@ final class PayAdminController extends Controller
             $this->rates->promoteDraftToCurrent($terminal, $tripType);
             return sprintf('Promoted draft to current for %s (%s).', $terminal, $tripType);
         });
+    }
+
+    /**
+     * POST /pay-admin/recompute — walk driver_loads and refill np/op via
+     * PayCalculator using current rates + variables.
+     *
+     * Scope: by default, only loads from the last 30 days (sinceDate filter)
+     * to bound the runtime on the preview channel. The filter is a request
+     * param so the admin can broaden if needed.
+     *
+     * This is intentionally NOT routed through guard() because it doesn't
+     * take terminal/trip_type — the recompute is global. We still do the
+     * auth + CSRF check inline.
+     */
+    public function recompute(Request $request): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        $this->session->start();
+        if (! $this->csrf->verify($request->input('_csrf'))) {
+            return $this->failBack('Your session expired. Please try again.', $request);
+        }
+
+        $sinceRaw = (string) $request->input('since', '');
+        $since = $sinceRaw !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $sinceRaw)
+            ? $sinceRaw . ' 00:00:00'
+            : date('Y-m-d', strtotime('-30 days')) . ' 00:00:00';
+
+        $driverRaw = (string) $request->input('driver_id', '');
+        $driverFilter = ctype_digit($driverRaw) && (int) $driverRaw > 0 ? (int) $driverRaw : null;
+
+        // Closure resolves miles via city_distances and runs PayCalculator
+        // on each row. Cache mile lookups by (pickup, delivery) so a busy
+        // driver doesn't hit the matrix 50 times for the same pair.
+        $milesCache = [];
+        $resolve = function (string $from, string $to) use (&$milesCache): int {
+            $k = "{$from}|{$to}";
+            if (! array_key_exists($k, $milesCache)) {
+                $rows = $this->distances->between($from, $to);
+                $milesCache[$k] = $rows !== [] ? (int) $rows[0]['miles'] : 0;
+            }
+            return $milesCache[$k];
+        };
+
+        $compute = function (array $row) use ($resolve): array {
+            $miles = $resolve((string) $row['pickup_city'], (string) $row['delivery_city']);
+            $load  = new LoadInputs(
+                load_type:          (int) $row['load_type'],
+                load_miles:         $miles,
+                empty_miles:        (int) $row['empty_miles'],
+                begin_empty_miles:  (int) $row['begin_empty_miles'],
+                is_split:           (int) $row['is_split'],
+                is_weekend:         (int) $row['is_weekend'],
+                extra_pay:          (float) $row['extra_pay'],
+                dem_minutes:        (int) $row['dem_minutes'],
+                break_minutes:      (int) $row['break_minutes'],
+                variables_blob:     (string) ($row['variables'] ?? '168-night--0'),
+                out_of_route_ind:   (int) ($row['out_of_route_ind']   ?? 0),
+                out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
+                terminal_pcola:     (int) ($row['terminal_pcola']     ?? 0),
+            );
+            return $this->calculator->computeFor($load);
+        };
+
+        try {
+            $stats = $this->loads->recomputePay($compute, $driverFilter, $since);
+        } catch (\Throwable $e) {
+            return $this->failBack('Recompute failed: ' . $e->getMessage(), $request);
+        }
+
+        $scopeNote = $driverFilter !== null
+            ? sprintf(' driver_id=%d, since %s', $driverFilter, substr($since, 0, 10))
+            : sprintf(' since %s', substr($since, 0, 10));
+        $this->session->put('_flash', sprintf(
+            'Recompute complete (%s): considered=%d, updated=%d, unchanged=%d, skipped=%d.',
+            trim($scopeNote),
+            $stats['considered'],
+            $stats['updated'],
+            $stats['unchanged'],
+            $stats['skipped'],
+        ));
+        return $this->redirect($request->basePath() . '/pay-admin');
     }
 
     /**
