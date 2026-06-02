@@ -26,7 +26,9 @@ test.describe('driver dashboard', () => {
         // The heading includes today's date — match the static prefix only.
         await expect(page.getByRole('heading', { name: /my pay/i })).toBeVisible();
         await expect(page.getByRole('heading', { name: /this week/i })).toBeVisible();
-        await expect(page.getByRole('heading', { name: /today/i })).toBeVisible();
+        // Anchor "Today (DATE)" to the start of the heading so we don't
+        // also match the H1's "today" pill when viewing the current day.
+        await expect(page.getByRole('heading', { name: /^Today\b/ })).toBeVisible();
         await expect(page.getByRole('heading', { name: /loads/i })).toBeVisible();
 
         // Date-nav links must be present
