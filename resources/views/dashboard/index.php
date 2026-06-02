@@ -22,7 +22,6 @@
 layout('layouts/app');
 
 $npTotalF    = number_format((float) $totals['np_total'], 2);
-$opTotalF    = number_format((float) $totals['op_total'], 2);
 $milesTotalF = number_format((int)   $totals['miles_total']);
 
 $loadTypeLabel = static function (?int $t): string {
@@ -103,8 +102,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
     <table style="border-collapse:collapse;font-size:14px;">
         <tbody>
             <tr><td style="padding:.3rem .8rem;"><strong>Loads</strong></td><td style="padding:.3rem .8rem;"><code><?= (int) $totals['count'] ?></code></td></tr>
-            <tr><td style="padding:.3rem .8rem;"><strong>Net pay (np)</strong></td><td style="padding:.3rem .8rem;"><code>$<?= e($npTotalF) ?></code></td></tr>
-            <tr><td style="padding:.3rem .8rem;"><strong>Old pay (op)</strong></td><td style="padding:.3rem .8rem;"><code>$<?= e($opTotalF) ?></code></td></tr>
+            <tr><td style="padding:.3rem .8rem;"><strong>Net pay</strong></td><td style="padding:.3rem .8rem;"><code>$<?= e($npTotalF) ?></code></td></tr>
             <tr><td style="padding:.3rem .8rem;"><strong>Miles</strong></td><td style="padding:.3rem .8rem;"><code><?= e($milesTotalF) ?></code></td></tr>
         </tbody>
     </table>
@@ -145,8 +143,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                     <th style="padding:.3rem .5rem;">Time</th>
                     <th style="padding:.3rem .5rem;">Type</th>
                     <th style="padding:.3rem .5rem;">Pickup &rarr; Delivery</th>
-                    <th style="padding:.3rem .5rem;text-align:right;">NP</th>
-                    <th style="padding:.3rem .5rem;text-align:right;">OP</th>
+                    <th style="padding:.3rem .5rem;text-align:right;">Pay</th>
                     <th style="padding:.3rem .5rem;text-align:right;">&nbsp;</th>
                 </tr>
             </thead>
@@ -171,7 +168,6 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                             <?= e((string) ($row['delivery_city'] ?? '?')) ?>
                         </td>
                         <td style="padding:.25rem .5rem;text-align:right;"><code>$<?= number_format((float) $row['np'], 2) ?></code></td>
-                        <td style="padding:.25rem .5rem;text-align:right;"><code>$<?= number_format((float) $row['op'], 2) ?></code></td>
                         <td style="padding:.25rem .5rem;text-align:right;white-space:nowrap;">
                             <a href="<?= e($base) ?>/loads/<?= (int) $row['frtl'] ?>/edit"
                                style="color:var(--accent);text-decoration:none;font-size:12px;margin-right:.3rem;"
@@ -188,7 +184,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                     </tr>
                     <?php if ($bd !== null): ?>
                         <tr style="background:#f8fafc;border-bottom:1px solid #f0f2f6;">
-                            <td colspan="8" style="padding:.6rem 1.2rem;">
+                            <td colspan="7" style="padding:.6rem 1.2rem;">
                                 <details>
                                     <summary style="cursor:pointer;color:var(--accent);font-weight:600;">
                                         Pay breakdown &mdash; <?= e((string) ($bd['trip_label'] ?? '?')) ?>
