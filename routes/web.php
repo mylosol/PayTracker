@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use PayTracker\Http\Controllers\DashboardController;
 use PayTracker\Http\Controllers\DistancesController;
 use PayTracker\Http\Controllers\HealthController;
 use PayTracker\Http\Controllers\HomeController;
@@ -29,6 +30,11 @@ return static function (Router $router): void {
     $router->get('/login',  [LoginController::class, 'showForm']);
     $router->post('/login', [LoginController::class, 'submit']);
     $router->post('/logout', [LoginController::class, 'logout']);
+
+    // --- Driver dashboard (signed-in) ---------------------------------
+    // "My pay" page: the signed-in driver's loads for a date window
+    // (default = today in APP_TIMEZONE) plus the day's pay totals.
+    $router->get('/dashboard',     [DashboardController::class, 'index']);
 
     // --- Locations (signed-in) ----------------------------------------
     $router->get('/locations',     [LocationController::class, 'index']);

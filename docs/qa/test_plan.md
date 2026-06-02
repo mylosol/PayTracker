@@ -707,7 +707,61 @@ defaulted — the preview is disposable).
 
 ---
 
-## 12. Production is untouched
+## 12. Driver dashboard ("my pay")
+
+Pre-req: signed in as the QA admin account.
+
+Visit `https://paytracker.xyz/preview/dashboard`.
+
+### 12a. Anon redirect
+
+1. Open a private tab, navigate to `/preview/dashboard`.
+
+**Expected:** redirect to `/preview/login`.
+
+### 12b. Today's view renders
+
+1. Sign in, visit `/preview/dashboard`.
+
+**Expected:**
+- Heading reads **My pay — `YYYY-MM-DD`** with a `today` pill.
+- Three cards: heading + date-nav, **Totals**, **Loads**.
+- Date-nav has prev-day and next-day links and the **+ Add load** CTA.
+- If you have no loads today (likely, given the preview backfill is
+  from 2023), Loads shows "No loads on `YYYY-MM-DD`." and Totals shows
+  all zeros. This is the normal state for the QA account.
+
+### 12c. Empty-day view
+
+1. Append `?date=1999-01-01` to the URL.
+
+**Expected:** Loads card shows "No loads on 1999-01-01." Totals shows
+`Loads = 0`.
+
+### 12d. Date-nav preserves auth
+
+1. Append `?date=2023-04-10` to the URL.
+2. Click the **← 2023-04-09** link.
+
+**Expected:** URL becomes `/dashboard?date=2023-04-09`; you stay
+signed in and see the same dashboard layout.
+
+### 12e. Stale-totals warning (when applicable)
+
+If the QA account happens to have loads on the viewed date but the
+**Totals → Net pay (np)** value is `$0.00`, you should see an amber
+warning banner reading:
+
+> Heads up: there are N load(s) on this date but np total is $0.00 —
+> the stored pay columns may not have been computed yet. Ask the admin
+> to run /pay-admin → Recompute np/op scoped to this date.
+
+That banner is correct behaviour, not a bug — it's the signal that a
+PayCalculator recompute is needed.
+
+---
+
+## 13. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -726,7 +780,7 @@ defaulted — the preview is disposable).
 
 ---
 
-## 13. Security headers are present (optional — engineer-assisted)
+## 14. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

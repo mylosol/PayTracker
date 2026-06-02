@@ -121,6 +121,81 @@ final class DriverLoad extends Model
     }
 
     /**
+     * Loads for a specific driver, restricted to a date range. The window
+     * is inclusive on the start (>= since) and exclusive on the end
+     * (< until) so callers can use "midnight to midnight" without
+     * worrying about second-boundary off-by-one.
+     *
+     * Typed columns only (no blob strings) — the dashboard renders these
+     * via the typed surface; the /loads page is where the blobs live.
+     *
+     * @return list<array{
+     *   frtl:int, date:string,
+     *   load_type:?int, pickup_city:?string, delivery_city:?string,
+     *   empty_miles:?int, is_split:?int, is_weekend:?int,
+     *   extra_pay:?string, dem_minutes:?int, break_minutes:?int,
+     *   out_of_route_miles:?int, np:string, op:string,
+     * }>
+     */
+    public function forDriverInWindow(int $driverId, string $since, string $until): array
+    {
+        $sql = '
+            SELECT
+                frtl, date,
+                load_type, pickup_city, delivery_city,
+                empty_miles, is_split, is_weekend,
+                extra_pay, dem_minutes, break_minutes,
+                out_of_route_miles,
+                np, op
+            FROM ' . self::ident(self::$table) . '
+            WHERE driver_id = ?
+              AND date >= ?
+              AND date <  ?
+            ORDER BY date DESC, frtl DESC';
+        $rows = $this->prepared($sql, [$driverId, $since, $until])->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Aggregate counters for a driver across a date window. Same window
+     * semantics as forDriverInWindow().
+     *
+     * "miles" is the sum of (pickup → delivery distance + return empty +
+     * any deadhead) — a single number representing total driving on the
+     * load. Pulled from the typed columns; rows where load_type IS NULL
+     * (legacy backfill couldn't parse the blob) contribute zero.
+     *
+     * @return array{count:int, np_total:string, op_total:string, miles_total:int}
+     */
+    public function totalsForDriverInWindow(int $driverId, string $since, string $until): array
+    {
+        $sql = '
+            SELECT
+                COUNT(*)                                                AS row_count,
+                COALESCE(SUM(np), 0)                                    AS np_total,
+                COALESCE(SUM(op), 0)                                    AS op_total,
+                COALESCE(SUM(
+                    COALESCE(empty_miles, 0)
+                  + COALESCE(begin_empty_miles, 0)
+                  + COALESCE(out_of_route_miles, 0)
+                ), 0)                                                   AS miles_total
+            FROM ' . self::ident(self::$table) . '
+            WHERE driver_id = ?
+              AND date >= ?
+              AND date <  ?';
+        $row = $this->prepared($sql, [$driverId, $since, $until])->fetch();
+        if (! is_array($row)) {
+            return ['count' => 0, 'np_total' => '0.00', 'op_total' => '0.00', 'miles_total' => 0];
+        }
+        return [
+            'count'       => (int) $row['row_count'],
+            'np_total'    => (string) $row['np_total'],
+            'op_total'    => (string) $row['op_total'],
+            'miles_total' => (int) $row['miles_total'],
+        ];
+    }
+
+    /**
      * Insert a single load.
      *
      * Performs the full write transaction:
