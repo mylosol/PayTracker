@@ -74,19 +74,6 @@ $formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
                    style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
         </p>
 
-        <p>
-            <label for="end_empty_city"><strong>End Empty location</strong>
-                <span class="muted">(one-way only)</span>
-            </label><br>
-            <input list="city-options" id="end_empty_city" name="end_empty_city" type="text"
-                   value="<?= e((string) ($old['end_empty'] ?? '')) ?>"
-                   style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-            <small class="muted">
-                Where you ended after the delivery (typically the terminal you returned to).
-                Empty leg = delivery &rarr; here. Leave blank for round-trip.
-            </small>
-        </p>
-
         <datalist id="city-options">
             <?php foreach ($cities as $c): ?>
                 <option value="<?= e((string) $c['city']) ?>"></option>
@@ -104,6 +91,17 @@ $formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
                 Round-trip
             </label>
         </fieldset>
+
+        <p id="end-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
+            <label for="end_empty_city"><strong>End Empty location</strong></label><br>
+            <input list="city-options" id="end_empty_city" name="end_empty_city" type="text"
+                   value="<?= e((string) ($old['end_empty'] ?? '')) ?>"
+                   style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+            <small class="muted">
+                Where you ended after the delivery (typically the terminal you returned to).
+                Empty leg = delivery &rarr; here. Leave blank if you didn't go anywhere empty.
+            </small>
+        </p>
 
         <p>
             <label>
@@ -154,6 +152,29 @@ $formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
             &nbsp;<a href="<?= e($base) ?>/<?= $isEdit ? 'dashboard' : 'loads' ?>">Cancel</a>
         </p>
     </form>
+
+    <script>
+        // Hide End Empty when the user picks Round-trip — round-trip
+        // doesn't have an empty leg in the legacy formula and the
+        // controller silently ignores the value anyway. Showing it
+        // for round-trip just confuses the driver. We also clear
+        // the value on hide so a stale one-way value doesn't sneak
+        // back if they toggle a third time and forget.
+        (function () {
+            const wrapper = document.getElementById('end-empty-wrapper');
+            const input   = document.getElementById('end_empty_city');
+            if (!wrapper || !input) return;
+            const radios  = document.querySelectorAll('input[name="load_type"]');
+            const refresh = () => {
+                const sel = document.querySelector('input[name="load_type"]:checked');
+                const isOneWay = sel && sel.value === '0';
+                wrapper.style.display = isOneWay ? '' : 'none';
+                if (!isOneWay) input.value = '';
+            };
+            radios.forEach(r => r.addEventListener('change', refresh));
+            refresh();
+        })();
+    </script>
 
     <p class="muted" style="margin-top:1.5rem;font-size:13px;">
         Mileage is looked up in the city-distances matrix first; on a miss
