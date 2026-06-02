@@ -75,7 +75,7 @@ final class LoadEntryController extends Controller
         return $this->view('loads/new', [
             'csrfToken' => $this->csrf->token(),
             'base'      => $request->basePath(),
-            'cities'    => $this->cities->all(),
+            'cities'    => $this->cities->allForPicker(),
             'driver'    => $account,
             'flash'     => $this->popFlash(),
             'old'       => [
