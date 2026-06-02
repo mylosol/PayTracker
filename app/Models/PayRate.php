@@ -32,7 +32,7 @@ use PayTracker\Database\Model;
  * Concurrency: promote and reset operations run inside a single transaction
  * so a partial failure can't leave the live table half-replaced.
  */
-final class PayRate extends Model
+class PayRate extends Model
 {
     protected static string $table = 'pay_rates';
 

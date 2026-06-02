@@ -91,6 +91,14 @@ jobs:
       - name: Static analysis (phpstan)
         run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress --error-format=github
 
+      # Unit tests. These run BEFORE deploy so a regression in pure-PHP
+      # logic (PayCalculator, model behaviour) fails fast rather than
+      # waiting for the Playwright suite to surface it. The suite is
+      # intentionally small (PHPUnit on tests/Unit only) — DB-touching
+      # tests are covered by Playwright against the live preview.
+      - name: PHP unit tests
+        run: vendor/bin/phpunit --colors=never
+
       # Strip dev dependencies before rsync so the deployed vendor/ tree
       # doesn't carry phpstan, phpunit, and their transitive deps. We
       # already proved the build is clean above; reinstalling without dev

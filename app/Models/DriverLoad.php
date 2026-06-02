@@ -163,6 +163,82 @@ final class DriverLoad extends Model
      *
      * @throws InvalidArgumentException if driver_id does not exist in account
      */
+    /**
+     * Walk driver_loads in batches, calling $compute(row) → {np, op} on
+     * each typed row, and UPDATE-ing the np/op columns when the new values
+     * differ from the stored ones.
+     *
+     * Designed for the /pay-admin "Recompute np/op" action. The optional
+     * filters scope the recompute to a single driver and/or a date range
+     * so admins can re-run pay for one week without touching the whole
+     * history.
+     *
+     * @param callable(array<string,mixed>): array{np:float, op:float} $compute
+     * @return array{considered:int, updated:int, unchanged:int, skipped:int}
+     */
+    public function recomputePay(
+        callable $compute,
+        ?int $driverFilter = null,
+        ?string $sinceDate = null,
+    ): array {
+        $where  = ['load_type IS NOT NULL'];
+        $params = [];
+        if ($driverFilter !== null && $driverFilter > 0) {
+            $where[]  = 'driver_id = ?';
+            $params[] = $driverFilter;
+        }
+        if ($sinceDate !== null && $sinceDate !== '') {
+            $where[]  = 'date >= ?';
+            $params[] = $sinceDate;
+        }
+        $whereSql = 'WHERE ' . implode(' AND ', $where);
+
+        $sql = 'SELECT
+                    driver_id, frtl,
+                    load_type, empty_miles, pickup_city, delivery_city,
+                    is_split, is_weekend, begin_empty_miles,
+                    extra_pay, dem_minutes, break_minutes,
+                    out_of_route_ind, out_of_route_miles, terminal_pcola,
+                    variables, np, op
+                FROM `driver_loads` ' . $whereSql . '
+                ORDER BY driver_id ASC, frtl ASC';
+        $rows = $this->prepared($sql, $params)->fetchAll();
+        if (! is_array($rows)) {
+            return ['considered' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0];
+        }
+
+        $update = $this->connection->pdo()->prepare(
+            'UPDATE `driver_loads` SET np = ?, op = ? WHERE driver_id = ? AND frtl = ?'
+        );
+
+        $stats = ['considered' => 0, 'updated' => 0, 'unchanged' => 0, 'skipped' => 0];
+        foreach ($rows as $row) {
+            $stats['considered']++;
+            try {
+                $result = $compute($row);
+            } catch (Throwable) {
+                $stats['skipped']++;
+                continue;
+            }
+            $newNp = (float) $result['np'];
+            $newOp = (float) $result['op'];
+            $oldNp = (float) $row['np'];
+            $oldOp = (float) $row['op'];
+            if (abs($newNp - $oldNp) < 0.005 && abs($newOp - $oldOp) < 0.005) {
+                $stats['unchanged']++;
+                continue;
+            }
+            $update->execute([
+                number_format($newNp, 2, '.', ''),
+                number_format($newOp, 2, '.', ''),
+                (int) $row['driver_id'],
+                (int) $row['frtl'],
+            ]);
+            $stats['updated']++;
+        }
+        return $stats;
+    }
+
     public function insertOne(array $data): int
     {
         $pdo = $this->connection->pdo();

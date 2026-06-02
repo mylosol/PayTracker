@@ -84,6 +84,10 @@ jobs:
       - name: Static analysis (phpstan)
         run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress --error-format=github
 
+      # Unit tests — same rationale as the preview workflow.
+      - name: PHP unit tests
+        run: vendor/bin/phpunit --colors=never
+
       # Strip dev dependencies before rsync so the deployed vendor/ tree
       # doesn't carry phpstan, phpunit, and their transitive deps.
       - name: Re-install without dev dependencies (for deploy)

@@ -56,4 +56,5 @@ return static function (Router $router): void {
     $router->post('/pay-admin/draft/delete',   [PayAdminController::class, 'deleteDraftTier']);
     $router->post('/pay-admin/draft/promote',  [PayAdminController::class, 'promoteDraft']);
     $router->post('/pay-admin/reset',          [PayAdminController::class, 'resetCurrent']);
+    $router->post('/pay-admin/recompute',      [PayAdminController::class, 'recompute']);
 };

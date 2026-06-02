@@ -639,7 +639,75 @@ disposable).
 
 ---
 
-## 11. Production is untouched
+## 11. Pay calculator (recompute np/op)
+
+Pre-req: signed in; PR #12 (pay-calculator) deployed; `pay_variables`
+backfill has run (preview log shows `backfill complete: {"default":32,"current":32}`).
+
+Sign in, visit `/preview/pay-admin`. Scroll past the rate-editor cards
+to the **Recompute pay (np/op)** card.
+
+### 11a. Recompute respects the date filter
+
+1. Leave the **Driver id** field blank.
+2. Set **Since** to a date in the last 7 days.
+3. Click **Recompute np/op** (confirm the dialog).
+
+**Expected:**
+- Flash banner like:
+  `Recompute complete (since YYYY-MM-DD): considered=N, updated=M,
+   unchanged=K, skipped=S.`
+- `considered` should be a small number (just last week's loads).
+- `updated + unchanged + skipped == considered` (every row gets a
+  verdict).
+
+### 11b. Recompute respects the driver_id filter
+
+1. From `/preview/loads`, pick a driver_id that has loads in the recent
+   sample.
+2. On the pay-admin recompute card, set **Driver id** to that number,
+   leave **Since** blank (defaults to last 30 days).
+3. Submit.
+
+**Expected:**
+- Flash banner shows `driver_id=N, since YYYY-MM-DD` in the scope
+  description.
+- `considered` is bounded by the loads visible for that driver on
+  `/loads?driver_id=N`.
+
+### 11c. Recompute is idempotent on a stable input
+
+1. Without changing any rates or variables, run **11a** again with the
+   same Since date.
+2. Observe the new flash banner.
+
+**Expected:**
+- `updated` is **0** on the second run (the math is deterministic).
+- `unchanged` matches `considered` (all rows already had the right
+  np/op from the first run).
+
+### 11d. Editing a rate then recomputing changes np
+
+1. On the Pensacola Round-trip card, click **Start draft from current**.
+2. Pick a common-tier row (e.g. miles=100), bump the rate up by $10,
+   click **Save**, then **Promote draft → current**.
+3. Run a recompute scoped to the last 30 days.
+
+**Expected:**
+- Flash banner shows non-zero `updated` (round-trip loads in the date
+  range had their np bumped).
+- After running, click **Reset current ← default** to restore the
+  rates so subsequent QA runs see a clean baseline.
+
+### Cleanup
+
+11d leaves the Pensacola RT rates at the factory defaults after the
+reset step. Re-apply any customisations you want preserved (or leave
+defaulted — the preview is disposable).
+
+---
+
+## 12. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -658,7 +726,7 @@ disposable).
 
 ---
 
-## 12. Security headers are present (optional — engineer-assisted)
+## 13. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 
