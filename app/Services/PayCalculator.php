@@ -68,7 +68,7 @@ final class PayCalculator
     private VariableBag $vars;
 
     public function __construct(
-        private readonly PayRate $rateModel,
+        PayRate $rateModel,
         private readonly PayVariable $varModel,
     ) {
         $this->rates = new RateLookup($rateModel);
