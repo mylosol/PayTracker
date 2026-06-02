@@ -3,8 +3,9 @@
  * @var string                  $base
  * @var string                  $csrfToken
  * @var array<string,mixed>     $driver
- * @var string                  $hireDate  YYYY-MM-DD or empty
- * @var string                  $shift     'day' | 'night'
+ * @var string                  $hireDate         YYYY-MM-DD or empty
+ * @var string                  $shift            'day' | 'night'
+ * @var string                  $payWeekStartDay  'sun' | 'mon' | ... | 'sat'
  * @var string|null             $flash
  */
 layout('layouts/app');
@@ -78,6 +79,31 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
             <br>
             <small class="muted">Applied to every load you submit. If you swap shifts for a day, an admin recompute won't change history &mdash; the load's variables blob is snapshotted at write time.</small>
         </fieldset>
+
+        <p>
+            <label for="pay_week_start_day"><strong>Pay week starts on</strong></label><br>
+            <select id="pay_week_start_day" name="pay_week_start_day"
+                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+                <?php foreach ([
+                    'sun' => 'Sunday',
+                    'mon' => 'Monday',
+                    'tue' => 'Tuesday',
+                    'wed' => 'Wednesday',
+                    'thu' => 'Thursday',
+                    'fri' => 'Friday',
+                    'sat' => 'Saturday',
+                ] as $key => $label): ?>
+                    <option value="<?= e($key) ?>" <?= $payWeekStartDay === $key ? 'selected' : '' ?>>
+                        <?= e($label) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <br>
+            <small class="muted">
+                Drives the dashboard's <strong>This Week</strong> card.
+                Most US carriers use Sunday; pick whatever matches your payroll.
+            </small>
+        </p>
 
         <p>
             <button type="submit"

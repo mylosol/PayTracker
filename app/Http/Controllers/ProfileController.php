@@ -51,12 +51,13 @@ final class ProfileController extends Controller
         $this->session->start();
 
         return $this->view('profile/index', [
-            'base'      => $request->basePath(),
-            'csrfToken' => $this->csrf->token(),
-            'driver'    => $account,
-            'hireDate'  => is_string($account['hire_date'] ?? null) ? (string) $account['hire_date'] : '',
-            'shift'     => is_string($account['shift'] ?? null) ? (string) $account['shift'] : 'day',
-            'flash'     => $this->popFlash(),
+            'base'             => $request->basePath(),
+            'csrfToken'        => $this->csrf->token(),
+            'driver'           => $account,
+            'hireDate'         => is_string($account['hire_date'] ?? null) ? (string) $account['hire_date'] : '',
+            'shift'            => is_string($account['shift'] ?? null) ? (string) $account['shift'] : 'day',
+            'payWeekStartDay'  => is_string($account['pay_week_start_day'] ?? null) ? (string) $account['pay_week_start_day'] : 'sun',
+            'flash'            => $this->popFlash(),
         ]);
     }
 
@@ -71,8 +72,9 @@ final class ProfileController extends Controller
             return $this->failBack($request, 'Your session expired. Please try again.');
         }
 
-        $hireRaw  = trim((string) $request->input('hire_date', ''));
-        $shiftRaw = (string) $request->input('shift', 'day');
+        $hireRaw      = trim((string) $request->input('hire_date', ''));
+        $shiftRaw     = (string) $request->input('shift', 'day');
+        $payWeekRaw   = (string) $request->input('pay_week_start_day', 'sun');
 
         // hire_date is optional — drivers who haven't filled it in keep
         // the legacy fallback (senior band). When supplied it must be a
@@ -95,17 +97,21 @@ final class ProfileController extends Controller
         if (! in_array($shiftRaw, ['day', 'night'], true)) {
             return $this->failBack($request, 'Shift must be Day or Night.');
         }
+        if (! in_array($payWeekRaw, Account::PAY_WEEK_DAYS, true)) {
+            return $this->failBack($request, 'Pay week start day must be a valid weekday.');
+        }
 
         try {
-            $this->accounts->updateProfile((int) $account['id'], $hireDate, $shiftRaw);
+            $this->accounts->updateProfile((int) $account['id'], $hireDate, $shiftRaw, $payWeekRaw);
         } catch (\Throwable $e) {
             return $this->failBack($request, 'Could not save profile: ' . $e->getMessage());
         }
 
         $this->session->put('_flash', sprintf(
-            'Profile saved. Tenure date: %s. Shift: %s. New loads will use these values for pay.',
+            'Profile saved. Tenure date: %s. Shift: %s. Pay week starts %s.',
             $hireDate ?? 'unset (junior-band default)',
-            ucfirst($shiftRaw)
+            ucfirst($shiftRaw),
+            ucfirst($payWeekRaw)
         ));
         return $this->redirect($request->basePath() . '/profile');
     }

@@ -118,9 +118,9 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
         </tbody>
     </table>
     <p class="muted" style="margin-top:.6rem;font-size:12px;">
-        Pay week runs Sunday → Saturday. The weekly total stays anchored
-        to the week containing the viewed date — use the day-jump nav
-        above to walk through it.
+        Pay week is configured in your <a href="<?= e($base) ?>/profile">profile</a>.
+        The weekly total stays anchored to the week containing the
+        viewed date — use the day-jump nav above to walk through it.
     </p>
 </div>
 

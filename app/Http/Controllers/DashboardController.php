@@ -66,21 +66,26 @@ final class DashboardController extends Controller
         $rows   = $this->loads->forDriverInWindow($driverId, $since, $until);
         $totals = $this->loads->totalsForDriverInWindow($driverId, $since, $until);
 
-        // Pay-week boundaries containing the viewed date. Sunday → Saturday
-        // matches the US convention most carriers use for weekly settlement.
-        // We store this as the week-START datestamp so navigation jumps are
-        // intuitive. The end of the window is the NEXT Sunday at midnight
-        // (exclusive), giving us a full 7-day inclusive window.
-        $weekStartDate = date('Y-m-d', strtotime("last sunday {$dateRaw}"));
-        // strtotime("last sunday") on a Sunday returns the PREVIOUS Sunday,
-        // not the same day — so when the viewed date IS a Sunday, snap to it.
-        if (date('w', strtotime($dateRaw)) === '0') {
-            $weekStartDate = $dateRaw;
-        }
-        $weekEndDate = date('Y-m-d', strtotime($weekStartDate . ' +6 days'));
-        $weekSince   = $weekStartDate . ' 00:00:00';
-        $weekUntil   = date('Y-m-d 00:00:00', strtotime($weekStartDate . ' +7 days'));
-        $weekTotals  = $this->loads->totalsForDriverInWindow($driverId, $weekSince, $weekUntil);
+        // Pay-week boundaries containing the viewed date. The start day
+        // is the driver's preference (account.pay_week_start_day); the
+        // end is start + 6 inclusive.
+        //
+        // Algorithm: take date('w') of the viewed day (0=Sun..6=Sat),
+        // subtract the configured start-day index, mod 7. That gives
+        // the number of days to subtract to land on the most recent
+        // week-start at or before the viewed date.
+        $startKey = is_string($account['pay_week_start_day'] ?? null)
+            ? (string) $account['pay_week_start_day']
+            : 'sun';
+        $startIndex = ['sun' => 0, 'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6][$startKey] ?? 0;
+        $dow        = (int) date('w', strtotime($dateRaw));
+        $offsetDays = ($dow - $startIndex + 7) % 7;
+
+        $weekStartDate = date('Y-m-d', strtotime($dateRaw . ' -' . $offsetDays . ' days'));
+        $weekEndDate   = date('Y-m-d', strtotime($weekStartDate . ' +6 days'));
+        $weekSince     = $weekStartDate . ' 00:00:00';
+        $weekUntil     = date('Y-m-d 00:00:00', strtotime($weekStartDate . ' +7 days'));
+        $weekTotals    = $this->loads->totalsForDriverInWindow($driverId, $weekSince, $weekUntil);
 
         $this->session->start();
         $flash = $this->session->get('_flash');

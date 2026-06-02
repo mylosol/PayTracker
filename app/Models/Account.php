@@ -63,28 +63,41 @@ final class Account extends Model
         return is_array($row) ? (int) $row['n'] : 0;
     }
 
+    /** Three-letter weekday keys for pay_week_start_day, in calendar order. */
+    public const PAY_WEEK_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
     /**
-     * Update the driver-profile columns (hire_date, shift) for an account.
+     * Update the driver-profile columns for an account.
      *
-     * Both are validated by the caller (the ProfileController). hire_date
-     * is the canonical "tenure clock" — weeks-since at load-write time
-     * decides the pay band. shift is the driver's default day/night,
-     * snapshotted into each load's variables blob at insert time.
+     * Fields:
+     *   hire_date         — drives tenure band at load-write time.
+     *   shift             — 'day' or 'night'; snapshotted per load.
+     *   payWeekStartDay   — three-letter weekday key. The dashboard's
+     *                       This Week card uses this to compute the
+     *                       pay-period window.
      *
-     * @param ?string $hireDate ISO date (YYYY-MM-DD) or null to clear.
-     * @param string  $shift    'day' or 'night'.
+     * @param ?string $hireDate        ISO date (YYYY-MM-DD) or null to clear.
+     * @param string  $shift           'day' or 'night'.
+     * @param string  $payWeekStartDay one of PAY_WEEK_DAYS.
      */
-    public function updateProfile(int $accountId, ?string $hireDate, string $shift): void
-    {
+    public function updateProfile(
+        int $accountId,
+        ?string $hireDate,
+        string $shift,
+        string $payWeekStartDay,
+    ): void {
         if (! in_array($shift, ['day', 'night'], true)) {
             throw new \InvalidArgumentException('shift must be "day" or "night"');
+        }
+        if (! in_array($payWeekStartDay, self::PAY_WEEK_DAYS, true)) {
+            throw new \InvalidArgumentException('pay_week_start_day must be one of: ' . implode(', ', self::PAY_WEEK_DAYS));
         }
         if ($hireDate !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) !== 1) {
             throw new \InvalidArgumentException('hire_date must be YYYY-MM-DD or null');
         }
         $sql = 'UPDATE ' . self::ident(self::$table) . '
-                SET hire_date = ?, shift = ?
+                SET hire_date = ?, shift = ?, pay_week_start_day = ?
                 WHERE id = ?';
-        $this->prepared($sql, [$hireDate, $shift, $accountId]);
+        $this->prepared($sql, [$hireDate, $shift, $payWeekStartDay, $accountId]);
     }
 }
