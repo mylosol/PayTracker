@@ -62,4 +62,29 @@ final class Account extends Model
         $row = $this->prepared($sql)->fetch();
         return is_array($row) ? (int) $row['n'] : 0;
     }
+
+    /**
+     * Update the driver-profile columns (hire_date, shift) for an account.
+     *
+     * Both are validated by the caller (the ProfileController). hire_date
+     * is the canonical "tenure clock" — weeks-since at load-write time
+     * decides the pay band. shift is the driver's default day/night,
+     * snapshotted into each load's variables blob at insert time.
+     *
+     * @param ?string $hireDate ISO date (YYYY-MM-DD) or null to clear.
+     * @param string  $shift    'day' or 'night'.
+     */
+    public function updateProfile(int $accountId, ?string $hireDate, string $shift): void
+    {
+        if (! in_array($shift, ['day', 'night'], true)) {
+            throw new \InvalidArgumentException('shift must be "day" or "night"');
+        }
+        if ($hireDate !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) !== 1) {
+            throw new \InvalidArgumentException('hire_date must be YYYY-MM-DD or null');
+        }
+        $sql = 'UPDATE ' . self::ident(self::$table) . '
+                SET hire_date = ?, shift = ?
+                WHERE id = ?';
+        $this->prepared($sql, [$hireDate, $shift, $accountId]);
+    }
 }

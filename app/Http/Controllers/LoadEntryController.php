@@ -12,6 +12,7 @@ use PayTracker\Models\CityDistance;
 use PayTracker\Models\DriverLoad;
 use PayTracker\Models\Terminal;
 use PayTracker\Services\Pay\LoadInputs;
+use PayTracker\Services\Pay\VariableBlobBuilder;
 use PayTracker\Services\PayCalculator;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
@@ -64,6 +65,7 @@ final class LoadEntryController extends Controller
         private readonly DriverLoad $loads,
         private readonly Terminal $terminals,
         private readonly PayCalculator $calculator,
+        private readonly VariableBlobBuilder $blobBuilder,
     ) {
     }
 
@@ -222,6 +224,13 @@ final class LoadEntryController extends Controller
         // Drivers expecting empty pay on a one-way should pick Round-trip
         // instead; that path uses the round-trip rate table without
         // double-billing.
+        // Build the variables blob from the driver's profile (hire_date
+        // → tenure band, shift → night-bonus toggle). When hire_date is
+        // unset the builder falls back to "168-day--0", which is closer
+        // to a safe-low default than the historical hardcoded
+        // "168-night--0" (which over-paid every day-shift load).
+        $variablesBlob = $this->blobBuilder->build($account);
+
         $payInput = new LoadInputs(
             load_type:          $loadType,
             load_miles:         $emptyMiles,
@@ -232,7 +241,7 @@ final class LoadEntryController extends Controller
             extra_pay:          (float) $extraRaw,
             dem_minutes:        (int) $demRaw,
             break_minutes:      (int) $brkRaw,
-            variables_blob:     '168-night--0',
+            variables_blob:     $variablesBlob,
             out_of_route_ind:   0,
             out_of_route_miles: 0,
             terminal_pcola:     0,
@@ -260,6 +269,7 @@ final class LoadEntryController extends Controller
             'notes'              => $notes !== '' ? $notes : null,
             'np'                 => $pay['np'],
             'op'                 => $pay['op'],
+            'variables'          => $variablesBlob,
         ]);
 
         // Clear preserved input on success.

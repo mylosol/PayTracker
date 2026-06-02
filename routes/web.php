@@ -11,6 +11,7 @@ use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
 use PayTracker\Http\Controllers\PayAdminController;
+use PayTracker\Http\Controllers\ProfileController;
 use PayTracker\Http\Router;
 
 /*
@@ -36,6 +37,12 @@ return static function (Router $router): void {
     // (default = today in APP_TIMEZONE) plus the day's pay totals.
     $router->get('/dashboard',            [DashboardController::class, 'index']);
     $router->post('/dashboard/recompute', [DashboardController::class, 'recompute']);
+
+    // --- Driver profile (signed-in) ----------------------------------
+    // Hire date (tenure band) + default shift. Both feed PayCalculator
+    // via the variables blob snapshotted into driver_loads at insert.
+    $router->get('/profile',  [ProfileController::class, 'show']);
+    $router->post('/profile', [ProfileController::class, 'save']);
 
     // --- Locations (signed-in) ----------------------------------------
     $router->get('/locations',     [LocationController::class, 'index']);

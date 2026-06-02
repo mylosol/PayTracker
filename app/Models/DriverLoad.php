@@ -347,10 +347,14 @@ final class DriverLoad extends Model
             $data['out_of_route_ind'],
             $data['out_of_route_miles'],
         ]);
-        // `variables` is the week-context blob; on fresh inserts we use the
-        // canonical "168-night--0" form observed in 100% of live rows. A
-        // future branch that ports the weekly-settings UI can vary this.
-        $variables = '168-night--0';
+        // `variables` is the per-load tenure/shift snapshot. The caller
+        // builds it from the driver's profile (hire_date → tenure band,
+        // shift → night flag) via VariableBlobBuilder; if not supplied
+        // we fall back to the legacy-observed default so backfill/
+        // migration paths still work.
+        $variables = isset($data['variables']) && is_string($data['variables']) && $data['variables'] !== ''
+            ? $data['variables']
+            : '168-day--0';
         // `paid` is an 8-field pay-state vector. Fresh inserts start in the
         // "submitted, unpaid" state — first slot 1, rest 0.
         $paid = '1-0-0-0-0-0-0-0';

@@ -144,7 +144,8 @@ final class AuthService
             return null;
         }
         $stmt = $this->connection->pdo()->prepare(
-            'SELECT id, user, email, role, last_login_at, locked_until
+            'SELECT id, user, email, role, last_login_at, locked_until,
+                    hire_date, shift
              FROM `account` WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);
