@@ -157,7 +157,7 @@ if ($dateValue === '') {
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
         </p>
 
-        <p>
+        <p id="begin-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
             <label for="begin_empty_miles"><strong>Begin empty miles</strong></label><br>
             <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
                    value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
@@ -165,6 +165,7 @@ if ($dateValue === '') {
             <small class="muted">
                 Miles driven empty BEFORE pick-up (e.g. home &rarr; terminal).
                 Paid at the empty-miles rate. 0 if you started at the terminal.
+                Hidden on Round-trip &mdash; round-trips don't begin empty.
             </small>
         </p>
 
@@ -196,22 +197,31 @@ if ($dateValue === '') {
     </form>
 
     <script>
-        // Hide End Empty when the user picks Round-trip — round-trip
-        // doesn't have an empty leg in the legacy formula and the
-        // controller silently ignores the value anyway. Showing it
-        // for round-trip just confuses the driver. We also clear
-        // the value on hide so a stale one-way value doesn't sneak
-        // back if they toggle a third time and forget.
+        // Hide End Empty AND Begin Empty when the user picks Round-trip
+        // — round-trip doesn't have separate empty legs in the legacy
+        // formula (the return leg is implicit in the round-trip rate
+        // table) and the controller silently drops both values for
+        // round-trip. Showing them just confuses the driver. We also
+        // clear the values on hide so a stale one-way value doesn't
+        // sneak back if they toggle a third time and forget.
         (function () {
-            const wrapper = document.getElementById('end-empty-wrapper');
-            const input   = document.getElementById('end_empty_city');
-            if (!wrapper || !input) return;
-            const radios  = document.querySelectorAll('input[name="load_type"]');
+            const pairs = [
+                { wrapper: 'end-empty-wrapper',   input: 'end_empty_city',    blank: '' },
+                { wrapper: 'begin-empty-wrapper', input: 'begin_empty_miles', blank: '0' },
+            ].map(p => ({
+                wrapper: document.getElementById(p.wrapper),
+                input:   document.getElementById(p.input),
+                blank:   p.blank,
+            })).filter(p => p.wrapper && p.input);
+            if (pairs.length === 0) return;
+            const radios = document.querySelectorAll('input[name="load_type"]');
             const refresh = () => {
                 const sel = document.querySelector('input[name="load_type"]:checked');
                 const isOneWay = sel && sel.value === '0';
-                wrapper.style.display = isOneWay ? '' : 'none';
-                if (!isOneWay) input.value = '';
+                pairs.forEach(p => {
+                    p.wrapper.style.display = isOneWay ? '' : 'none';
+                    if (!isOneWay) p.input.value = p.blank;
+                });
             };
             radios.forEach(r => r.addEventListener('change', refresh));
             refresh();

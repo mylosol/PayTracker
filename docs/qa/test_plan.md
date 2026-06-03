@@ -515,9 +515,10 @@ spec exercises.
 - **End Empty location** is a free-text city input that is visible
   ONLY when "Loaded one-way" is selected. Switching to Round-trip
   hides it and clears any typed value.
-- **Begin empty miles** is a plain number input (0–9999). Miles
-  driven empty BEFORE pick-up (e.g. home → terminal). Paid at the
-  empty-miles rate. 0 if you started at the terminal.
+- **Begin empty miles** is a plain number input (0–9999), also visible
+  ONLY when "Loaded one-way" is selected. Round-trip loads don't have
+  a separate empty pre-leg in the legacy formula, so toggling to
+  Round-trip hides this field and resets the value to 0.
 - **Out-of-route miles** is a plain number input (0–9999). Used
   only when the actual detoured distance exceeds the map distance
   by more than 3 miles — otherwise the map distance pays.
@@ -570,19 +571,23 @@ The form preserves your typed inputs so you can correct the FRTL.
    the `Pay: $X.XX` is the np value PayCalculator returned at insert time).
 - The "Recent loads" table on `/loads` now shows the new row.
 
-### 9g. End Empty location is one-way-only
+### 9g. End Empty + Begin Empty are one-way-only
 
 1. From `/loads/new`, with **Load type = Loaded one-way** selected,
-   fill in End Empty location = `DeFuniak Springs, FL`. Take note
-   of the visible state.
+   fill in End Empty location = `DeFuniak Springs, FL` and Begin
+   empty miles = `25`. Take note of the visible state.
 2. Click the **Round-trip** radio.
 
 **Expected:**
-- The End Empty input row hides immediately.
-- The previously-typed value is cleared (visible again if you flip
-  back to Loaded one-way — empty box).
-- Submitting a Round-trip load with End Empty filled in silently
-  drops the value (the controller treats End Empty as one-way-only).
+- Both the End Empty input row AND the Begin empty miles row hide
+  immediately.
+- The previously-typed End Empty value is cleared; Begin empty miles
+  is reset to `0` (both visible again if you flip back to Loaded
+  one-way — empty / zero).
+- Submitting a Round-trip load with either value filled in silently
+  drops them (the controller treats both as one-way-only — round-trip
+  loads don't have a separate empty pre- or post-leg in the legacy
+  formula).
 
 ### 9h. Back-dating a load
 

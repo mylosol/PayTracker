@@ -229,6 +229,15 @@ final class LoadEntryController extends Controller
         }
         $beginEmptyMiles = (int) $beginEmptyRaw;
         $outOfRouteMiles = (int) $outOfRouteRaw;
+        // Round-trip loads don't have a separate empty pre-leg in the
+        // legacy formula — the return is implicit in the round-trip
+        // rate. Silently drop a stray begin-empty value so a driver
+        // who toggled between types after typing doesn't accidentally
+        // get paid for an empty leg the formula doesn't expect.
+        // (Mirrors the same one-way-only guard on End Empty.)
+        if ((isset($loadType) ? $loadType : (int) $typeRaw) !== 0) {
+            $beginEmptyMiles = 0;
+        }
         // Legacy `out_of_route_ind` is a boolean flag the calculator
         // checks before applying the rewrite. Deriving it from
         // miles>0 keeps the form to one input — the driver doesn't
@@ -523,6 +532,15 @@ final class LoadEntryController extends Controller
         }
         $beginEmptyMiles = (int) $beginEmptyRaw;
         $outOfRouteMiles = (int) $outOfRouteRaw;
+        // Round-trip loads don't have a separate empty pre-leg in the
+        // legacy formula — the return is implicit in the round-trip
+        // rate. Silently drop a stray begin-empty value so a driver
+        // who toggled between types after typing doesn't accidentally
+        // get paid for an empty leg the formula doesn't expect.
+        // (Mirrors the same one-way-only guard on End Empty.)
+        if ((isset($loadType) ? $loadType : (int) $typeRaw) !== 0) {
+            $beginEmptyMiles = 0;
+        }
         $outOfRouteInd   = $outOfRouteMiles > 0 ? 1 : 0;
 
         $loadType  = (int) $typeRaw;
