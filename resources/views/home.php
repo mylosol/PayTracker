@@ -88,22 +88,24 @@ $authenticated = is_array($account);
     </div>
 <?php endif; ?>
 
-<div class="card">
-    <h2>Help &amp; info</h2>
-    <ul>
-        <li><a href="<?= e($base) ?>/tutorial">Tutorial</a> &mdash;
-            walkthrough of profile setup, adding loads, and reading
-            the dashboard.</li>
-        <li><a href="<?= e($base) ?>/faq">FAQ</a> &mdash; the
-            short version of "how does pay actually work?" plus the
-            common driver questions.</li>
-        <li><a href="<?= e($base) ?>/about">About</a> &mdash; what
-            this rebuild is and how it differs from the legacy site.</li>
-        <li><a href="<?= e($base) ?>/contact">Contact</a> &mdash;
-            email for bug reports, feature requests, and access
-            seeding.</li>
-    </ul>
-</div>
+<?php if ($authenticated): ?>
+    <div class="card">
+        <h2>Help &amp; info</h2>
+        <ul>
+            <li><a href="<?= e($base) ?>/tutorial">Tutorial</a> &mdash;
+                walkthrough of profile setup, adding loads, and reading
+                the dashboard.</li>
+            <li><a href="<?= e($base) ?>/faq">FAQ</a> &mdash; the
+                short version of "how does pay actually work?" plus the
+                common driver questions.</li>
+            <li><a href="<?= e($base) ?>/about">About</a> &mdash; what
+                this rebuild is and how it differs from the legacy site.</li>
+            <li><a href="<?= e($base) ?>/contact">Contact</a> &mdash;
+                email for bug reports, feature requests, and access
+                seeding.</li>
+        </ul>
+    </div>
+<?php endif; ?>
 
 <div class="card">
     <h2>Where to go next</h2>

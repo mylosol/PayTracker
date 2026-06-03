@@ -1000,13 +1000,24 @@ legacy until parity is complete.
 - Heading "Contact" with a `mailto:` link.
 - A "Requesting access" section explains how new accounts are seeded.
 
-### 14e. Help nav appears on the home page
+### 14e. Help nav is hidden on the anonymous home page
 
-1. Visit `/preview/`.
+1. Open a private tab, visit `/preview/`.
 
 **Expected:**
-- A new "Help & info" card lists the four static pages with
-  one-line summaries.
+- The anonymous landing shows the marketing card and Sign-In CTA
+  only. The "Help & info" card is NOT shown.
+- The four static pages remain reachable by direct URL
+  (`/preview/tutorial`, `/preview/faq`, `/preview/about`,
+  `/preview/contact`) — covered in 14a–14d.
+
+### 14f. Help nav appears on the signed-in home page
+
+1. Sign in, visit `/preview/`.
+
+**Expected:**
+- A "Help & info" card lists the four static pages with one-line
+  summaries.
 - Clicking each link navigates to the matching page.
 
 ---

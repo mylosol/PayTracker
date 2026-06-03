@@ -1,14 +1,18 @@
 import { test, expect } from '@playwright/test';
+import { hasCredentials, signIn } from './helpers/auth';
 
 /**
  * Mirrors Section 14 of docs/qa/test_plan.md — the four public,
  * no-auth, no-DB housekeeping pages: /tutorial, /faq, /about,
  * /contact.
  *
- * These intentionally run WITHOUT signing in; the pages must work
- * for prospective drivers who don't have an account yet (the
- * /contact page in particular is how they request one). The home
- * page's Help nav linking each of them is also covered here.
+ * Pages 14a–14d intentionally run WITHOUT signing in; the pages
+ * must work for prospective drivers who don't have an account
+ * yet (the /contact page in particular is how they request one).
+ *
+ * 14e covers the home page's Help nav — gated behind the auth
+ * card so anonymous visitors see a clean Sign-In page. Skipped
+ * when QA credentials aren't configured.
  */
 test.describe('static housekeeping pages', () => {
     test('14a — /tutorial renders anonymously', async ({ page }) => {
@@ -47,8 +51,18 @@ test.describe('static housekeeping pages', () => {
         await expect(page.locator('a[href^="mailto:"]')).toHaveCount(1);
     });
 
-    test('14e — home page Help nav links to all four', async ({ page }) => {
+    test('14e — Help nav is hidden on the anonymous home page', async ({ page }) => {
         await page.context().clearCookies();
+        await page.goto('');
+        // Anon home is intentionally minimal — Sign-In CTA only, no
+        // Help nav. Prospective drivers can still reach the four
+        // static pages by direct URL (covered in 14a–14d).
+        await expect(page.getByRole('heading', { name: /help & info/i })).toHaveCount(0);
+    });
+
+    test('14f — signed-in home page surfaces the Help nav', async ({ page }) => {
+        test.skip(!hasCredentials(), 'QA_TEST_USER / QA_TEST_PASSWORD not configured');
+        await signIn(page);
         await page.goto('');
         await expect(page.getByRole('heading', { name: /help & info/i })).toBeVisible();
         // The nav links should exist by accessible name. Use the link role
