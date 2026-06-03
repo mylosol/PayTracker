@@ -497,23 +497,39 @@ spec exercises.
 
 **Expected:**
 - Heading "Add a load".
-- **FRTL #** is a required numeric field — the driver types in their
-  dispatch number from paperwork. It is NOT auto-generated.
+- **FRTL #** is optional — leave blank to auto-assign MAX+1 for this
+  driver, or type the dispatch number from your paperwork. When
+  supplied it must be a positive integer not already on file for
+  this driver.
+- **Load date** is a `<input type="date">` defaulting to **today**,
+  with `max=today` (can't enter future dates). Set it to the actual
+  delivery date if you're entering paperwork after the fact — the
+  dashboard groups by this date, not entry time.
 - **Pick-up terminal** renders as a dropdown restricted to the
   dispatch terminals (`terminal` ∪ `pcola_terminal`) — e.g. Panama
   City FL, Niceville FL, Freeport FL, Pelham GA, Pensacola FL,
   Montgomery AL, Birmingham AL, DeFuniak Springs FL, Bainbridge GA.
 - **Delivery city** is a free-text input backed by the full city
   autocompletion datalist.
+- **Load type** radios default to "Loaded one-way".
+- **End Empty location** is a free-text city input that is visible
+  ONLY when "Loaded one-way" is selected. Switching to Round-trip
+  hides it and clears any typed value.
+- **Begin empty miles** is a plain number input (0–9999). Miles
+  driven empty BEFORE pick-up (e.g. home → terminal). Paid at the
+  empty-miles rate. 0 if you started at the terminal.
+- **Out-of-route miles** is a plain number input (0–9999). Used
+  only when the actual detoured distance exceeds the map distance
+  by more than 3 miles — otherwise the map distance pays.
 - A hidden `_csrf` input is present (inspect the form HTML).
-- Load-type radios default to "Loaded one-way".
 
 ### 9c. Empty submission rejected
-1. From `/loads/new`, leave FRTL blank and click **Add load**.
+1. From `/loads/new`, clear pickup terminal and click **Add load**
+   (use the browser's "Inspect → form noValidate" trick if the
+   native validators block the submit).
 
-**Expected:** flash banner "FRTL must be a positive number from your
-dispatch paperwork." (FRTL is the first field validated, so a fully
-empty form trips this check first.)
+**Expected:** flash banner "Pick-up and delivery cities are required."
+FRTL is optional, so a missing FRTL no longer trips the first check.
 
 ### 9d. Same pickup and delivery rejected
 1. FRTL = a fresh 9-digit number (e.g. `999100001`).
@@ -540,6 +556,7 @@ The form preserves your typed inputs so you can correct the FRTL.
 
 ### 9f. Valid submission inserts and shows the FRTL you typed
 1. FRTL = a fresh number (e.g. `999100099`).
+2. Leave **Load date** at today's date.
 2. Select Pick-up = `Panama City, FL`, type Delivery = `Lynn Haven, FL`.
 2. Notes: `QA TEST manual walk` (the `QA TEST ` prefix is what lets
    `scripts/qa-cleanup.php --loads` sweep it later).
@@ -547,10 +564,59 @@ The form preserves your typed inputs so you can correct the FRTL.
 
 **Expected:**
 - Redirect to `/preview/loads`.
-- Flash banner: `Added load frtl=NNN: Panama City, FL → Lynn Haven, FL, NN miles.`
+- Flash banner: `Added load frtl=NNN: Panama City, FL → Lynn Haven, FL, NN miles. Pay: $X.XX.`
   (the trailing `(via Google Maps, now cached)` only appears the first
-   time a pair is resolved that wasn't already in `city_distances`).
+   time a pair is resolved that wasn't already in `city_distances`;
+   the `Pay: $X.XX` is the np value PayCalculator returned at insert time).
 - The "Recent loads" table on `/loads` now shows the new row.
+
+### 9g. End Empty location is one-way-only
+
+1. From `/loads/new`, with **Load type = Loaded one-way** selected,
+   fill in End Empty location = `DeFuniak Springs, FL`. Take note
+   of the visible state.
+2. Click the **Round-trip** radio.
+
+**Expected:**
+- The End Empty input row hides immediately.
+- The previously-typed value is cleared (visible again if you flip
+  back to Loaded one-way — empty box).
+- Submitting a Round-trip load with End Empty filled in silently
+  drops the value (the controller treats End Empty as one-way-only).
+
+### 9h. Back-dating a load
+
+1. FRTL = fresh number. Pick-up + delivery as in 9f.
+2. Set **Load date** to two days ago.
+3. Notes: `QA TEST back-dated walk`. Submit.
+
+**Expected:**
+- Insert succeeds with the chosen date stored in `driver_loads.date`
+  (verify on `/dashboard?date=YYYY-MM-DD` for that day — the load
+  appears there, NOT on today's dashboard).
+
+### 9i. Begin-empty + out-of-route miles flow into pay
+
+1. FRTL = fresh number. Pick-up = `Panama City, FL`, Delivery =
+   `Lynn Haven, FL` (a short loaded leg).
+2. **Begin empty miles** = `25`.
+3. **Out-of-route miles** = blank (or 0).
+4. Notes: `QA TEST begin-empty walk`. Submit.
+5. Note the `Pay: $X.XX` value in the flash banner.
+6. Repeat with begin empty miles = `0` for the same lane.
+
+**Expected:**
+- The first insert's np is higher than the second by approximately
+  `25 × $0.4962` (the current empty rate). The exact difference
+  depends on tenure band; what matters is that the value moves.
+
+### 9j. Future-dated load rejected
+
+1. From `/loads/new`, set **Load date** to tomorrow.
+
+**Expected:** the native date picker enforces `max=today` and won't
+let you advance. If you bypass it via dev-tools, submitting trips
+the server-side check: flash banner "Load date cannot be in the future."
 
 ### Cleanup
 
@@ -746,18 +812,27 @@ Visit `https://paytracker.xyz/preview/dashboard`.
 
 **Expected:**
 - Heading reads **My pay — `YYYY-MM-DD`** with a `today` pill.
-- Three cards: heading + date-nav, **Totals**, **Loads**.
+- Four cards in order: heading + date-nav, **This Week** totals,
+  **Today (`YYYY-MM-DD`)** totals, **Loads**.
+- The **This Week** card shows the pay-week window (e.g.
+  `Sun 2026-05-31 → Sat 2026-06-06` for the default Sunday start) with
+  summed Net Pay, total miles, and load count.
+- The **Today** card shows the single-day totals for the viewed date.
+- Totals cards show **Net Pay**; the per-load breakdown shows
+  **Load Pay** + **Extras**. The legacy "OP" / "Old Pay" metric is
+  NOT displayed — it was always zero in modern data.
 - Date-nav has prev-day and next-day links and the **+ Add load** CTA.
 - If you have no loads today (likely, given the preview backfill is
-  from 2023), Loads shows "No loads on `YYYY-MM-DD`." and Totals shows
-  all zeros. This is the normal state for the QA account.
+  from 2023), Loads shows "No loads on `YYYY-MM-DD`." and both totals
+  cards show zeros. This is the normal state for the QA account.
 
 ### 12c. Empty-day view
 
 1. Append `?date=1999-01-01` to the URL.
 
-**Expected:** Loads card shows "No loads on 1999-01-01." Totals shows
-`Loads = 0`.
+**Expected:** Loads card shows "No loads on 1999-01-01." The Today
+totals card shows `Loads = 0`. The This Week card reflects the week
+containing 1999-01-01 (also zero given the preview backfill range).
 
 ### 12d. Date-nav preserves auth
 
@@ -770,19 +845,112 @@ signed in and see the same dashboard layout.
 ### 12e. Stale-totals warning (when applicable)
 
 If the QA account happens to have loads on the viewed date but the
-**Totals → Net pay (np)** value is `$0.00`, you should see an amber
-warning banner reading:
+**Today → Net Pay** value is `$0.00`, you should see an amber warning
+banner reading:
 
 > Heads up: there are N load(s) on this date but np total is $0.00 —
 > the stored pay columns may not have been computed yet. Ask the admin
-> to run /pay-admin → Recompute np/op scoped to this date.
+> to run /pay-admin → Recompute pay scoped to this date.
 
 That banner is correct behaviour, not a bug — it's the signal that a
 PayCalculator recompute is needed.
 
+### 12f. Pay-week window honors profile setting
+
+1. Note the current pay-week window shown in the **This Week** card
+   (e.g. `Sun 2026-05-31 → Sat 2026-06-06` for the default Sunday start).
+2. Visit `/preview/profile`, change **Pay week starts on** to
+   **Monday**, save.
+3. Return to `/preview/dashboard`.
+
+**Expected:**
+- The This Week card now shows a Monday → Sunday window covering the
+  current date.
+- The summed totals shift to reflect the new window's loads.
+- Setting it back to Sunday restores the original window.
+
+### 12g. Self-serve "Refresh my pay"
+
+1. From `/preview/dashboard`, click the **Refresh my pay** button.
+
+**Expected:**
+- Flash banner like
+  `Refreshed pay (since YYYY-MM-DD): N load(s) considered, M updated, K already up-to-date.`
+- Spam-clicking is harmless — the recomputer short-circuits rows whose
+  computed values already match storage, so the second click shows
+  `updated=0`.
+
 ---
 
-## 13. Production is untouched
+## 13. Driver profile (hire date, shift, pay-week start day)
+
+Pre-req: signed in.
+
+The profile page drives PayCalculator's tenure-band selection
+(`hire_date` → months-since-hire → band) and the night-bonus flag
+(`shift`), and configures the dashboard's pay-week window
+(`pay_week_start_day`). Until this surface existed, every new load
+used a hardcoded `168-night--0` blob that inflated pay for junior /
+day-shift drivers.
+
+Visit `https://paytracker.xyz/preview/profile`.
+
+### 13a. Anon redirect
+
+1. Open a private tab, navigate to `/preview/profile`.
+
+**Expected:** redirect to `/preview/login`.
+
+### 13b. Form renders
+
+1. Sign in, visit `/preview/profile`.
+
+**Expected:**
+- Heading "Profile" with the signed-in user + driver id.
+- **Hire date** is an optional `<input type="date">` with `max=today`.
+- Below the input is a "Current band: …" preview that maps the
+  selected hire date to a tenure band (`6 / 12 / 24 / 60 / 108 / 168 / max`).
+- **Default shift** is a Day / Night radio pair.
+- **Pay week starts on** is a `<select>` of Sunday through Saturday.
+- A hidden `_csrf` input is present.
+
+### 13c. Invalid hire date is rejected
+
+1. Open the dev tools, set the date input's `type` to `text`, type
+   `not-a-date`, then submit (set `form.noValidate = true` first).
+
+**Expected:** flash banner "Hire date must be in YYYY-MM-DD format."
+
+### 13d. Future hire date is rejected
+
+1. Bypass the native `max=today` via dev-tools, set hire date to
+   tomorrow, submit.
+
+**Expected:** flash banner "Hire date cannot be in the future."
+
+### 13e. Saving persists across reload
+
+1. Set hire date to ~40 months ago, shift to **Day**, pay-week to
+   **Monday**. Click **Save profile**.
+2. Reload the page.
+
+**Expected:**
+- Flash banner: `Profile saved. Tenure date: YYYY-MM-DD. Shift: Day. Pay week starts Mon.`
+- After reload, all three fields retain the saved values.
+- The "Current band" preview shows `40 months → band 60`.
+
+### 13f. Persistence across preview deploys
+
+The Playwright `profile.spec.ts` 13e/p4 test now saves and restores the
+QA user's hire date, shift, and pay-week selection in a `try/finally`.
+That means **deploying a new preview build does NOT reset your profile**.
+
+To verify: after a preview redeploy, sign in and confirm your saved
+hire date, shift, and pay-week start day are still in place.
+
+---
+
+## 14. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -801,7 +969,7 @@ PayCalculator recompute is needed.
 
 ---
 
-## 14. Security headers are present (optional — engineer-assisted)
+## 15. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 
