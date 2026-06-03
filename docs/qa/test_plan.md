@@ -955,7 +955,63 @@ hire date, shift, and pay-week start day are still in place.
 
 ---
 
-## 14. Production is untouched
+## 14. Static housekeeping pages (tutorial, FAQ, about, contact)
+
+These are public-facing read-only pages. No database access, no auth
+requirement &mdash; a brand-new driver who hasn't been seeded an
+account can read the tutorial and contact info before they sign in.
+
+### 14a. Tutorial renders for anonymous and signed-in users
+
+1. Open a private tab, visit `/preview/tutorial`.
+
+**Expected:**
+- Heading "Tutorial" with sections for profile setup, adding a
+  load, reviewing pay, and editing.
+- An embedded YouTube video plays in a responsive iframe.
+- A "Back home" link returns to `/preview/`.
+
+2. Sign in as the QA account and visit the same URL.
+
+**Expected:** identical page renders (no auth gate, no redirect).
+
+### 14b. FAQ renders
+
+1. Visit `/preview/faq`.
+
+**Expected:** Heading "Frequently asked questions" with seven Q&A
+blocks covering pay math, the OP removal, hire-date snapshotting,
+back-dating, Begin/End Empty, out-of-route miles, pay-week config,
+and how to get an account.
+
+### 14c. About renders
+
+1. Visit `/preview/about`.
+
+**Expected:** Heading "About PayTracker" with a status note that the
+modern build runs on the preview channel and production still runs
+legacy until parity is complete.
+
+### 14d. Contact renders
+
+1. Visit `/preview/contact`.
+
+**Expected:**
+- Heading "Contact" with a `mailto:` link.
+- A "Requesting access" section explains how new accounts are seeded.
+
+### 14e. Help nav appears on the home page
+
+1. Visit `/preview/`.
+
+**Expected:**
+- A new "Help & info" card lists the four static pages with
+  one-line summaries.
+- Clicking each link navigates to the matching page.
+
+---
+
+## 15. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -974,7 +1030,7 @@ hire date, shift, and pay-week start day are still in place.
 
 ---
 
-## 15. Security headers are present (optional — engineer-assisted)
+## 16. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

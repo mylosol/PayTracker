@@ -12,6 +12,7 @@ use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
 use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Controllers\ProfileController;
+use PayTracker\Http\Controllers\StaticPagesController;
 use PayTracker\Http\Router;
 
 /*
@@ -26,6 +27,15 @@ return static function (Router $router): void {
     $router->get('/',            [HomeController::class,   'index']);
     $router->get('/health',      [HealthController::class, 'index']);
     $router->get('/health.json', [HealthController::class, 'jsonResponse']);
+
+    // --- Static housekeeping pages (public, no DB) --------------------
+    // These exist outside the auth boundary so a brand-new driver can
+    // read the tutorial / FAQ and find contact details before they
+    // have an account. None of them touch the database.
+    $router->get('/tutorial', [StaticPagesController::class, 'tutorial']);
+    $router->get('/faq',      [StaticPagesController::class, 'faq']);
+    $router->get('/about',    [StaticPagesController::class, 'about']);
+    $router->get('/contact',  [StaticPagesController::class, 'contact']);
 
     // --- Authentication ------------------------------------------------
     $router->get('/login',  [LoginController::class, 'showForm']);
