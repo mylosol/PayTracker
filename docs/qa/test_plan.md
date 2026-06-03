@@ -1078,7 +1078,120 @@ The negative case (User → 403) is exercised by the unit tests in
 
 ---
 
-## 16. Production is untouched
+## 16. Admin Panel — user management
+
+The `/admin` surface lets Admin and Super Admin accounts manage
+the user list: see who's signed in recently, ban / unban, hard
+delete, and generate a single-use password reset link.
+
+Role assignment is intentionally NOT here — that's Super Admin
+only and ships in a follow-up branch.
+
+Email delivery of the reset link is also a follow-up (Resend
+integration). For now the reset URL is shown in a flash banner
+on `/admin` so the admin can copy/paste it to the user.
+
+Pre-req: signed in as the QA Super Admin account.
+
+### 16a. Anon redirect, base User → 403
+
+1. Open a private tab, visit `/preview/admin`.
+
+**Expected:** redirect to `/preview/login`.
+
+2. (Manual / future) Sign in as a base User account, visit
+   `/preview/admin`.
+
+**Expected:** the 403 "Access denied" page from section 15.
+
+### 16b. User table renders
+
+1. Sign in, visit `/preview/admin`.
+
+**Expected:**
+- Heading **Admin Panel** with a role pill showing your role.
+- A "User accounts" card listing every account with columns:
+  ID, User, Email, Role, Last login, Status, Actions.
+- Your own row carries a small **you** badge next to the user
+  name AND shows "No self-actions" in the Actions column —
+  the server-side guard against banning / deleting yourself
+  is mirrored in the UI.
+- Other rows show a **Reset PW**, **Ban**, and **Delete** button.
+
+### 16c. Reset link is generated
+
+1. Find a non-self test account. Click **Reset PW**.
+
+**Expected:**
+- A green flash banner appears at the top of `/admin` containing:
+  `Reset link for <user> (expires YYYY-MM-DD HH:MM:SS UTC): https://paytracker.xyz/preview/password-reset/<64-hex-chars>`
+- The URL is copyable.
+
+### 16d. Reset link is single-use and time-bound
+
+1. Copy the URL from 16c. Open a private tab, paste it.
+
+**Expected:** a "Set a new password" form with two password
+fields (minimum 12 characters).
+
+2. Pick a password, submit.
+
+**Expected:** "Password updated" confirmation page; a **Sign in**
+button returns to `/login`.
+
+3. Reload the URL from step 1.
+
+**Expected:** "Reset link no longer valid" page with a `410` pill
+— the token was consumed.
+
+### 16e. Ban prevents login
+
+1. From `/admin`, click **Ban** on a non-self test account. Confirm
+   the browser dialog.
+
+**Expected:** flash banner "Banned `<user>` (id `N`)."
+
+2. Open a private tab. Try to sign in as the banned account.
+
+**Expected:**
+- Login fails with the same generic "wrong credentials" message
+  as a real bad password (the ban is deliberately not revealed).
+
+3. Return to `/admin`, click **Unban**.
+
+**Expected:** flash banner "Lifted ban on `<user>` (id `N`)."
+
+4. Retry the login from step 2.
+
+**Expected:** sign-in succeeds.
+
+### 16f. Delete is final
+
+1. From `/admin`, click **Delete** on a non-self test account.
+   Confirm the browser dialog.
+
+**Expected:**
+- Flash banner "Deleted `<user>` (id `N`)."
+- The row no longer appears in the table.
+- The deleted account can no longer sign in (login still
+  shows the generic "wrong credentials" message — we do not
+  reveal "no such account").
+
+### 16g. Self-target protection
+
+1. From `/admin`, copy a button URL for one of YOUR OWN row's
+   would-be actions (use dev tools — your row doesn't actually
+   show buttons). Build a POST against
+   `/admin/users/<your-id>/ban`.
+
+**Expected:** server-side refusal with flash:
+`Cannot ban your own account from the admin panel.`
+
+Repeated for `/delete` and `/reset-password` — same opaque refusal.
+
+---
+
+## 17. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -1097,7 +1210,7 @@ The negative case (User → 403) is exercised by the unit tests in
 
 ---
 
-## 17. Security headers are present (optional — engineer-assisted)
+## 18. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

@@ -1,0 +1,140 @@
+<?php
+/**
+ * @var string                     $base
+ * @var string                     $csrfToken
+ * @var array<string,mixed>        $actor
+ * @var list<array<string,mixed>>  $users
+ * @var ?string                    $flash
+ * @var bool                       $isSuperAdmin
+ */
+layout('layouts/app');
+
+// Convenience: format a nullable UTC datetime for display. We
+// don't localise — admins reading this surface generally want
+// UTC for consistency with audit logs and server times.
+$fmt = static function ($value): string {
+    if (! is_string($value) || $value === '') {
+        return '—';
+    }
+    return $value . ' UTC';
+};
+?>
+<div class="card">
+    <h1>Admin Panel <span class="pill ok"><?= e((string) $actor['role']) ?></span></h1>
+    <p class="muted">
+        Signed in as <strong><?= e((string) $actor['user']) ?></strong>
+        (id <?= (int) $actor['id'] ?>).
+        <?php if (! $isSuperAdmin): ?>
+            Role assignment is restricted to Super Admin and is hidden
+            from this surface for you.
+        <?php endif; ?>
+    </p>
+</div>
+
+<?php if ($flash !== null): ?>
+    <div class="card" style="background:#dcfce7;color:#166534;word-break:break-all;">
+        <?= e($flash) ?>
+    </div>
+<?php endif; ?>
+
+<div class="card">
+    <h2>User accounts <span class="muted" style="font-size:14px;">(<?= count($users) ?> shown)</span></h2>
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="text-align:left;border-bottom:2px solid #cbd2da;">
+                <th style="padding:.5rem .25rem;">ID</th>
+                <th style="padding:.5rem .25rem;">User</th>
+                <th style="padding:.5rem .25rem;">Email</th>
+                <th style="padding:.5rem .25rem;">Role</th>
+                <th style="padding:.5rem .25rem;">Last login</th>
+                <th style="padding:.5rem .25rem;">Status</th>
+                <th style="padding:.5rem .25rem;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($users as $u): ?>
+                <?php
+                $uId      = (int) $u['id'];
+                $isSelf   = $uId === (int) $actor['id'];
+                $banned   = is_string($u['banned_at'] ?? null) && $u['banned_at'] !== '';
+                $locked   = is_string($u['locked_until'] ?? null) && $u['locked_until'] !== ''
+                            && strtotime((string) $u['locked_until']) > time();
+                $statusPills = [];
+                if ($banned) { $statusPills[] = '<span class="pill err">banned</span>'; }
+                if ($locked) { $statusPills[] = '<span class="pill warn">locked</span>'; }
+                if (! $banned && ! $locked) { $statusPills[] = '<span class="pill ok">active</span>'; }
+                ?>
+                <tr style="border-bottom:1px solid #e4e8ee;">
+                    <td style="padding:.5rem .25rem;"><code><?= $uId ?></code></td>
+                    <td style="padding:.5rem .25rem;">
+                        <?= e((string) $u['user']) ?>
+                        <?php if ($isSelf): ?>
+                            <span class="pill ok" style="margin-left:.4rem;">you</span>
+                        <?php endif; ?>
+                    </td>
+                    <td style="padding:.5rem .25rem;"><?= e((string) ($u['email'] ?? '—')) ?></td>
+                    <td style="padding:.5rem .25rem;"><code><?= e((string) ($u['role'] ?? 'user')) ?></code></td>
+                    <td style="padding:.5rem .25rem;"><?= e($fmt($u['last_login_at'] ?? null)) ?></td>
+                    <td style="padding:.5rem .25rem;"><?= implode(' ', $statusPills) ?></td>
+                    <td style="padding:.5rem .25rem;">
+                        <?php if ($isSelf): ?>
+                            <span class="muted" style="font-size:12px;">No self-actions</span>
+                        <?php else: ?>
+                            <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/reset-password" style="display:inline;">
+                                <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+                                <button type="submit"
+                                        style="background:#fff;color:#101418;border:1px solid #cbd2da;padding:.25rem .6rem;border-radius:4px;font:inherit;cursor:pointer;font-size:13px;">
+                                    Reset PW
+                                </button>
+                            </form>
+                            <?php if ($banned): ?>
+                                <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/unban" style="display:inline;">
+                                    <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+                                    <button type="submit"
+                                            style="background:#dcfce7;color:#166534;border:1px solid #86efac;padding:.25rem .6rem;border-radius:4px;font:inherit;cursor:pointer;font-size:13px;">
+                                        Unban
+                                    </button>
+                                </form>
+                            <?php else: ?>
+                                <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/ban"
+                                      onsubmit="return confirm('Ban <?= e((string) $u['user']) ?>? They will be logged out and unable to sign in.');"
+                                      style="display:inline;">
+                                    <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+                                    <button type="submit"
+                                            style="background:#fef9c3;color:#854d0e;border:1px solid #fde68a;padding:.25rem .6rem;border-radius:4px;font:inherit;cursor:pointer;font-size:13px;">
+                                        Ban
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                            <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/delete"
+                                  onsubmit="return confirm('PERMANENTLY DELETE <?= e((string) $u['user']) ?> (id <?= $uId ?>)? This cannot be undone.');"
+                                  style="display:inline;">
+                                <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+                                <button type="submit"
+                                        style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:.25rem .6rem;border-radius:4px;font:inherit;cursor:pointer;font-size:13px;">
+                                    Delete
+                                </button>
+                            </form>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Coming up</h2>
+    <ul class="muted">
+        <li><strong>Audit log + system diagnostics</strong> — branch 3 of the
+            admin-panel work. Shows login / logout / ban / role-change events
+            with actor + IP + timestamp, plus the PHP / DB version probe.</li>
+        <li><strong>Email-delivered reset links</strong> — branch 4 wires
+            Resend so the URL in the flash above is also emailed automatically.</li>
+        <li><strong>Role assignment</strong> — branch 5 lets a Super Admin
+            promote / demote other accounts. Hidden until then.</li>
+    </ul>
+    <p>
+        <a href="<?= e($base) ?>/">&larr; Back home</a>
+    </p>
+</div>

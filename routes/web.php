@@ -10,6 +10,8 @@ use PayTracker\Http\Controllers\LoadEntryController;
 use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
+use PayTracker\Http\Controllers\AdminUsersController;
+use PayTracker\Http\Controllers\PasswordResetController;
 use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Controllers\ProfileController;
 use PayTracker\Http\Controllers\StaticPagesController;
@@ -71,6 +73,26 @@ return static function (Router $router): void {
     $router->get('/loads/{frtl}/edit',     [LoadEntryController::class, 'edit']);
     $router->post('/loads/{frtl}',         [LoadEntryController::class, 'update']);
     $router->post('/loads/{frtl}/delete',  [LoadEntryController::class, 'destroy']);
+
+    // --- Admin Panel (admin+) ------------------------------------------
+    // The user-management surface: list, ban / unban, delete, mint a
+    // 1h single-use password reset link. Role assignment lives behind
+    // a Super-Admin-only surface that ships in a follow-up branch.
+    $router->get('/admin',                              [AdminUsersController::class, 'index']);
+    $router->post('/admin/users/{id}/ban',              [AdminUsersController::class, 'ban']);
+    $router->post('/admin/users/{id}/unban',            [AdminUsersController::class, 'unban']);
+    $router->post('/admin/users/{id}/delete',           [AdminUsersController::class, 'delete']);
+    $router->post('/admin/users/{id}/reset-password',   [AdminUsersController::class, 'resetPassword']);
+
+    // --- Password reset claim (public, token-gated) -------------------
+    // No auth requirement — the user can't log in, that's the whole
+    // point of the reset link. Security comes from the token itself:
+    // 256 bits of entropy, stored hashed, expires in 1 hour, single
+    // use. The admin who minted the token sees the URL once in their
+    // flash banner (and, in a follow-up branch, gets it emailed via
+    // Resend automatically).
+    $router->get('/password-reset/{token}',  [PasswordResetController::class, 'show']);
+    $router->post('/password-reset/{token}', [PasswordResetController::class, 'submit']);
 
     // --- Pay-rate admin (signed-in) -----------------------------------
     // Modern replacement for the four legacy pay-admin pages. Manages

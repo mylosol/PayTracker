@@ -59,7 +59,7 @@ final class AuthService
         // placeholder with native MySQL prepared statements (raises
         // HY093 "Invalid parameter number" at execute time).
         $stmt = $pdo->prepare(
-            'SELECT id, user, email, password_hash, role, failed_login_count, locked_until
+            'SELECT id, user, email, password_hash, role, failed_login_count, locked_until, banned_at
              FROM `account`
              WHERE user = ? OR (email IS NOT NULL AND email = ?)
              LIMIT 1'
@@ -68,6 +68,16 @@ final class AuthService
         $row = $stmt->fetch();
 
         if (! is_array($row) || ! is_string($row['password_hash'] ?? null) || $row['password_hash'] === '') {
+            $this->equalizeFailureLatency();
+            return null;
+        }
+
+        // Banned accounts: refuse the login with the same opaque "no" we
+        // give bad passwords. We do NOT reveal that the account is banned
+        // (that would let a banned user farm "still banned?" probes, and
+        // tells an attacker which accounts exist + are suspended). The
+        // admin panel surfaces ban state to admins.
+        if (is_string($row['banned_at'] ?? null) && $row['banned_at'] !== '') {
             $this->equalizeFailureLatency();
             return null;
         }
@@ -144,13 +154,25 @@ final class AuthService
             return null;
         }
         $stmt = $this->connection->pdo()->prepare(
-            'SELECT id, user, email, role, last_login_at, locked_until,
+            'SELECT id, user, email, role, last_login_at, locked_until, banned_at,
                     hire_date, shift, pay_week_start_day
              FROM `account` WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
-        return is_array($row) ? $row : null;
+        if (! is_array($row)) {
+            return null;
+        }
+        // Mid-session ban eviction. If an admin banned this account
+        // since the cookie was minted, every subsequent currentAccount()
+        // call treats them as anonymous — the next request lands at
+        // /login (where the ban check refuses re-auth too). Cleaner
+        // than waiting on cookie expiry and doesn't require a
+        // session-version column.
+        if (is_string($row['banned_at'] ?? null) && $row['banned_at'] !== '') {
+            return null;
+        }
+        return $row;
     }
 
     /** @param array<string, mixed> $row */

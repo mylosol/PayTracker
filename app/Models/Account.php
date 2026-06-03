@@ -150,4 +150,107 @@ final class Account extends Model
                 WHERE id = ?';
         $this->prepared($sql, [$hireDate, $shift, $payWeekStartDay, $accountId]);
     }
+
+    // ====================================================================
+    // Admin-panel surface
+    // ====================================================================
+
+    /**
+     * Page through the account list for the admin user-management
+     * surface. Returns columns the admin view actually displays —
+     * not a SELECT *, so adding sensitive columns later doesn't
+     * leak them into the admin page by accident.
+     *
+     * Ordering: most-recently-active first. NULL `last_login_at`
+     * (never-logged-in accounts) sort to the bottom. Falls back
+     * to id DESC so the order is deterministic when last_login
+     * ties.
+     *
+     * @return list<array{
+     *   id:int, user:string, email:?string, role:string,
+     *   last_login_at:?string, banned_at:?string, locked_until:?string
+     * }>
+     */
+    public function allForAdmin(int $limit = 200): array
+    {
+        $limit = max(1, min(1000, $limit));
+        $sql = 'SELECT id, user, email, role,
+                       last_login_at, banned_at, locked_until
+                  FROM ' . self::ident(self::$table) . '
+                 ORDER BY (last_login_at IS NULL) ASC,
+                          last_login_at DESC,
+                          id DESC
+                 LIMIT ' . $limit;
+        $rows = $this->prepared($sql)->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
+     * Fetch a single account row for the admin edit / action surface.
+     * Returns the full set of admin-visible columns including
+     * profile fields so a future edit form can pre-populate them.
+     *
+     * @return array<string,mixed>|null
+     */
+    public function findById(int $accountId): ?array
+    {
+        $sql = 'SELECT id, user, email, role,
+                       last_login_at, banned_at, locked_until,
+                       hire_date, shift, pay_week_start_day
+                  FROM ' . self::ident(self::$table) . '
+                 WHERE id = ?
+                 LIMIT 1';
+        $row = $this->prepared($sql, [$accountId])->fetch();
+        return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Suspend an account. Sets banned_at = NOW() in UTC if not
+     * already set. Idempotent — re-banning an already-banned
+     * account is a no-op rather than refreshing the timestamp,
+     * so the audit log (branch 3) can reason about "first banned
+     * at" timestamps cleanly.
+     */
+    public function ban(int $accountId): void
+    {
+        $sql = 'UPDATE ' . self::ident(self::$table) . '
+                   SET banned_at = COALESCE(banned_at, UTC_TIMESTAMP())
+                 WHERE id = ?';
+        $this->prepared($sql, [$accountId]);
+    }
+
+    /**
+     * Lift a suspension. Clears banned_at AND the lockout counters
+     * — if an admin is explicitly unbanning someone, the user has
+     * earned a clean slate, not a hidden 5-strikes-lockout left
+     * over from before the ban.
+     */
+    public function unban(int $accountId): void
+    {
+        $sql = 'UPDATE ' . self::ident(self::$table) . '
+                   SET banned_at          = NULL,
+                       failed_login_count = 0,
+                       locked_until       = NULL
+                 WHERE id = ?';
+        $this->prepared($sql, [$accountId]);
+    }
+
+    /**
+     * Hard-delete an account. The legacy `account` table has no
+     * soft-delete column and the application enforces foreign-key-
+     * style constraints in code (e.g., DriverLoad inserts check
+     * the driver_id exists). We adopt hard delete here to match
+     * the existing convention. The audit log (branch 3) preserves
+     * the actor + timestamp trail so "what happened to account N"
+     * remains answerable even after the row is gone.
+     *
+     * The caller is responsible for refusing to delete the actor's
+     * OWN account (that would orphan their session and is almost
+     * never what an admin actually wants).
+     */
+    public function deleteAccount(int $accountId): void
+    {
+        $sql = 'DELETE FROM ' . self::ident(self::$table) . ' WHERE id = ?';
+        $this->prepared($sql, [$accountId]);
+    }
 }

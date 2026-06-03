@@ -67,6 +67,11 @@ $isAdmin       = $authenticated && Account::hasRole($account, Account::ROLE_ADMI
                    style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
                     Pay-rate admin &rarr;
                 </a>
+                &nbsp;
+                <a href="<?= e($base) ?>/admin"
+                   style="display:inline-block;background:#101418;color:#fff;border:1px solid #101418;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                    Admin Panel &rarr;
+                </a>
             <?php endif; ?>
         </p>
 
