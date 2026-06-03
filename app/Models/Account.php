@@ -67,6 +67,56 @@ final class Account extends Model
     public const PAY_WEEK_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
     /**
+     * RBAC roles, in ascending privilege order. The position in this
+     * array IS the privilege level — `hasRole($acct, 'admin')` returns
+     * true for both 'admin' AND 'super_admin' because super_admin is
+     * at a higher index.
+     *
+     * Why a code-side whitelist rather than a DB enum / CHECK constraint:
+     *   Adding a new role (say 'auditor') would otherwise require a
+     *   migration + a deploy in lockstep. Keeping the whitelist in
+     *   PHP means we can add a role with a single code change and
+     *   the existing migration's UPDATE-stragglers-to-'user' clause
+     *   still keeps the DB safe against any rogue value.
+     */
+    public const ROLES = ['user', 'admin', 'super_admin'];
+
+    public const ROLE_USER        = 'user';
+    public const ROLE_ADMIN       = 'admin';
+    public const ROLE_SUPER_ADMIN = 'super_admin';
+
+    /**
+     * True if the account's role is at least `$minimumRole` in the
+     * privilege hierarchy. Inclusive: 'admin' satisfies 'admin', and
+     * 'super_admin' satisfies both 'admin' and 'super_admin'.
+     *
+     * Anonymous accounts (null) and accounts with a missing/unknown
+     * role always return false — fail closed. Callers pre-validate
+     * that `$minimumRole` is a known role; we throw on unknowns
+     * rather than silently allowing anything.
+     *
+     * @param array<string,mixed>|null $account
+     */
+    public static function hasRole(?array $account, string $minimumRole): bool
+    {
+        if (! in_array($minimumRole, self::ROLES, true)) {
+            throw new \InvalidArgumentException(
+                'Unknown role: ' . $minimumRole . ' (must be one of: ' . implode(', ', self::ROLES) . ')'
+            );
+        }
+        if ($account === null) {
+            return false;
+        }
+        $actorRole = is_string($account['role'] ?? null) ? (string) $account['role'] : '';
+        $actorIdx  = array_search($actorRole, self::ROLES, true);
+        $minIdx    = array_search($minimumRole, self::ROLES, true);
+        if ($actorIdx === false) {
+            return false;
+        }
+        return $actorIdx >= $minIdx;
+    }
+
+    /**
      * Update the driver-profile columns for an account.
      *
      * Fields:

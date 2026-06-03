@@ -7,6 +7,7 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Models\Account;
 use PayTracker\Models\PayRate;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
@@ -31,8 +32,11 @@ use PayTracker\Services\Pay\PayRecomputer;
  *   - Tier delete (POST /pay-admin/draft/delete with miles).
  *   - Add new tier reuses the upsert path.
  *
- * Auth posture: any authenticated account can view AND edit. Role
- * gating tracked for a future branch.
+ * Auth posture: admin+ on every action (view AND edit). The pay-rate
+ * tables drive how every load is paid; mis-editing them silently
+ * shifts every driver's paycheck. The base User role gets a 403 on
+ * GET, not a redirect, so a curious driver isn't pushed back through
+ * the login flow.
  */
 final class PayAdminController extends Controller
 {
@@ -50,6 +54,9 @@ final class PayAdminController extends Controller
         $account = $this->auth->currentAccount();
         if ($account === null) {
             return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
         }
         $this->session->start();
 
@@ -145,6 +152,9 @@ final class PayAdminController extends Controller
         if ($account === null) {
             return $this->redirect($request->basePath() . '/login');
         }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
+        }
         $this->session->start();
         if (! $this->csrf->verify($request->input('_csrf'))) {
             return $this->failBack('Your session expired. Please try again.', $request);
@@ -199,6 +209,12 @@ final class PayAdminController extends Controller
         $account = $this->auth->currentAccount();
         if ($account === null) {
             return $this->redirect($request->basePath() . '/login');
+        }
+        // RBAC: pay-rate writes must be admin+. A base User who somehow
+        // POSTs to /pay-admin/draft/* (CSRF-forged or hand-crafted) gets
+        // a 403 instead of a silent success.
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
         }
         $this->session->start();
 

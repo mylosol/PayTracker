@@ -1022,7 +1022,63 @@ legacy until parity is complete.
 
 ---
 
-## 15. Production is untouched
+## 15. RBAC — role-gated admin surfaces
+
+The `account.role` column now drives access to Locations, City
+Distances, and Pay-rate admin. Three roles exist:
+
+| Role          | Can access                                            |
+|---------------|-------------------------------------------------------|
+| `user`        | Dashboard, Profile, Loads, all static pages           |
+| `admin`       | Everything above + `/locations`, `/distances`, `/pay-admin` |
+| `super_admin` | Everything above (Admin Panel lands in a later branch) |
+
+The QA account (`mylosol@gmail.com`) is promoted to `super_admin` by
+migration `2026_06_03_001_promote_super_admin.sql`. The bulk of the
+QA walk runs as super_admin, so the previously-walked sections 6, 7,
+10, 11 still pass unchanged.
+
+### 15a. Admin nav is visible for super_admin
+
+1. Sign in as the QA account, visit `/preview/`.
+
+**Expected:**
+- The welcome card's button row shows Driver loads, **Manage
+  locations**, **City distances**, and **Pay-rate admin** — all
+  three admin links are visible.
+- "My pay (today)" remains the primary CTA.
+
+### 15b. Admin pages return 200 for super_admin
+
+1. Visit `/preview/locations`, `/preview/distances`, and
+   `/preview/pay-admin` in sequence.
+
+**Expected:** each renders normally (no 403 page).
+
+### 15c. (Manual / future) base User gets a 403
+
+This step requires a seeded test account with `role='user'`. We
+don't have one on preview yet; once we do, the manual walk is:
+
+1. Sign in as the User-role account.
+2. Visit `/preview/pay-admin`.
+
+**Expected:**
+- Heading **Access denied** with a red `403` pill.
+- Body reads "This area is restricted to **Admin** accounts or
+  higher. Your account role is `user`."
+- A "Back to dashboard" CTA returns to `/preview/dashboard`.
+- The home page's button row hides the three admin links for
+  this user.
+
+For now the Playwright spec `tests/e2e/rbac.spec.ts` covers the
+positive case (super_admin sees the nav + accesses the surfaces).
+The negative case (User → 403) is exercised by the unit tests in
+`tests/Unit/Models/AccountTest.php` against `Account::hasRole()`.
+
+---
+
+## 16. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -1041,7 +1097,7 @@ legacy until parity is complete.
 
 ---
 
-## 16. Security headers are present (optional — engineer-assisted)
+## 17. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

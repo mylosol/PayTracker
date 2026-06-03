@@ -7,6 +7,7 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Models\Account;
 use PayTracker\Models\City;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
@@ -148,18 +149,23 @@ final class LocationController extends Controller
     }
 
     /**
-     * Redirect anonymous visitors to the login form. Returns null when an
-     * account is signed in, so the caller can continue.
+     * Auth + RBAC guard. Returns null when the signed-in account has at
+     * least the required role (default 'admin' for this controller —
+     * Locations management is admin+ across all actions); returns the
+     * appropriate redirect/403 response otherwise.
+     *
+     * Why admin: the legacy `addlocation.php` flow let any authenticated
+     * user mutate the canonical city list. That was always intended for
+     * admins; the legacy gate was just absent. The modern RBAC scopes
+     * it correctly.
      */
-    private function requireAuth(Request $request): ?Response
+    private function requireAuth(Request $request, string $minimumRole = Account::ROLE_ADMIN): ?Response
     {
-        if ($this->auth->currentAccount() !== null) {
-            return null;
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
         }
-        // Capture the desired destination so post-login we can bounce back
-        // (not implemented yet — placeholder for a follow-up). For now just
-        // land on the home page after login.
-        return $this->redirect($request->basePath() . '/login');
+        return $this->requireRole($request, $account, $minimumRole);
     }
 
     private function failBack(Request $request, string $message): Response

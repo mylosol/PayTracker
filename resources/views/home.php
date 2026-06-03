@@ -7,9 +7,14 @@
  * @var string                       $csrfToken
  * @var string                       $base
  */
+use PayTracker\Models\Account;
+
 layout('layouts/app');
 $isProduction  = $env === 'production';
 $authenticated = is_array($account);
+// RBAC role helpers for the nav. Admin+ sees the admin surfaces;
+// Super Admin will get a future Admin Panel link when that lands.
+$isAdmin       = $authenticated && Account::hasRole($account, Account::ROLE_ADMIN);
 ?>
 <div class="card">
     <h1><?= e($appName) ?> <span class="pill <?= $isProduction ? 'ok' : 'warn' ?>"><?= e($env) ?></span></h1>
@@ -42,25 +47,27 @@ $authenticated = is_array($account);
                 My pay (today) &rarr;
             </a>
             &nbsp;
-            <a href="<?= e($base) ?>/locations"
-               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                Manage locations &rarr;
-            </a>
-            &nbsp;
-            <a href="<?= e($base) ?>/distances"
-               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                City distances &rarr;
-            </a>
-            &nbsp;
             <a href="<?= e($base) ?>/loads"
                style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
                 Driver loads &rarr;
             </a>
-            &nbsp;
-            <a href="<?= e($base) ?>/pay-admin"
-               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                Pay-rate admin &rarr;
-            </a>
+            <?php if ($isAdmin): ?>
+                &nbsp;
+                <a href="<?= e($base) ?>/locations"
+                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                    Manage locations &rarr;
+                </a>
+                &nbsp;
+                <a href="<?= e($base) ?>/distances"
+                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                    City distances &rarr;
+                </a>
+                &nbsp;
+                <a href="<?= e($base) ?>/pay-admin"
+                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                    Pay-rate admin &rarr;
+                </a>
+            <?php endif; ?>
         </p>
 
         <form method="post" action="<?= e($base) ?>/logout" style="margin-top:1rem;">

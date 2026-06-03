@@ -7,6 +7,7 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Models\Account;
 use PayTracker\Models\CityDistance;
 
 /**
@@ -33,8 +34,16 @@ final class DistancesController extends Controller
 
     public function index(Request $request): Response
     {
-        if ($this->auth->currentAccount() === null) {
+        // Auth + RBAC. City-distance matrix is the canonical lookup table
+        // PayCalculator + LoadEntryController consume; surfacing it
+        // unrestricted would leak the carrier's haul-distance graph to
+        // every account. Gate behind admin+.
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
             return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
         }
 
         $from = trim((string) $request->input('from', ''));
