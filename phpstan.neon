@@ -1,0 +1,35 @@
+# phpstan static-analysis config.
+#
+# Goal of this config: catch the class of bug that "use PDO;" missing in
+# DriverLoad.php fell through CI. That bug (and friends — wrong method
+# names, calling non-existent methods, return-type mismatches) is exactly
+# what phpstan flags at modest levels without forcing us to annotate
+# every array shape.
+#
+# Level 5 is the sensible starting point for greenfield strict_types code:
+#   - Catches undefined classes, methods, functions, properties.
+#   - Catches wrong-type arguments and return types.
+#   - Does NOT yet require array-shape annotations everywhere
+#     (level 6+) or strict mixed handling (level 7+).
+#   - Can be bumped later by changing this single line.
+#
+# Scope is intentionally limited to the modernized application code. The
+# legacy PHP at the repo root (auth.php, alSubmit.php, edit.php, etc.)
+# would produce hundreds of findings and is slated for replacement; running
+# phpstan over it would obscure real findings in new code.
+parameters:
+    level: 5
+    phpVersion: 80200
+    paths:
+        - app
+        - bootstrap
+        - config
+        - public
+        - routes
+        - scripts
+        - database/migrations
+    excludePaths:
+        - vendor
+        - storage
+        - tests
+    treatPhpDocTypesAsCertain: false

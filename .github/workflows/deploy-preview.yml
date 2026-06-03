@@ -1,0 +1,303 @@
+# PayTracker — preview-channel deployment.
+#
+# Trigger:  push to any `feature/**` branch
+# Target:   /home/robshe48/paytracker/preview  on DreamHost
+# URL:      https://paytracker.xyz/preview/
+#
+# Goal of the preview channel: let stakeholders validate a branch end-to-end
+# without ever touching production code, files, or session cookies. Because
+# the deploy lives at a distinct URL path (`/preview/`) the session cookie
+# automatically scopes away from the production root.
+#
+# The preview deploy WILL overwrite anything previously deployed at the
+# preview path — that is by design; only one branch is "previewed live" at
+# a time. Re-running the workflow from a different feature branch swaps it
+# in.
+#
+# Secrets required (same set as production):
+#   DH_SSH_HOST  DH_SSH_USER  DH_SSH_PRIVATE_KEY  DH_SSH_KNOWN_HOSTS
+#   APP_KEY  SQL_HOST  SQL_DB  SQL_UN  SQL_PW  MAPS_API_PAT
+#
+# Optional (Playwright E2E tests skip gracefully when unset):
+#   QA_TEST_USER       login handle for the seeded preview test account
+#                      (e.g. mylosol@gmail.com)
+#   QA_TEST_PASSWORD   the password the deploy seeds into that account
+#                      via scripts/set-password.php on every run, AND
+#                      the password Playwright uses to log in
+
+name: Deploy preview
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to DreamHost (preview)
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Pin the CI runtime to the exact PHP version DreamHost shared hosting
+      # ships (8.2). Linting and platform_check then catch any 8.3-only
+      # syntax before it hits the server. Bump in lockstep if/when DreamHost
+      # rolls 8.3 to this shared host.
+      - name: Set up PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo, pdo_mysql, mbstring, json
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate composer manifest
+        run: composer validate --strict
+
+      # Install with dev dependencies so phpstan is available below.
+      # We re-install --no-dev right before rsync so the deployed vendor/
+      # tree stays lean.
+      - name: Install PHP dependencies (with dev for static analysis)
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Syntax-check all new PHP sources
+        run: |
+          set -euo pipefail
+          find app bootstrap config public routes -name '*.php' -print0 \
+            | xargs -0 -n1 php -l > /dev/null
+
+      # PSR-4 conformance check. `--strict-psr` makes composer fail when any
+      # class's namespace doesn't match its file location. This catches
+      # rename/typo bugs before they reach the server. It's lightweight and
+      # doesn't try to instantiate classes (which would risk false positives
+      # from autoload side-effects). LSP / load-time fatals are caught by
+      # the live /health.json smoke at the end of the workflow.
+      - name: Validate PSR-4 autoload mapping
+        run: composer dump-autoload --optimize --strict-psr --no-interaction
+
+      # Static analysis. Catches the class of bug that bare-class-reference
+      # inside a method body produces (e.g. forgetting `use PDO;` before
+      # `PDO::FETCH_ASSOC`), which `php -l` and PSR-4 validation both miss.
+      # Config in phpstan.neon; level can be bumped over time.
+      - name: Static analysis (phpstan)
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress --error-format=github
+
+      # Unit tests. These run BEFORE deploy so a regression in pure-PHP
+      # logic (PayCalculator, model behaviour) fails fast rather than
+      # waiting for the Playwright suite to surface it. The suite is
+      # intentionally small (PHPUnit on tests/Unit only) — DB-touching
+      # tests are covered by Playwright against the live preview.
+      - name: PHP unit tests
+        run: vendor/bin/phpunit --colors=never
+
+      # Strip dev dependencies before rsync so the deployed vendor/ tree
+      # doesn't carry phpstan, phpunit, and their transitive deps. We
+      # already proved the build is clean above; reinstalling without dev
+      # deps is fast (composer cache is hot).
+      - name: Re-install without dev dependencies (for deploy)
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+      - name: Install SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DH_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Ensure preview directory exists on remote
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "mkdir -p /home/robshe48/paytracker/preview"
+
+      # `--delete` keeps the preview tree clean; we exclude the legacy root
+      # files the rebuild does not need so the preview shows only the modern
+      # stack. Once the modern app fully supersedes the legacy code these
+      # exclusions can be tightened or removed.
+      - name: Rsync repository to preview path
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          set -euo pipefail
+          rsync -avz --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='tests/' \
+            --exclude='playwright-report/' \
+            --exclude='test-results/' \
+            --exclude='blob-report/' \
+            --exclude='playwright.config.ts' \
+            --exclude='package.json' \
+            --exclude='package-lock.json' \
+            --exclude='.PayTracker/' \
+            --exclude='.env' \
+            --exclude='.env.local' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
+            ./ "$REMOTE:/home/robshe48/paytracker/preview/"
+
+      # Promote the preview-specific root .htaccess into place. The repo
+      # version is intentionally named differently so it stays inert during
+      # local development.
+      - name: Activate preview .htaccess
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cp /home/robshe48/paytracker/preview/deploy/preview.htaccess /home/robshe48/paytracker/preview/.htaccess"
+
+      - name: Write preview .env on remote
+        env:
+          REMOTE:    ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          APP_KEY:   ${{ secrets.APP_KEY }}
+          DB_HOST:   ${{ secrets.SQL_HOST }}
+          DB_NAME:   ${{ secrets.SQL_DB }}
+          DB_USER:   ${{ secrets.SQL_UN }}
+          DB_PASS:   ${{ secrets.SQL_PW }}
+          MAPS_KEY:  ${{ secrets.MAPS_API_PAT }}
+          BRANCH:    ${{ github.ref_name }}
+          COMMIT:    ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "cat > /home/robshe48/paytracker/preview/.env" <<EOF
+          APP_ENV=preview
+          APP_DEBUG=true
+          APP_NAME="PayTracker (preview: ${BRANCH})"
+          APP_URL=https://paytracker.xyz/preview
+          APP_TIMEZONE=America/Chicago
+          APP_KEY=${APP_KEY}
+
+          # The preview channel reads the same database as production by
+          # default — read-only flows are safe. Once write flows arrive,
+          # point this at a sandboxed schema to keep production data
+          # completely untouched, per the spec's isolation requirement.
+          DB_HOST=${DB_HOST}
+          DB_PORT=3306
+          DB_DATABASE=${DB_NAME}
+          DB_USERNAME=${DB_USER}
+          DB_PASSWORD=${DB_PASS}
+          DB_CHARSET=utf8mb4
+
+          SESSION_NAME=paytracker_preview_session
+          SESSION_LIFETIME_MIN=120
+          SESSION_SECURE_COOKIE=true
+          SESSION_SAMESITE=Lax
+
+          GOOGLE_MAPS_API_KEY=${MAPS_KEY}
+
+          # Build provenance — surfaced on /health for traceability.
+          BUILD_BRANCH=${BRANCH}
+          BUILD_COMMIT=${COMMIT}
+          EOF
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/preview/.env"
+
+      # Run pending DB migrations on the remote using the live preview .env.
+      # Migrations are additive-only by policy (see app/Console/Migrator.php)
+      # so re-running is safe: the tracking table skips anything already
+      # applied. If a migration fails, the deploy fails — production traffic
+      # is unaffected because the Pi is still authoritative for paytracker.xyz.
+      - name: Apply database migrations on remote
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker/preview && php scripts/migrate.php"
+
+      # Sync the QA test account's password from GH secrets so the Playwright
+      # suite below can log in with a known-good credential. The password
+      # set here lives only on the preview channel — it is NEVER set on
+      # production. Gating happens at the shell level (not via a GH Actions
+      # `if:` expression) because `${{ secrets.X != '' }}` doesn't evaluate
+      # reliably when the secret is masked; checking the env var directly
+      # in bash is straightforward and explicit.
+      - name: Sync QA test account password (preview only)
+        env:
+          REMOTE:  ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          QA_USER: ${{ secrets.QA_TEST_USER }}
+          QA_PASS: ${{ secrets.QA_TEST_PASSWORD }}
+        run: |
+          if [ -z "$QA_USER" ] || [ -z "$QA_PASS" ]; then
+            echo "QA_TEST_USER / QA_TEST_PASSWORD not configured in repo secrets — skipping password sync."
+            echo "Playwright auth tests will skip themselves; non-auth tests still run."
+            exit 0
+          fi
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker/preview && php scripts/set-password.php '$QA_USER' '$QA_PASS' --role=admin"
+
+      - name: Smoke test (preview /health.json)
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 \
+            "https://paytracker.xyz/preview/health.json" \
+            | tee preview-health.json
+          test "$(jq -r .database.ok preview-health.json)" = "true"
+
+      # ----- Playwright end-to-end suite -----------------------------------
+      # Runs the browser-level coverage of Sections 5-8 of docs/qa/test_plan.md
+      # against the just-deployed preview channel. The suite handles its own
+      # auth via QA_TEST_USER / QA_TEST_PASSWORD (synced into the DB above),
+      # and individual tests `.skip()` cleanly when those env vars are unset.
+      - name: Set up Node.js 20 (for Playwright)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # `cache: 'npm'` would speed up subsequent runs, but it requires a
+          # committed package-lock.json. We don't have one yet — the first
+          # `npm install` on a fresh runner generates it. Skipping the
+          # cache directive is the trade-off; ~10s extra per run vs the
+          # complication of committing and maintaining the lockfile.
+          # Revisit when the JS dep list grows beyond a couple of packages.
+
+      - name: Install Playwright dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install Playwright browser (Chromium only)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright suite against the live preview
+        env:
+          BASE_URL:         https://paytracker.xyz/preview/
+          QA_TEST_USER:     ${{ secrets.QA_TEST_USER }}
+          QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
+        run: npx playwright test --reporter=github,list
+
+      # Always-run cleanup. Sweeps QA-test rows across cities (Qa Test %),
+      # account lockouts, and driver_loads (notes prefixed "QA TEST ") so
+      # the preview DB doesn't accumulate orphan artefacts across runs.
+      # `if: always()` ensures we still tidy when Playwright itself failed.
+      # Running with no scope flag cleans all three; we used to pass
+      # --loads but that left stale QA test cities behind whenever an
+      # earlier deploy failed, which then made the locations.spec
+      # "valid submission" test trip the duplicate-rejected path on
+      # the next run.
+      - name: Sweep QA test data from preview DB
+        if: always()
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker/preview && php scripts/qa-cleanup.php --apply"
+
+      # Upload the HTML report on failure so we can inspect screenshots,
+      # traces, and timings without re-running the suite locally.
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
