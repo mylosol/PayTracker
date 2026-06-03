@@ -55,6 +55,7 @@ final class LoadEntryController extends Controller
     /** Sanity bounds; outside this an input is rejected as a typo. */
     private const MAX_MINUTES   = 1440; // 24h cap on dem/break
     private const MAX_EXTRA_PAY = 999.99;
+    private const MAX_MILES     = 9999; // typo guard for begin-empty / out-of-route
 
     public function __construct(
         private readonly AuthService $auth,
@@ -89,17 +90,20 @@ final class LoadEntryController extends Controller
             'mode'      => 'create',
             'editFrtl'  => 0,
             'old'       => [
-                'frtl'      => $this->session->get('_old_frtl')      ?? '',
-                'pickup'    => $this->session->get('_old_pickup')    ?? '',
-                'delivery'  => $this->session->get('_old_delivery')  ?? '',
-                'load_type' => $this->session->get('_old_type')      ?? '0',
-                'dem'       => $this->session->get('_old_dem')       ?? '0',
-                'break'     => $this->session->get('_old_break')     ?? '0',
-                'extra'     => $this->session->get('_old_extra')     ?? '0',
-                'split'     => $this->session->get('_old_split')     ?? '0',
-                'weekend'   => $this->session->get('_old_weekend')   ?? '0',
-                'end_empty' => $this->session->get('_old_end_empty') ?? '',
-                'notes'     => '',
+                'frtl'              => $this->session->get('_old_frtl')              ?? '',
+                'pickup'            => $this->session->get('_old_pickup')            ?? '',
+                'delivery'          => $this->session->get('_old_delivery')          ?? '',
+                'load_type'         => $this->session->get('_old_type')              ?? '0',
+                'dem'               => $this->session->get('_old_dem')               ?? '0',
+                'break'             => $this->session->get('_old_break')             ?? '0',
+                'extra'             => $this->session->get('_old_extra')             ?? '0',
+                'split'             => $this->session->get('_old_split')             ?? '0',
+                'weekend'           => $this->session->get('_old_weekend')           ?? '0',
+                'end_empty'         => $this->session->get('_old_end_empty')         ?? '',
+                'date'              => $this->session->get('_old_date')              ?? '',
+                'begin_empty_miles' => $this->session->get('_old_begin_empty_miles') ?? '0',
+                'out_of_route_miles'=> $this->session->get('_old_out_of_route_miles')?? '0',
+                'notes'             => '',
             ],
         ]);
     }
@@ -130,6 +134,9 @@ final class LoadEntryController extends Controller
         $demRaw    = (string) $request->input('dem_minutes', '0');
         $brkRaw    = (string) $request->input('break_minutes', '0');
         $extraRaw  = (string) $request->input('extra_pay', '0');
+        $dateRaw   = trim((string) $request->input('load_date', ''));
+        $beginEmptyRaw = (string) $request->input('begin_empty_miles', '0');
+        $outOfRouteRaw = (string) $request->input('out_of_route_miles', '0');
         $notes     = trim((string) $request->input('notes', ''));
 
         $this->session->put('_old_frtl', $frtlRaw);
@@ -142,6 +149,9 @@ final class LoadEntryController extends Controller
         $this->session->put('_old_extra', $extraRaw);
         $this->session->put('_old_split', $splitRaw);
         $this->session->put('_old_weekend', $wkRaw);
+        $this->session->put('_old_date', $dateRaw);
+        $this->session->put('_old_begin_empty_miles', $beginEmptyRaw);
+        $this->session->put('_old_out_of_route_miles', $outOfRouteRaw);
 
         // --- validate ---------------------------------------------------
         // FRTL is the driver's dispatch number — typed in from paperwork
@@ -186,6 +196,45 @@ final class LoadEntryController extends Controller
         if (! is_numeric($extraRaw) || (float) $extraRaw < 0 || (float) $extraRaw > self::MAX_EXTRA_PAY) {
             return $this->failBack($request, 'Extra pay must be between 0 and ' . self::MAX_EXTRA_PAY . '.');
         }
+
+        // Load date: required field, must be a real calendar day, and we
+        // refuse future dates because the dashboard groups by `date` and a
+        // future row would silently disappear off "today" until that day
+        // arrives. Defaulting empty → today keeps the legacy "submit now"
+        // behaviour working from old form posts.
+        if ($dateRaw === '') {
+            $dateRaw = date('Y-m-d');
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) !== 1) {
+            return $this->failBack($request, 'Load date must be in YYYY-MM-DD format.');
+        }
+        $parsedDate = \DateTimeImmutable::createFromFormat('Y-m-d', $dateRaw);
+        if ($parsedDate === false || $parsedDate->format('Y-m-d') !== $dateRaw) {
+            return $this->failBack($request, 'Load date is not a valid calendar date.');
+        }
+        if ($parsedDate > new \DateTimeImmutable('tomorrow')) {
+            return $this->failBack($request, 'Load date cannot be in the future.');
+        }
+        // Store as the same midnight-of-day datetime the legacy column
+        // expects. Keeps the (driver_id, date) index well-clustered and
+        // avoids per-row time-of-day creep that would make day-bucket
+        // queries miss rows.
+        $loadDate = $dateRaw . ' 00:00:00';
+
+        if (! is_numeric($beginEmptyRaw) || (int) $beginEmptyRaw < 0 || (int) $beginEmptyRaw > self::MAX_MILES) {
+            return $this->failBack($request, 'Begin empty miles must be between 0 and ' . self::MAX_MILES . '.');
+        }
+        if (! is_numeric($outOfRouteRaw) || (int) $outOfRouteRaw < 0 || (int) $outOfRouteRaw > self::MAX_MILES) {
+            return $this->failBack($request, 'Out-of-route miles must be between 0 and ' . self::MAX_MILES . '.');
+        }
+        $beginEmptyMiles = (int) $beginEmptyRaw;
+        $outOfRouteMiles = (int) $outOfRouteRaw;
+        // Legacy `out_of_route_ind` is a boolean flag the calculator
+        // checks before applying the rewrite. Deriving it from
+        // miles>0 keeps the form to one input — the driver doesn't
+        // need to think about a separate "is this an out-of-route
+        // load?" toggle.
+        $outOfRouteInd = $outOfRouteMiles > 0 ? 1 : 0;
 
         // Pick-up MUST be a known terminal — drivers fuel at terminals and
         // load there. This is a stricter check than "is this a known city"
@@ -266,15 +315,15 @@ final class LoadEntryController extends Controller
             load_type:          $loadType,
             load_miles:         $emptyMiles,
             empty_miles:        $endEmptyMiles,
-            begin_empty_miles:  0,
+            begin_empty_miles:  $beginEmptyMiles,
             is_split:           $isSplit,
             is_weekend:         $isWeekend,
             extra_pay:          (float) $extraRaw,
             dem_minutes:        (int) $demRaw,
             break_minutes:      (int) $brkRaw,
             variables_blob:     $variablesBlob,
-            out_of_route_ind:   0,
-            out_of_route_miles: 0,
+            out_of_route_ind:   $outOfRouteInd,
+            out_of_route_miles: $outOfRouteMiles,
         );
         $pay = $this->calculator->computeFor($payInput);
 
@@ -282,20 +331,21 @@ final class LoadEntryController extends Controller
         $frtl = $this->loads->insertOne([
             'driver_id'          => (int) $account['id'],
             'frtl'               => $frtl,
+            'date'               => $loadDate,
             'load_type'          => $loadType,
             'pickup_city'        => $pickup,
             'delivery_city'      => $delivery,
             'end_empty_city'     => $loadType === 0 && $endEmpty !== '' ? $endEmpty : null,
             'end_empty_miles'    => $endEmptyMiles,
             'empty_miles'        => $emptyMiles,
-            'begin_empty_miles'  => 0,
+            'begin_empty_miles'  => $beginEmptyMiles,
             'is_split'           => $isSplit,
             'is_weekend'         => $isWeekend,
             'extra_pay'          => (float) $extraRaw,
             'dem_minutes'        => (int) $demRaw,
             'break_minutes'      => (int) $brkRaw,
-            'out_of_route_ind'   => 0,
-            'out_of_route_miles' => 0,
+            'out_of_route_ind'   => $outOfRouteInd,
+            'out_of_route_miles' => $outOfRouteMiles,
             'used_google_maps'   => $usedGoogleMaps,
             'notes'              => $notes !== '' ? $notes : null,
             'np'                 => $pay['np'],
@@ -305,7 +355,7 @@ final class LoadEntryController extends Controller
         ]);
 
         // Clear preserved input on success.
-        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_end_empty', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend'] as $k) {
+        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_end_empty', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend', '_old_date', '_old_begin_empty_miles', '_old_out_of_route_miles'] as $k) {
             $this->session->forget($k);
         }
 
@@ -359,17 +409,21 @@ final class LoadEntryController extends Controller
             'mode'      => 'edit',
             'editFrtl'  => $frtlInt,
             'old'       => [
-                'frtl'      => (string) $frtlInt,
-                'pickup'    => (string) ($row['pickup_city']    ?? ''),
-                'delivery'  => (string) ($row['delivery_city']  ?? ''),
-                'end_empty' => (string) ($row['end_empty_city'] ?? ''),
-                'load_type' => (string) ($row['load_type']      ?? '0'),
-                'dem'       => (string) ($row['dem_minutes']    ?? '0'),
-                'break'     => (string) ($row['break_minutes']  ?? '0'),
-                'extra'     => (string) ($row['extra_pay']      ?? '0'),
-                'split'     => (string) ($row['is_split']       ?? '0'),
-                'weekend'   => (string) ($row['is_weekend']     ?? '0'),
-                'notes'     => (string) ($row['notes']          ?? ''),
+                'frtl'               => (string) $frtlInt,
+                'pickup'             => (string) ($row['pickup_city']         ?? ''),
+                'delivery'           => (string) ($row['delivery_city']       ?? ''),
+                'end_empty'          => (string) ($row['end_empty_city']      ?? ''),
+                'load_type'          => (string) ($row['load_type']           ?? '0'),
+                'dem'                => (string) ($row['dem_minutes']         ?? '0'),
+                'break'              => (string) ($row['break_minutes']       ?? '0'),
+                'extra'              => (string) ($row['extra_pay']           ?? '0'),
+                'split'              => (string) ($row['is_split']            ?? '0'),
+                'weekend'            => (string) ($row['is_weekend']          ?? '0'),
+                // Drop the datetime's time portion for the <input type="date">.
+                'date'               => substr((string) ($row['date'] ?? ''), 0, 10),
+                'begin_empty_miles'  => (string) ($row['begin_empty_miles']   ?? '0'),
+                'out_of_route_miles' => (string) ($row['out_of_route_miles']  ?? '0'),
+                'notes'              => (string) ($row['notes']               ?? ''),
             ],
         ]);
     }
@@ -411,6 +465,9 @@ final class LoadEntryController extends Controller
         $demRaw    = (string) $request->input('dem_minutes', '0');
         $brkRaw    = (string) $request->input('break_minutes', '0');
         $extraRaw  = (string) $request->input('extra_pay', '0');
+        $dateRaw   = trim((string) $request->input('load_date', ''));
+        $beginEmptyRaw = (string) $request->input('begin_empty_miles', '0');
+        $outOfRouteRaw = (string) $request->input('out_of_route_miles', '0');
         $notes     = trim((string) $request->input('notes', ''));
 
         if ($pickup === '' || $delivery === '') {
@@ -440,6 +497,33 @@ final class LoadEntryController extends Controller
         if (! is_numeric($extraRaw) || (float) $extraRaw < 0 || (float) $extraRaw > self::MAX_EXTRA_PAY) {
             return $this->failBackEdit($request, $frtl, 'Extra pay must be between 0 and ' . self::MAX_EXTRA_PAY . '.');
         }
+        if ($dateRaw === '') {
+            // Empty edit POST means "keep existing date" — fall through to
+            // the existing row's value so we never silently overwrite the
+            // historical timestamp with today.
+            $dateRaw = substr((string) ($existing['date'] ?? date('Y-m-d')), 0, 10);
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) !== 1) {
+            return $this->failBackEdit($request, $frtl, 'Load date must be in YYYY-MM-DD format.');
+        }
+        $parsedDate = \DateTimeImmutable::createFromFormat('Y-m-d', $dateRaw);
+        if ($parsedDate === false || $parsedDate->format('Y-m-d') !== $dateRaw) {
+            return $this->failBackEdit($request, $frtl, 'Load date is not a valid calendar date.');
+        }
+        if ($parsedDate > new \DateTimeImmutable('tomorrow')) {
+            return $this->failBackEdit($request, $frtl, 'Load date cannot be in the future.');
+        }
+        $loadDate = $dateRaw . ' 00:00:00';
+
+        if (! is_numeric($beginEmptyRaw) || (int) $beginEmptyRaw < 0 || (int) $beginEmptyRaw > self::MAX_MILES) {
+            return $this->failBackEdit($request, $frtl, 'Begin empty miles must be between 0 and ' . self::MAX_MILES . '.');
+        }
+        if (! is_numeric($outOfRouteRaw) || (int) $outOfRouteRaw < 0 || (int) $outOfRouteRaw > self::MAX_MILES) {
+            return $this->failBackEdit($request, $frtl, 'Out-of-route miles must be between 0 and ' . self::MAX_MILES . '.');
+        }
+        $beginEmptyMiles = (int) $beginEmptyRaw;
+        $outOfRouteMiles = (int) $outOfRouteRaw;
+        $outOfRouteInd   = $outOfRouteMiles > 0 ? 1 : 0;
 
         $loadType  = (int) $typeRaw;
         $isSplit   = $splitRaw === '1' ? 1 : 0;
@@ -482,36 +566,40 @@ final class LoadEntryController extends Controller
             load_type:          $loadType,
             load_miles:         $miles,
             empty_miles:        $endEmptyMiles,
-            begin_empty_miles:  0,
+            begin_empty_miles:  $beginEmptyMiles,
             is_split:           $isSplit,
             is_weekend:         $isWeekend,
             extra_pay:          (float) $extraRaw,
             dem_minutes:        (int) $demRaw,
             break_minutes:      (int) $brkRaw,
             variables_blob:     $variablesBlob,
-            out_of_route_ind:   0,
-            out_of_route_miles: 0,
+            out_of_route_ind:   $outOfRouteInd,
+            out_of_route_miles: $outOfRouteMiles,
         );
         $pay = $this->calculator->computeFor($payInput);
 
         try {
             $this->loads->updateOne((int) $account['id'], $frtlInt, [
-                'load_type'       => $loadType,
-                'pickup_city'     => $pickup,
-                'delivery_city'   => $delivery,
-                'end_empty_city'  => $loadType === 0 && $endEmpty !== '' ? $endEmpty : null,
-                'end_empty_miles' => $endEmptyMiles,
-                'empty_miles'     => $miles,
-                'is_split'        => $isSplit,
-                'is_weekend'      => $isWeekend,
-                'extra_pay'       => (float) $extraRaw,
-                'dem_minutes'     => (int) $demRaw,
-                'break_minutes'   => (int) $brkRaw,
-                'notes'           => $notes !== '' ? $notes : null,
-                'np'              => $pay['np'],
-                'op'              => $pay['op'],
-                'variables'       => $variablesBlob,
-                'pay_breakdown'   => $pay,
+                'load_type'         => $loadType,
+                'date'              => $loadDate,
+                'pickup_city'       => $pickup,
+                'delivery_city'     => $delivery,
+                'end_empty_city'    => $loadType === 0 && $endEmpty !== '' ? $endEmpty : null,
+                'end_empty_miles'   => $endEmptyMiles,
+                'empty_miles'       => $miles,
+                'begin_empty_miles' => $beginEmptyMiles,
+                'is_split'          => $isSplit,
+                'is_weekend'        => $isWeekend,
+                'extra_pay'         => (float) $extraRaw,
+                'dem_minutes'       => (int) $demRaw,
+                'break_minutes'     => (int) $brkRaw,
+                'out_of_route_ind'  => $outOfRouteInd,
+                'out_of_route_miles'=> $outOfRouteMiles,
+                'notes'             => $notes !== '' ? $notes : null,
+                'np'                => $pay['np'],
+                'op'                => $pay['op'],
+                'variables'         => $variablesBlob,
+                'pay_breakdown'     => $pay,
             ]);
         } catch (\Throwable $e) {
             return $this->failBackEdit($request, $frtl, 'Could not save load: ' . $e->getMessage());

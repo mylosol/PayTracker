@@ -233,6 +233,7 @@ final class DriverLoad extends Model
      *   out_of_route_miles:int,
      *   used_google_maps:int,
      *   notes?:string|null,
+     *   date?:string,
      * } $data
      *
      * @return int the frtl assigned to the inserted row
@@ -428,6 +429,15 @@ final class DriverLoad extends Model
         // stays on driver_loads (additive-only migration policy) and is
         // written as a literal 0 here so we don't need to thread it
         // through the calling code.
+        // `date` is caller-supplied as a 'YYYY-MM-DD HH:MM:SS' string when
+        // present (the load-entry form lets the driver back-date entries
+        // for paperwork submitted after the haul). When absent we fall
+        // back to NOW() — the legacy behaviour and a sane default for
+        // any future caller that hasn't been updated to thread the date
+        // through.
+        $dateValue = isset($data['date']) && is_string($data['date']) && $data['date'] !== ''
+            ? $data['date']
+            : null;
         $sql = 'INSERT INTO `driver_loads` (
                     driver_id, frtl, date,
                     variables, loadinfo, paid, notPaid, notes, np, op, pay_breakdown,
@@ -437,7 +447,7 @@ final class DriverLoad extends Model
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles, terminal_pcola
                 ) VALUES (
-                    ?, ?, NOW(),
+                    ?, ?, ' . ($dateValue === null ? 'NOW()' : '?') . ',
                     ?, ?, ?, 0, ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?,
@@ -458,8 +468,11 @@ final class DriverLoad extends Model
                 $frtl = $this->nextFrtlFor((int) $data['driver_id']);
             }
             try {
-                $this->prepared($sql, [
-                    $data['driver_id'], $frtl,
+                $params = [$data['driver_id'], $frtl];
+                if ($dateValue !== null) {
+                    $params[] = $dateValue;
+                }
+                $params = array_merge($params, [
                     $variables, $loadinfo, $paid, $data['notes'] ?? null,
                     $np, $op, $payBreakdown,
                     $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
@@ -469,6 +482,7 @@ final class DriverLoad extends Model
                     $data['dem_minutes'], $data['break_minutes'],
                     $data['out_of_route_ind'], $data['out_of_route_miles'],
                 ]);
+                $this->prepared($sql, $params);
                 return $frtl;
             } catch (\PDOException $e) {
                 // 23000 / 1062 = duplicate PK. On auto-assign we loop and
@@ -554,10 +568,20 @@ final class DriverLoad extends Model
      *   np:float, op:float,
      *   variables:string,
      *   pay_breakdown:array<string,mixed>,
+     *   end_empty_city?:?string,
+     *   end_empty_miles?:int,
+     *   begin_empty_miles?:int,
+     *   out_of_route_ind?:int,
+     *   out_of_route_miles?:int,
+     *   date?:string,
      * } $data
      */
     public function updateOne(int $driverId, int $frtl, array $data): void
     {
+        $beginEmptyMiles = (int) ($data['begin_empty_miles'] ?? 0);
+        $outOfRouteInd   = (int) ($data['out_of_route_ind']  ?? 0);
+        $outOfRouteMiles = (int) ($data['out_of_route_miles']?? 0);
+
         $loadinfo = implode('-', [
             $data['load_type'],
             $data['empty_miles'],
@@ -566,33 +590,51 @@ final class DriverLoad extends Model
             $data['is_split'],
             $data['is_weekend'],
             '2',
-            0, // begin_empty_miles — edit form doesn't expose it
+            $beginEmptyMiles,
             0, // used_google_maps — keep on edit (already cached)
             number_format($data['extra_pay'], 0, '.', ''),
             $data['dem_minutes'],
             $data['break_minutes'],
-            0, // out_of_route_ind
-            0, // out_of_route_miles
+            $outOfRouteInd,
+            $outOfRouteMiles,
         ]);
 
-        $sql = 'UPDATE `driver_loads` SET
+        // `date` is optional on the update path — when supplied (the
+        // edit form always supplies it now), we overwrite the legacy
+        // entry timestamp with the driver-chosen calendar day. When
+        // absent we leave the stored date untouched so callers that
+        // don't expose date editing can't accidentally clobber it.
+        $dateValue = isset($data['date']) && is_string($data['date']) && $data['date'] !== ''
+            ? $data['date']
+            : null;
+        $dateSql = $dateValue !== null ? ' date = ?,' : '';
+
+        $sql = 'UPDATE `driver_loads` SET' . $dateSql . '
                     load_type = ?, empty_miles = ?,
                     pickup_city = ?, delivery_city = ?,
                     end_empty_city = ?, end_empty_miles = ?,
+                    begin_empty_miles = ?,
                     is_split = ?, is_weekend = ?,
                     extra_pay = ?, dem_minutes = ?, break_minutes = ?,
+                    out_of_route_ind = ?, out_of_route_miles = ?,
                     notes = ?,
                     np = ?, op = ?,
                     variables = ?, loadinfo = ?,
                     pay_breakdown = ?
                 WHERE driver_id = ? AND frtl = ?';
-        $this->prepared($sql, [
+        $params = [];
+        if ($dateValue !== null) {
+            $params[] = $dateValue;
+        }
+        $params = array_merge($params, [
             $data['load_type'], $data['empty_miles'],
             $data['pickup_city'], $data['delivery_city'],
             $data['end_empty_city'] ?? null, (int) ($data['end_empty_miles'] ?? 0),
+            $beginEmptyMiles,
             $data['is_split'], $data['is_weekend'],
             number_format($data['extra_pay'], 2, '.', ''),
             $data['dem_minutes'], $data['break_minutes'],
+            $outOfRouteInd, $outOfRouteMiles,
             $data['notes'],
             number_format($data['np'], 2, '.', ''),
             number_format($data['op'], 2, '.', ''),
@@ -600,6 +642,7 @@ final class DriverLoad extends Model
             json_encode($data['pay_breakdown'], JSON_THROW_ON_ERROR),
             $driverId, $frtl,
         ]);
+        $this->prepared($sql, $params);
     }
 
     /**

@@ -11,6 +11,7 @@
  *   dem:string, break:string, extra:string,
  *   split:string, weekend:string,
  *   notes?:string, end_empty?:string,
+ *   date?:string, begin_empty_miles?:string, out_of_route_miles?:string,
  * } $old
  * @var string $mode      'create' (default) or 'edit'
  * @var int    $editFrtl  Only set when mode === 'edit'
@@ -21,6 +22,11 @@ $mode      = $mode      ?? 'create';
 $editFrtl  = $editFrtl  ?? 0;
 $isEdit    = $mode === 'edit';
 $formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
+$today     = date('Y-m-d');
+$dateValue = (string) ($old['date'] ?? '');
+if ($dateValue === '') {
+    $dateValue = $today;
+}
 ?>
 <div class="card">
     <h1><?= $isEdit ? 'Edit load #' . (int) $editFrtl : 'Add a load' ?></h1>
@@ -50,6 +56,19 @@ $formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
                 <?php else: ?>
                     From your dispatch paperwork. Leave blank to auto-assign the next number.
                 <?php endif; ?>
+            </small>
+        </p>
+
+        <p>
+            <label for="load_date"><strong>Load date</strong></label><br>
+            <input id="load_date" name="load_date" type="date" required
+                   value="<?= e($dateValue) ?>"
+                   max="<?= e($today) ?>"
+                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
+            <small class="muted">
+                Defaults to today. Set to the actual delivery date if you're entering
+                paperwork after the fact &mdash; the dashboard groups by this date,
+                not entry time.
             </small>
         </p>
 
@@ -136,6 +155,29 @@ $formAction = $isEdit ? $base . '/loads/' . (int) $editFrtl : $base . '/loads';
             <input id="extra_pay" name="extra_pay" type="number" min="0" max="999.99" step="0.01"
                    value="<?= e((string) $old['extra']) ?>"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
+        </p>
+
+        <p>
+            <label for="begin_empty_miles"><strong>Begin empty miles</strong></label><br>
+            <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
+                   value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
+                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
+            <small class="muted">
+                Miles driven empty BEFORE pick-up (e.g. home &rarr; terminal).
+                Paid at the empty-miles rate. 0 if you started at the terminal.
+            </small>
+        </p>
+
+        <p>
+            <label for="out_of_route_miles"><strong>Out-of-route miles</strong></label><br>
+            <input id="out_of_route_miles" name="out_of_route_miles" type="number" min="0" max="9999" step="1"
+                   value="<?= e((string) ($old['out_of_route_miles'] ?? '0')) ?>"
+                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
+            <small class="muted">
+                Total <em>actual</em> loaded miles when a detour added significant distance
+                (construction, road closure, etc.). Only used if it exceeds the
+                map distance by more than 3 miles; otherwise the map distance pays.
+            </small>
         </p>
 
         <p>
