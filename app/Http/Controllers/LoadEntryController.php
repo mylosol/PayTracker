@@ -235,7 +235,7 @@ final class LoadEntryController extends Controller
         // who toggled between types after typing doesn't accidentally
         // get paid for an empty leg the formula doesn't expect.
         // (Mirrors the same one-way-only guard on End Empty.)
-        if ((isset($loadType) ? $loadType : (int) $typeRaw) !== 0) {
+        if ((int) $typeRaw !== 0) {
             $beginEmptyMiles = 0;
         }
         // Legacy `out_of_route_ind` is a boolean flag the calculator
@@ -538,7 +538,7 @@ final class LoadEntryController extends Controller
         // who toggled between types after typing doesn't accidentally
         // get paid for an empty leg the formula doesn't expect.
         // (Mirrors the same one-way-only guard on End Empty.)
-        if ((isset($loadType) ? $loadType : (int) $typeRaw) !== 0) {
+        if ((int) $typeRaw !== 0) {
             $beginEmptyMiles = 0;
         }
         $outOfRouteInd   = $outOfRouteMiles > 0 ? 1 : 0;
