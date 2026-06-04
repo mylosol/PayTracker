@@ -8,6 +8,7 @@ use PayTracker\Auth\PasswordHasher;
 use PayTracker\Database\Connection;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Models\AuditLog;
 use PayTracker\Models\PasswordReset;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
@@ -42,6 +43,7 @@ final class PasswordResetController extends Controller
         private readonly Session $session,
         private readonly PasswordReset $resets,
         private readonly PasswordHasher $hasher,
+        private readonly AuditLog $audit,
     ) {
     }
 
@@ -130,9 +132,37 @@ final class PasswordResetController extends Controller
         );
         $stmt->execute([$hash, $userId]);
 
+        $this->audit->record(
+            AuditLog::ACTION_PASSWORD_RESET_USED,
+            userId: $userId,
+            ipAddress: $this->clientIp(),
+        );
+
         return $this->view('password-reset/complete', [
             'base' => $request->basePath(),
         ]);
+    }
+
+    /**
+     * Best-effort client IP for the audit row on a successful
+     * reset. Mirrors the helper used by AdminUsersController and
+     * AuthService; duplication kept deliberately so this controller
+     * doesn't grow a hard dependency on either.
+     */
+    private function clientIp(): ?string
+    {
+        $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null;
+        if (is_string($xff) && $xff !== '') {
+            $first = trim(explode(',', $xff)[0]);
+            if ($first !== '') {
+                return substr($first, 0, 45);
+            }
+        }
+        $remote = $_SERVER['REMOTE_ADDR'] ?? null;
+        if (is_string($remote) && $remote !== '') {
+            return substr($remote, 0, 45);
+        }
+        return null;
     }
 
     /**

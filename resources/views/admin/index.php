@@ -29,6 +29,17 @@ $fmt = static function ($value): string {
             from this surface for you.
         <?php endif; ?>
     </p>
+    <p>
+        <a href="<?= e($base) ?>/admin/audit"
+           style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+            Audit log &rarr;
+        </a>
+        &nbsp;
+        <a href="<?= e($base) ?>/admin/diagnostics"
+           style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+            System diagnostics &rarr;
+        </a>
+    </p>
 </div>
 
 <?php if ($flash !== null): ?>
@@ -126,9 +137,6 @@ $fmt = static function ($value): string {
 <div class="card">
     <h2>Coming up</h2>
     <ul class="muted">
-        <li><strong>Audit log + system diagnostics</strong> — branch 3 of the
-            admin-panel work. Shows login / logout / ban / role-change events
-            with actor + IP + timestamp, plus the PHP / DB version probe.</li>
         <li><strong>Email-delivered reset links</strong> — branch 4 wires
             Resend so the URL in the flash above is also emailed automatically.</li>
         <li><strong>Role assignment</strong> — branch 5 lets a Super Admin

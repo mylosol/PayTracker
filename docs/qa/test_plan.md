@@ -1191,7 +1191,102 @@ Repeated for `/delete` and `/reset-password` — same opaque refusal.
 
 ---
 
-## 17. Production is untouched
+## 17. Audit log + system diagnostics
+
+The `audit_logs` table is append-only and records every auth
+event (login success, failure with reason, logout) plus every
+admin-panel mutation (ban / unban / delete / password-reset
+issuance + consumption). `/admin/audit` is the searchable
+viewer; `/admin/diagnostics` is the runtime fingerprint +
+last-hour audit counters.
+
+Pre-req: signed in as the QA Super Admin.
+
+### 17a. Audit viewer renders + filters
+
+1. From `/preview/admin` click **Audit log →**.
+
+**Expected:**
+- Heading "Audit log" with the role pill.
+- Filter form: User id, Action (dropdown), IP, Limit, Apply, Clear.
+- Table columns: Time (UTC), User, Action, Reason, IP, Metadata.
+- Most-recent-first ordering.
+
+2. Pick **USER_LOGIN** in the Action dropdown, Apply.
+
+**Expected:** the table narrows to login-success rows only.
+
+3. Click **Clear**.
+
+**Expected:** filters reset, all event types visible again.
+
+### 17b. Diagnostics renders
+
+1. From `/preview/admin` click **System diagnostics →**.
+
+**Expected:**
+- Three cards: **Runtime**, **Audit counters — last hour**,
+  **Recent migrations**.
+- Runtime card shows PHP version (8.3.x on web SAPI), DB
+  version (MariaDB 10.11.6), DB now (UTC), account row count,
+  audit_logs row count.
+- Audit counters card lists the action names that fired in
+  the last 60 minutes with their counts. Failed-login rows
+  highlight red when count > 5.
+- Recent migrations card lists the 10 most recent applied
+  migrations with their UTC timestamps.
+
+### 17c. Login is audited
+
+1. Sign out, sign back in.
+2. Visit `/preview/admin/audit?action=USER_LOGIN`.
+
+**Expected:** the top row's Action cell is **USER_LOGIN** with
+your account user/id, your IP, and a JSON metadata blob
+containing user_agent + accept_language + attempted_handle.
+
+### 17d. Failed login is audited with a reason
+
+1. Sign out. From `/preview/login`, type your QA handle but a
+   WRONG password. Submit.
+
+**Expected:** generic "invalid credentials" error (no leak).
+
+2. Sign in correctly. Visit `/preview/admin/audit?action=USER_LOGIN_FAILED`.
+
+**Expected:**
+- A new row at the top with Action **USER_LOGIN_FAILED**, Reason
+  `bad_password`, your IP, and the QA handle in the metadata
+  blob's `attempted_handle` field.
+
+3. Repeat with a username that doesn't exist (e.g.
+   `not-a-real-handle@example.com`).
+
+**Expected:** row appears with Reason `no_such_user`, user_id NULL.
+
+### 17e. Admin actions are audited
+
+1. From `/admin`, generate a reset link for any non-self test
+   account (Reset PW button).
+
+**Expected:** /admin/audit shows a **PASSWORD_RESET_SENT** row
+with your id as the actor, the target user's id and name in
+the metadata, plus the expiry timestamp.
+
+2. Paste the URL into a private tab, set a new password.
+
+**Expected:** a **PASSWORD_RESET_USED** row appears with the
+target user as the actor (they're the one who consumed it),
+not the admin who minted it.
+
+3. Ban then unban a test account from /admin.
+
+**Expected:** **USER_BANNED** and **USER_UNBANNED** rows
+appear with the actor (you), target user id, and IP recorded.
+
+---
+
+## 18. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -1210,7 +1305,7 @@ Repeated for `/delete` and `/reset-password` — same opaque refusal.
 
 ---
 
-## 18. Security headers are present (optional — engineer-assisted)
+## 19. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

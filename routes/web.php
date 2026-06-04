@@ -10,6 +10,7 @@ use PayTracker\Http\Controllers\LoadEntryController;
 use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
+use PayTracker\Http\Controllers\AdminAuditController;
 use PayTracker\Http\Controllers\AdminUsersController;
 use PayTracker\Http\Controllers\PasswordResetController;
 use PayTracker\Http\Controllers\PayAdminController;
@@ -83,6 +84,10 @@ return static function (Router $router): void {
     $router->post('/admin/users/{id}/unban',            [AdminUsersController::class, 'unban']);
     $router->post('/admin/users/{id}/delete',           [AdminUsersController::class, 'delete']);
     $router->post('/admin/users/{id}/reset-password',   [AdminUsersController::class, 'resetPassword']);
+
+    // Audit + diagnostics — read-only viewers, admin+.
+    $router->get('/admin/audit',         [AdminAuditController::class, 'audit']);
+    $router->get('/admin/diagnostics',   [AdminAuditController::class, 'diagnostics']);
 
     // --- Password reset claim (public, token-gated) -------------------
     // No auth requirement — the user can't log in, that's the whole

@@ -8,6 +8,7 @@ use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
 use PayTracker\Models\Account;
+use PayTracker\Models\AuditLog;
 use PayTracker\Models\PasswordReset;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
@@ -45,6 +46,7 @@ final class AdminUsersController extends Controller
         private readonly Session $session,
         private readonly Account $accounts,
         private readonly PasswordReset $resets,
+        private readonly AuditLog $audit,
     ) {
     }
 
@@ -78,6 +80,15 @@ final class AdminUsersController extends Controller
     {
         return $this->mutate($request, $id, 'ban', function (array $actor, array $target): string {
             $this->accounts->ban((int) $target['id']);
+            $this->audit->record(
+                AuditLog::ACTION_USER_BANNED,
+                userId: (int) $actor['id'],
+                ipAddress: $this->clientIp(),
+                metadata: [
+                    'target_user_id'   => (int) $target['id'],
+                    'target_user_name' => (string) $target['user'],
+                ],
+            );
             return sprintf('Banned %s (id %d).', $target['user'], (int) $target['id']);
         });
     }
@@ -86,6 +97,15 @@ final class AdminUsersController extends Controller
     {
         return $this->mutate($request, $id, 'unban', function (array $actor, array $target): string {
             $this->accounts->unban((int) $target['id']);
+            $this->audit->record(
+                AuditLog::ACTION_USER_UNBANNED,
+                userId: (int) $actor['id'],
+                ipAddress: $this->clientIp(),
+                metadata: [
+                    'target_user_id'   => (int) $target['id'],
+                    'target_user_name' => (string) $target['user'],
+                ],
+            );
             return sprintf('Lifted ban on %s (id %d).', $target['user'], (int) $target['id']);
         });
     }
@@ -94,6 +114,15 @@ final class AdminUsersController extends Controller
     {
         return $this->mutate($request, $id, 'delete', function (array $actor, array $target): string {
             $this->accounts->deleteAccount((int) $target['id']);
+            $this->audit->record(
+                AuditLog::ACTION_USER_DELETED,
+                userId: (int) $actor['id'],
+                ipAddress: $this->clientIp(),
+                metadata: [
+                    'target_user_id'   => (int) $target['id'],
+                    'target_user_name' => (string) $target['user'],
+                ],
+            );
             return sprintf('Deleted %s (id %d).', $target['user'], (int) $target['id']);
         });
     }
@@ -110,6 +139,16 @@ final class AdminUsersController extends Controller
             $url  = rtrim($this->absoluteBase($request), '/')
                   . $request->basePath()
                   . '/password-reset/' . $mint['token'];
+            $this->audit->record(
+                AuditLog::ACTION_PASSWORD_RESET_SENT,
+                userId: (int) $actor['id'],
+                ipAddress: $this->clientIp(),
+                metadata: [
+                    'target_user_id'   => (int) $target['id'],
+                    'target_user_name' => (string) $target['user'],
+                    'expires_at'       => $mint['expiresAt'],
+                ],
+            );
             return sprintf(
                 'Reset link for %s (expires %s UTC): %s',
                 $target['user'],
@@ -189,6 +228,28 @@ final class AdminUsersController extends Controller
         $proto = $https ? 'https' : 'http';
         $host  = is_string($_SERVER['HTTP_HOST'] ?? null) ? (string) $_SERVER['HTTP_HOST'] : 'paytracker.xyz';
         return $proto . '://' . $host;
+    }
+
+    /**
+     * Best-effort client IP for audit rows. Mirrors AuthService::clientIp;
+     * duplicated here rather than promoted to a shared helper because the
+     * surface is small and the dependency hierarchy stays simpler this
+     * way.
+     */
+    private function clientIp(): ?string
+    {
+        $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null;
+        if (is_string($xff) && $xff !== '') {
+            $first = trim(explode(',', $xff)[0]);
+            if ($first !== '') {
+                return substr($first, 0, 45);
+            }
+        }
+        $remote = $_SERVER['REMOTE_ADDR'] ?? null;
+        if (is_string($remote) && $remote !== '') {
+            return substr($remote, 0, 45);
+        }
+        return null;
     }
 
     private function failBack(Request $request, string $message): Response

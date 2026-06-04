@@ -6,6 +6,7 @@ namespace PayTracker\Auth;
 
 use PayTracker\Database\Connection;
 use PayTracker\Models\Account;
+use PayTracker\Models\AuditLog;
 use PayTracker\Security\Session;
 
 /**
@@ -40,6 +41,7 @@ final class AuthService
         private readonly Connection $connection,
         private readonly Session $session,
         private readonly PasswordHasher $hasher,
+        private readonly AuditLog $audit,
     ) {
     }
 
@@ -67,7 +69,20 @@ final class AuthService
         $stmt->execute([$handle, $handle]);
         $row = $stmt->fetch();
 
+        // Audit metadata snapshot: IP + UA + attempted handle. Captured once
+        // so every failure / success path passes the same context block
+        // through to the audit log.
+        $auditMeta = $this->auditContext($handle);
+        $auditIp   = is_string($auditMeta['ip_address'] ?? null) ? (string) $auditMeta['ip_address'] : null;
+
         if (! is_array($row) || ! is_string($row['password_hash'] ?? null) || $row['password_hash'] === '') {
+            $this->audit->record(
+                AuditLog::ACTION_USER_LOGIN_FAILED,
+                userId: null,
+                reason: AuditLog::REASON_NO_SUCH_USER,
+                ipAddress: $auditIp,
+                metadata: $auditMeta,
+            );
             $this->equalizeFailureLatency();
             return null;
         }
@@ -78,6 +93,13 @@ final class AuthService
         // tells an attacker which accounts exist + are suspended). The
         // admin panel surfaces ban state to admins.
         if (is_string($row['banned_at'] ?? null) && $row['banned_at'] !== '') {
+            $this->audit->record(
+                AuditLog::ACTION_USER_LOGIN_FAILED,
+                userId: (int) $row['id'],
+                reason: AuditLog::REASON_BANNED,
+                ipAddress: $auditIp,
+                metadata: $auditMeta,
+            );
             $this->equalizeFailureLatency();
             return null;
         }
@@ -86,12 +108,26 @@ final class AuthService
         // login attempt while locked — that would let an attacker extend
         // the lockout forever and effectively DOS the account.
         if ($this->isLocked($row)) {
+            $this->audit->record(
+                AuditLog::ACTION_USER_LOGIN_FAILED,
+                userId: (int) $row['id'],
+                reason: AuditLog::REASON_LOCKED,
+                ipAddress: $auditIp,
+                metadata: $auditMeta,
+            );
             $this->equalizeFailureLatency();
             return null;
         }
 
         if (! $this->hasher->verify($password, $row['password_hash'])) {
             $this->recordFailure((int) $row['id'], (int) $row['failed_login_count']);
+            $this->audit->record(
+                AuditLog::ACTION_USER_LOGIN_FAILED,
+                userId: (int) $row['id'],
+                reason: AuditLog::REASON_BAD_PASSWORD,
+                ipAddress: $auditIp,
+                metadata: $auditMeta,
+            );
             $this->equalizeFailureLatency();
             return null;
         }
@@ -99,6 +135,12 @@ final class AuthService
         // Success. Reset counters, persist the new hash if the cost moved,
         // rotate the session id, and store the identity.
         $this->recordSuccess((int) $row['id']);
+        $this->audit->record(
+            AuditLog::ACTION_USER_LOGIN,
+            userId: (int) $row['id'],
+            ipAddress: $auditIp,
+            metadata: $auditMeta,
+        );
         if ($this->hasher->needsRehash($row['password_hash'])) {
             $newHash = $this->hasher->hash($password);
             $upd     = $pdo->prepare('UPDATE `account` SET password_hash = :h WHERE id = :id');
@@ -117,6 +159,17 @@ final class AuthService
     public function logout(): void
     {
         $this->session->start();
+        // Capture identity BEFORE we wipe the session, so the audit
+        // row attributes the logout to the right account.
+        $idForAudit = $this->session->get('account_id');
+        $idForAudit = is_int($idForAudit) && $idForAudit > 0 ? $idForAudit : null;
+        if ($idForAudit !== null) {
+            $this->audit->record(
+                AuditLog::ACTION_USER_LOGOUT,
+                userId: $idForAudit,
+                ipAddress: $this->clientIp(),
+            );
+        }
         $_SESSION = [];
         if (PHP_SAPI !== 'cli' && session_status() === PHP_SESSION_ACTIVE) {
             $params = session_get_cookie_params();
@@ -228,5 +281,52 @@ final class AuthService
     private function equalizeFailureLatency(): void
     {
         usleep(random_int(150_000, 250_000)); // 150–250 ms
+    }
+
+    /**
+     * Best-effort client IP. Reads X-Forwarded-For first (we trust the
+     * upstream DreamHost proxy chain), falling back to REMOTE_ADDR.
+     * Returns null in CLI contexts where REMOTE_ADDR is absent.
+     *
+     * NOTE: X-Forwarded-For can be a comma-separated list when there
+     * are multiple proxies. We take the leftmost (original client) value.
+     */
+    private function clientIp(): ?string
+    {
+        $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null;
+        if (is_string($xff) && $xff !== '') {
+            $first = trim(explode(',', $xff)[0]);
+            if ($first !== '') {
+                return substr($first, 0, 45);
+            }
+        }
+        $remote = $_SERVER['REMOTE_ADDR'] ?? null;
+        if (is_string($remote) && $remote !== '') {
+            return substr($remote, 0, 45);
+        }
+        return null;
+    }
+
+    /**
+     * Context block recorded alongside auth events. Captures the
+     * fingerprint info a security investigation actually needs:
+     * IP, user-agent, and the typed handle (so failed-login
+     * forensics can correlate "what was being tried" across rows
+     * where user_id is NULL).
+     *
+     * @return array<string,mixed>
+     */
+    private function auditContext(string $attemptedHandle): array
+    {
+        return [
+            'ip_address'        => $this->clientIp(),
+            'user_agent'        => isset($_SERVER['HTTP_USER_AGENT']) && is_string($_SERVER['HTTP_USER_AGENT'])
+                ? substr($_SERVER['HTTP_USER_AGENT'], 0, 255)
+                : null,
+            'accept_language'   => isset($_SERVER['HTTP_ACCEPT_LANGUAGE']) && is_string($_SERVER['HTTP_ACCEPT_LANGUAGE'])
+                ? substr($_SERVER['HTTP_ACCEPT_LANGUAGE'], 0, 120)
+                : null,
+            'attempted_handle'  => substr($attemptedHandle, 0, 120),
+        ];
     }
 }
