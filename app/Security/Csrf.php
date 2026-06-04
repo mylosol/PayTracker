@@ -20,6 +20,16 @@ final class Csrf
 
     public function token(): string
     {
+        // ALWAYS start the session before touching $_SESSION. The
+        // Session helper writes directly to $_SESSION; without an
+        // active session PHP discards the data at request end. This
+        // bit a regression in the password-reset claim flow where
+        // show() didn't start the session before calling token() and
+        // the persisted token was lost, so submit()'s verify() always
+        // failed. Belt-and-suspenders here so no caller has to
+        // remember.
+        $this->session->start();
+
         $token = $this->session->get('_csrf');
         if (! is_string($token) || $token === '') {
             $token = bin2hex(random_bytes(32));
@@ -30,6 +40,8 @@ final class Csrf
 
     public function verify(?string $submitted): bool
     {
+        $this->session->start();
+
         $expected = $this->session->get('_csrf');
         if (! is_string($expected) || ! is_string($submitted)) {
             return false;

@@ -53,6 +53,14 @@ final class PasswordResetController extends Controller
      */
     public function show(Request $request, string $token): Response
     {
+        // CRITICAL: start the session BEFORE touching CSRF or flash.
+        // Session::put writes to $_SESSION directly; without an
+        // active session PHP never writes the data to the session
+        // store, so the token (and any flash) is lost between GET
+        // and POST. Symptom: form submits silently, page reloads to
+        // the same URL with no visible error and no password change.
+        $this->session->start();
+
         $userId = $this->resets->findActiveUserIdFor($this->normalize($token));
         if ($userId === null) {
             return $this->view('password-reset/expired', [
