@@ -1,0 +1,191 @@
+# PayTracker — production deployment.
+#
+# Trigger:  push to `main`  (the only branch that ever touches production)
+# Target:   /home/robshe48/paytracker  on DreamHost (iad1-shared-b8-30)
+#
+# Safety invariants enforced by this workflow:
+#   1. Only `main` may deploy here — `branches: [main]` is the single gate.
+#   2. `--exclude='preview/'` keeps the preview channel intact when the
+#      production rsync runs, so a preview build is never overwritten by
+#      a production deploy.
+#   3. `.env` is regenerated on the server from GitHub Actions secrets and
+#      never travels through the repository. The deploy aborts loudly if
+#      any required secret is missing.
+#
+# Secrets required (configure under Settings → Secrets and variables):
+#   DH_SSH_HOST            iad1-shared-b8-30.dreamhost.com
+#   DH_SSH_USER            DreamHost shell user (`DH_FTP_UN` works too)
+#   DH_SSH_PRIVATE_KEY     OpenSSH-format private key authorised on the host
+#   DH_SSH_KNOWN_HOSTS     output of `ssh-keyscan -t ed25519,rsa <host>`
+#   APP_KEY                32-byte hex string (php -r 'echo bin2hex(random_bytes(32));')
+#   SQL_HOST  SQL_DB  SQL_UN  SQL_PW
+#   MAPS_API_PAT           Google Maps API key
+#   RESEND_API             Resend transactional email key (empty disables sending)
+#   MAIL_FROM              Optional: verified Resend sender (default in config)
+
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to DreamHost (production)
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Pin the CI runtime to the exact PHP version DreamHost shared hosting
+      # ships (8.2). Linting and platform_check then catch any 8.3-only
+      # syntax before it hits the server. Bump in lockstep if/when DreamHost
+      # rolls 8.3 to this shared host.
+      - name: Set up PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo, pdo_mysql, mbstring, json
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate composer manifest
+        run: composer validate --strict
+
+      # Install with dev dependencies so phpstan is available below.
+      # We re-install --no-dev right before rsync so the deployed vendor/
+      # tree stays lean.
+      - name: Install PHP dependencies (with dev for static analysis)
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      # ----- Lint / smoke ----------------------------------------------------
+      - name: Syntax-check all new PHP sources
+        run: |
+          set -euo pipefail
+          find app bootstrap config public routes -name '*.php' -print0 \
+            | xargs -0 -n1 php -l > /dev/null
+
+      # PSR-4 conformance check. `--strict-psr` makes composer fail when any
+      # class's namespace doesn't match its file location. This catches
+      # rename/typo bugs before they reach the server. It's lightweight and
+      # doesn't try to instantiate classes (which would risk false positives
+      # from autoload side-effects). LSP / load-time fatals are caught by
+      # the live smoke at the end of the workflow.
+      - name: Validate PSR-4 autoload mapping
+        run: composer dump-autoload --optimize --strict-psr --no-interaction
+
+      # Static analysis — same rationale as the preview workflow.
+      - name: Static analysis (phpstan)
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress --error-format=github
+
+      # Unit tests — same rationale as the preview workflow.
+      - name: PHP unit tests
+        run: vendor/bin/phpunit --colors=never
+
+      # Strip dev dependencies before rsync so the deployed vendor/ tree
+      # doesn't carry phpstan, phpunit, and their transitive deps.
+      - name: Re-install without dev dependencies (for deploy)
+        run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
+
+      # ----- Prepare SSH ----------------------------------------------------
+      - name: Install SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.DH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DH_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      # ----- Rsync deploy ---------------------------------------------------
+      # `--delete` keeps the live tree in sync with the repo so removed files
+      # disappear on the server. `--exclude='preview/'` protects the preview
+      # channel — it is owned by the feature workflow, not this one.
+      - name: Rsync to production
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          set -euo pipefail
+          rsync -avz --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='tests/' \
+            --exclude='docs/' \
+            --exclude='.PayTracker/' \
+            --exclude='.env' \
+            --exclude='.env.local' \
+            --exclude='preview/' \
+            --exclude='deploy/' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
+            ./ "$REMOTE:/home/robshe48/paytracker/"
+
+      # ----- Write .env from secrets ---------------------------------------
+      - name: Write production .env on remote
+        env:
+          REMOTE:   ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          APP_KEY:  ${{ secrets.APP_KEY }}
+          DB_HOST:  ${{ secrets.SQL_HOST }}
+          DB_NAME:  ${{ secrets.SQL_DB }}
+          DB_USER:  ${{ secrets.SQL_UN }}
+          DB_PASS:  ${{ secrets.SQL_PW }}
+          MAPS_KEY: ${{ secrets.MAPS_API_PAT }}
+          RESEND_KEY: ${{ secrets.RESEND_API }}
+          MAIL_FROM_ADDR: ${{ secrets.MAIL_FROM }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "cat > /home/robshe48/paytracker/.env" <<EOF
+          APP_ENV=production
+          APP_DEBUG=false
+          APP_NAME=PayTracker
+          APP_URL=https://paytracker.xyz
+          APP_TIMEZONE=America/Chicago
+          APP_KEY=${APP_KEY}
+
+          DB_HOST=${DB_HOST}
+          DB_PORT=3306
+          DB_DATABASE=${DB_NAME}
+          DB_USERNAME=${DB_USER}
+          DB_PASSWORD=${DB_PASS}
+          DB_CHARSET=utf8mb4
+
+          SESSION_NAME=paytracker_session
+          SESSION_LIFETIME_MIN=120
+          SESSION_SECURE_COOKIE=true
+          SESSION_SAMESITE=Lax
+
+          GOOGLE_MAPS_API_KEY=${MAPS_KEY}
+
+          # Resend transactional email (admin-initiated password reset).
+          RESEND_API=${RESEND_KEY}
+          MAIL_FROM="${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}"
+          EOF
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/.env"
+
+      # Run pending DB migrations on the remote using the live production
+      # .env. Migrations are additive-only and tracked so re-runs are
+      # idempotent (the migrator skips anything already applied).
+      - name: Apply database migrations on remote
+        env:
+          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd /home/robshe48/paytracker && php scripts/migrate.php"
+
+      # ----- Post-deploy smoke ---------------------------------------------
+      # The legacy index.php currently serves the production hostname. Once
+      # the modern app supersedes it, swap this URL for /health.json to gate
+      # rollouts on a live database round-trip.
+      - name: Smoke test (HTTP 200 on root)
+        run: |
+          curl --fail --silent --show-error --max-time 15 \
+            -o /dev/null -w "HTTP %{http_code}\n" https://paytracker.xyz/

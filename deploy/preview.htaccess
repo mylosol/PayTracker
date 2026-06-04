@@ -1,0 +1,46 @@
+# Preview-channel root .htaccess.
+#
+# Placed by the GitHub Actions preview-deploy workflow at the deploy root
+# (e.g. /home/robshe48/paytracker/preview/.htaccess). It routes every URL
+# under /preview/ that doesn't map to a real file or directory through the
+# modern front controller in public/index.php.
+#
+# This file is intentionally NOT named `.htaccess` in the repository to keep
+# it inert during local development — the workflow renames it on deploy.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Block direct browser access to the application source tree. Only the
+    # `public/` directory is meant to be web-reachable; everything else is
+    # framework guts.
+    #
+    # NB: <Directory> / <DirectoryMatch> blocks are server-config-only in
+    # Apache and produce `<DirectoryMatch not allowed here` 500s when used
+    # in .htaccess. We achieve the same effect with a RewriteRule that
+    # returns 403 (the `[F]` flag) for any URL whose first path segment
+    # names one of the protected directories.
+    RewriteRule ^(app|bootstrap|config|routes|resources|storage|tests|vendor|deploy|docs)(/|$) - [F,L]
+
+    # Static-asset passthrough — but ONLY for paths under public/. The
+    # preview deploy intentionally also carries the legacy code tree (for
+    # parity with the production deploy), so without this scoping a
+    # request for /preview/ would land on the legacy index.php instead
+    # of the modern front controller. Scoping to ^public/ is what
+    # isolates the preview channel from legacy code.
+    RewriteCond %{REQUEST_URI} ^/.+/public/
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else — including the preview root — goes through the
+    # modern front controller.
+    RewriteRule ^ public/index.php [L,QSA]
+</IfModule>
+
+# Belt-and-braces denial of dotfile access at the preview root (.env, .git,
+# .htaccess itself, etc.). `Require` is .htaccess-legal — only `<Directory>`
+# / `<DirectoryMatch>` are server-config-only.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
