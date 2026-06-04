@@ -12,6 +12,7 @@ use PayTracker\Models\AuditLog;
 use PayTracker\Models\PasswordReset;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
+use PayTracker\Services\MailService;
 
 /**
  * AdminUsersController — the user-management surface of the
@@ -47,6 +48,7 @@ final class AdminUsersController extends Controller
         private readonly Account $accounts,
         private readonly PasswordReset $resets,
         private readonly AuditLog $audit,
+        private readonly MailService $mail,
     ) {
     }
 
@@ -139,6 +141,27 @@ final class AdminUsersController extends Controller
             $url  = rtrim($this->absoluteBase($request), '/')
                   . $request->basePath()
                   . '/password-reset/' . $mint['token'];
+
+            // Attempt email delivery via Resend. The flash banner still
+            // shows the URL so a delivery failure doesn't strand the
+            // admin -- they can always copy/paste manually.
+            $emailStatus = 'no email on file';
+            $targetEmail = is_string($target['email'] ?? null) ? (string) $target['email'] : '';
+            if ($targetEmail !== '') {
+                if (! $this->mail->isConfigured()) {
+                    $emailStatus = 'Resend not configured';
+                } else {
+                    $messageId = $this->mail->send(
+                        $targetEmail,
+                        'Reset your PayTracker password',
+                        $this->buildResetEmailHtml((string) $target['user'], $url, $mint['expiresAt'])
+                    );
+                    $emailStatus = $messageId !== null
+                        ? sprintf('emailed to %s (msg %s)', $targetEmail, substr($messageId, 0, 12))
+                        : sprintf('email to %s FAILED — see Resend logs', $targetEmail);
+                }
+            }
+
             $this->audit->record(
                 AuditLog::ACTION_PASSWORD_RESET_SENT,
                 userId: (int) $actor['id'],
@@ -147,15 +170,54 @@ final class AdminUsersController extends Controller
                     'target_user_id'   => (int) $target['id'],
                     'target_user_name' => (string) $target['user'],
                     'expires_at'       => $mint['expiresAt'],
+                    'email_status'     => $emailStatus,
                 ],
             );
             return sprintf(
-                'Reset link for %s (expires %s UTC): %s',
+                'Reset link for %s (expires %s UTC, %s): %s',
                 $target['user'],
                 $mint['expiresAt'],
+                $emailStatus,
                 $url
             );
         });
+    }
+
+    /**
+     * Build the HTML body for the reset-password email. Kept minimal:
+     * an inline-styled card with the link, expiry note, and a
+     * "didn't request this?" footer. No external images / CSS so
+     * the message renders the same in every client.
+     */
+    private function buildResetEmailHtml(string $userName, string $url, string $expiresAt): string
+    {
+        $safeUser = htmlspecialchars($userName, ENT_QUOTES, 'UTF-8');
+        $safeUrl  = htmlspecialchars($url,      ENT_QUOTES, 'UTF-8');
+        $safeExp  = htmlspecialchars($expiresAt, ENT_QUOTES, 'UTF-8');
+        return <<<HTML
+<div style="font:16px/1.5 -apple-system,Segoe UI,sans-serif;color:#101418;max-width:560px;">
+    <p>Hi {$safeUser},</p>
+    <p>An administrator has issued a password reset link for your
+       PayTracker account. Click the button below to set a new password:</p>
+    <p style="margin:1.5rem 0;">
+        <a href="{$safeUrl}"
+           style="display:inline-block;background:#1f6feb;color:#fff;text-decoration:none;padding:.6rem 1.4rem;border-radius:6px;">
+            Set a new password
+        </a>
+    </p>
+    <p style="color:#5a6470;font-size:14px;">
+        The link expires at <strong>{$safeExp} UTC</strong> and can
+        only be used once. If you didn't request this, you can safely
+        ignore the message &mdash; the link won't grant access to anyone
+        who doesn't click it before it expires.
+    </p>
+    <p style="color:#5a6470;font-size:14px;">
+        Trouble with the button? Copy and paste this URL into your
+        browser:<br>
+        <span style="word-break:break-all;">{$safeUrl}</span>
+    </p>
+</div>
+HTML;
     }
 
     /**

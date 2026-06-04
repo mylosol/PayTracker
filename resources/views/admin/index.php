@@ -137,10 +137,9 @@ $fmt = static function ($value): string {
 <div class="card">
     <h2>Coming up</h2>
     <ul class="muted">
-        <li><strong>Email-delivered reset links</strong> — branch 4 wires
-            Resend so the URL in the flash above is also emailed automatically.</li>
-        <li><strong>Role assignment</strong> — branch 5 lets a Super Admin
-            promote / demote other accounts. Hidden until then.</li>
+        <li><strong>Role assignment</strong> — a future branch lets a Super
+            Admin promote / demote other accounts directly from this surface.
+            Hidden until then.</li>
     </ul>
     <p>
         <a href="<?= e($base) ?>/">&larr; Back home</a>

@@ -20,6 +20,8 @@
 #   APP_KEY                32-byte hex string (php -r 'echo bin2hex(random_bytes(32));')
 #   SQL_HOST  SQL_DB  SQL_UN  SQL_PW
 #   MAPS_API_PAT           Google Maps API key
+#   RESEND_API             Resend transactional email key (empty disables sending)
+#   MAIL_FROM              Optional: verified Resend sender (default in config)
 
 name: Deploy production
 
@@ -137,6 +139,8 @@ jobs:
           DB_USER:  ${{ secrets.SQL_UN }}
           DB_PASS:  ${{ secrets.SQL_PW }}
           MAPS_KEY: ${{ secrets.MAPS_API_PAT }}
+          RESEND_KEY: ${{ secrets.RESEND_API }}
+          MAIL_FROM_ADDR: ${{ secrets.MAIL_FROM }}
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "cat > /home/robshe48/paytracker/.env" <<EOF
@@ -160,6 +164,10 @@ jobs:
           SESSION_SAMESITE=Lax
 
           GOOGLE_MAPS_API_KEY=${MAPS_KEY}
+
+          # Resend transactional email (admin-initiated password reset).
+          RESEND_API=${RESEND_KEY}
+          MAIL_FROM=${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}
           EOF
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/.env"
 

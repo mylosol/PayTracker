@@ -17,6 +17,8 @@
 # Secrets required (same set as production):
 #   DH_SSH_HOST  DH_SSH_USER  DH_SSH_PRIVATE_KEY  DH_SSH_KNOWN_HOSTS
 #   APP_KEY  SQL_HOST  SQL_DB  SQL_UN  SQL_PW  MAPS_API_PAT
+#   RESEND_API   (transactional email; empty disables sending)
+#   MAIL_FROM    (optional; verified Resend sender, defaults to PayTracker <noreply@paytracker.xyz>)
 #
 # Optional (Playwright E2E tests skip gracefully when unset):
 #   QA_TEST_USER       login handle for the seeded preview test account
@@ -167,6 +169,8 @@ jobs:
           DB_USER:   ${{ secrets.SQL_UN }}
           DB_PASS:   ${{ secrets.SQL_PW }}
           MAPS_KEY:  ${{ secrets.MAPS_API_PAT }}
+          RESEND_KEY: ${{ secrets.RESEND_API }}
+          MAIL_FROM_ADDR: ${{ secrets.MAIL_FROM }}
           BRANCH:    ${{ github.ref_name }}
           COMMIT:    ${{ github.sha }}
         run: |
@@ -196,6 +200,14 @@ jobs:
           SESSION_SAMESITE=Lax
 
           GOOGLE_MAPS_API_KEY=${MAPS_KEY}
+
+          # Resend transactional email (admin-initiated password reset).
+          # Empty RESEND_API disables sending; the admin panel still shows
+          # the reset URL in the flash banner so the action keeps working.
+          # MAIL_FROM defaults in config to a verified-domain sender, but
+          # the deploy secret overrides for env-specific addresses.
+          RESEND_API=${RESEND_KEY}
+          MAIL_FROM=${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}
 
           # Build provenance — surfaced on /health for traceability.
           BUILD_BRANCH=${BRANCH}

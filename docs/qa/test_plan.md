@@ -1118,14 +1118,24 @@ Pre-req: signed in as the QA Super Admin account.
   is mirrored in the UI.
 - Other rows show a **Reset PW**, **Ban**, and **Delete** button.
 
-### 16c. Reset link is generated
+### 16c. Reset link is generated AND emailed
 
-1. Find a non-self test account. Click **Reset PW**.
+1. Find a non-self test account that has an email on file. Click **Reset PW**.
 
 **Expected:**
-- A green flash banner appears at the top of `/admin` containing:
-  `Reset link for <user> (expires YYYY-MM-DD HH:MM:SS UTC): https://paytracker.xyz/preview/password-reset/<64-hex-chars>`
+- A green flash banner at the top of `/admin` reading:
+  `Reset link for <user> (expires YYYY-MM-DD HH:MM:SS UTC, emailed to <email> (msg <id>)): https://paytracker.xyz/preview/password-reset/<64-hex-chars>`
 - The URL is copyable.
+- An email arrives at the target's inbox (subject "Reset your
+  PayTracker password") with a "Set a new password" button
+  pointing at the same URL. **Check the Resend dashboard logs
+  if the message doesn't arrive within a minute.**
+
+When the target has NO email on file the flash reads
+`... (no email on file): <url>` and only the in-flash URL is
+available. When Resend itself returns a non-2xx, the flash reads
+`... (email to <email> FAILED — see Resend logs): <url>` so an
+admin knows to investigate without losing the URL.
 
 ### 16d. Reset link is single-use and time-bound
 
