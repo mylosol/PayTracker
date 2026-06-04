@@ -227,6 +227,85 @@ final class AdminUsersController extends Controller
         });
     }
 
+    /**
+     * GET /admin/users/{id}/edit — render the basics-edit form for a
+     * single account (username + email).
+     */
+    public function edit(Request $request, string $id): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
+        }
+        if (! ctype_digit($id) || (int) $id <= 0) {
+            $this->session->start();
+            $this->session->put('_flash', 'Invalid user id.');
+            return $this->redirect($request->basePath() . '/admin');
+        }
+        $target = $this->accounts->findById((int) $id);
+        if ($target === null) {
+            $this->session->start();
+            $this->session->put('_flash', sprintf('No account with id %d.', (int) $id));
+            return $this->redirect($request->basePath() . '/admin');
+        }
+
+        $this->session->start();
+        return $this->view('admin/edit-user', [
+            'base'      => $request->basePath(),
+            'csrfToken' => $this->csrf->token(),
+            'actor'     => $account,
+            'target'    => $target,
+            'flash'     => $this->popFlash(),
+        ]);
+    }
+
+    /**
+     * POST /admin/users/{id}/edit — update the basics (user + email)
+     * for the target account. Reuses Account::updateBasics so the same
+     * validation + uniqueness checks the user's own /profile page runs
+     * also apply here.
+     */
+    public function update(Request $request, string $id): Response
+    {
+        return $this->mutate($request, $id, 'edit', function (array $actor, array $target) use ($request): string {
+            $userRaw  = trim((string) $request->input('username', ''));
+            $emailRaw = trim((string) $request->input('email', ''));
+            $previousUser  = (string) ($target['user']  ?? '');
+            $previousEmail = is_string($target['email'] ?? null) ? (string) $target['email'] : '';
+
+            // updateBasics throws on validation / uniqueness errors;
+            // the mutate() shell catches and surfaces them as a flash.
+            $this->accounts->updateBasics(
+                (int) $target['id'],
+                $userRaw,
+                $emailRaw === '' ? null : $emailRaw
+            );
+
+            $this->audit->record(
+                AuditLog::ACTION_USER_EDITED,
+                userId: (int) $actor['id'],
+                ipAddress: $this->clientIp(),
+                metadata: [
+                    'target_user_id'    => (int) $target['id'],
+                    'previous_user'     => $previousUser,
+                    'new_user'          => $userRaw,
+                    'previous_email'    => $previousEmail,
+                    'new_email'         => $emailRaw,
+                ],
+            );
+
+            return sprintf(
+                'Updated user %d: username=%s, email=%s.',
+                (int) $target['id'],
+                $userRaw,
+                $emailRaw === '' ? '(unset)' : $emailRaw
+            );
+        });
+    }
+
     public function delete(Request $request, string $id): Response
     {
         return $this->mutate($request, $id, 'delete', function (array $actor, array $target): string {

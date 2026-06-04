@@ -912,12 +912,52 @@ Visit `https://paytracker.xyz/preview/profile`.
 
 **Expected:**
 - Heading "Profile" with the signed-in user + driver id.
+- **Username** input pre-populated with the current `account.user`
+  value. Pattern: 3-32 characters, letters/digits/dot/underscore/
+  dash, no spaces or `@`.
+- **Email** input pre-populated with the current `account.email`
+  value (after migration `2026_06_04_001`, this is backfilled from
+  `user` for every legacy account whose handle looked like an
+  email). Optional; leave blank to disable outbound mail.
 - **Hire date** is an optional `<input type="date">` with `max=today`.
 - Below the input is a "Current band: …" preview that maps the
   selected hire date to a tenure band (`6 / 12 / 24 / 60 / 108 / 168 / max`).
 - **Default shift** is a Day / Night radio pair.
 - **Pay week starts on** is a `<select>` of Sunday through Saturday.
 - A hidden `_csrf` input is present.
+
+### 13b.1. Legacy email-shaped usernames keep working
+
+Legacy QA accounts have `user="mylosol@gmail.com"` (handle equals
+email). The `@` character violates the new USER_PATTERN, but a
+grandfather clause in `Account::updateBasics` skips the pattern
+check when the submitted username matches the EXISTING one.
+
+1. Visit `/preview/profile`. Don't change the Username input
+   (leave it at the legacy email-shaped value). Edit only the
+   shift radio. Save.
+
+**Expected:** profile saves successfully — the grandfather
+clause accepts the unchanged legacy handle even though it has
+an `@`. Picking a new username at this point would require
+the modern pattern, so once you change it you can't change
+it back to an email-shaped value via this UI.
+
+### 13b.2. New username must match the modern pattern
+
+1. Change the Username to `bad name` (with a space). Save.
+
+**Expected:** error flash:
+`Username must be 3-32 characters, letters/digits/dot/underscore/dash only (no spaces or @).`
+
+2. Change Email to `not an email`. Save.
+
+**Expected:** error flash: `Email is not a valid address.`
+
+3. Change Username to a value already held by another account.
+   Save.
+
+**Expected:** error flash: `That username is already taken.`
 
 ### 13c. Invalid hire date is rejected
 
@@ -1213,6 +1253,27 @@ button returns to `/login`.
 - The deleted account can no longer sign in (login still
   shows the generic "wrong credentials" message — we do not
   reveal "no such account").
+
+### 16g-edit. Admin can edit a user's username + email
+
+The Actions column gains an **Edit** button on every non-self row.
+
+1. Pick a non-self test account. Click **Edit**.
+
+**Expected:**
+- New page at `/admin/users/<id>/edit` with a form pre-populated
+  from the target's current values: username + email inputs.
+- Submitting unchanged values is a no-op save with flash
+  `Updated user N: username=X, email=Y.`
+- Validation errors (bad pattern / invalid email / taken
+  username / taken email) surface as red flashes; the form
+  preserves the typed values.
+- The change is audited as `USER_EDITED` with previous + new
+  values for both fields in the metadata blob.
+
+The role-assignment / ban / delete / reset-password actions
+stay on the list view — only the basics (username + email)
+moved to the dedicated edit page.
 
 ### 16g.0. Bulk-clean legacy spam (admin-led, SSH)
 

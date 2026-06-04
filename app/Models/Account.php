@@ -380,6 +380,89 @@ final class Account extends Model
      * those are policy concerns the controller owns. This method is
      * just the underlying mutation.
      */
+    /**
+     * Charset / shape constraint for a username (the `user` column).
+     * Letters, digits, dot, underscore, dash; 3-32 chars. Crucially
+     * does NOT allow '@' so a typed-in username can never look like
+     * an email -- the two columns stay semantically distinct.
+     */
+    public const USER_PATTERN = '/^[A-Za-z0-9._-]{3,32}$/';
+
+    /**
+     * Update the login handle + email pair for the given account.
+     * Both fields are validated server-side: username against
+     * USER_PATTERN, email against PHP's FILTER_VALIDATE_EMAIL.
+     * Empty / null email is allowed (it just disables outbound
+     * password-reset email until the user sets one).
+     *
+     * Uniqueness is checked against OTHER accounts before the
+     * UPDATE. We rely on the database's UNIQUE index on email and
+     * an application-level check on user (the legacy `user` column
+     * has no unique constraint and adding one would fail if any
+     * duplicates remain from spam-bot signups).
+     *
+     * @throws \InvalidArgumentException on validation failure
+     * @throws \RuntimeException on uniqueness collision
+     */
+    public function updateBasics(int $accountId, string $user, ?string $email): void
+    {
+        $user  = trim($user);
+        $email = $email !== null ? trim($email) : null;
+        if ($email === '') {
+            $email = null;
+        }
+
+        // Grandfather clause: legacy accounts have their email stored
+        // in the `user` column (e.g. "mylosol@gmail.com"), which
+        // doesn't match USER_PATTERN. Forcing them to pick a new
+        // username before saving anything else would lock them out
+        // of changing hire_date / shift / etc. on every legacy login.
+        // So: only enforce USER_PATTERN when the username is being
+        // CHANGED. A no-op save (current value resubmitted) skips
+        // the check. Picking a fresh value DOES validate against
+        // the modern pattern, so we forward-only migrate the column.
+        $current = $this->prepared(
+            'SELECT user FROM ' . self::ident(self::$table) . ' WHERE id = ? LIMIT 1',
+            [$accountId]
+        )->fetch();
+        $currentUser = is_array($current) && is_string($current['user'] ?? null) ? (string) $current['user'] : '';
+
+        if ($user !== $currentUser && preg_match(self::USER_PATTERN, $user) !== 1) {
+            throw new \InvalidArgumentException(
+                'Username must be 3-32 characters, letters/digits/dot/underscore/dash only (no spaces or @).'
+            );
+        }
+        if ($user === '') {
+            throw new \InvalidArgumentException('Username is required.');
+        }
+        if ($email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+            throw new \InvalidArgumentException('Email is not a valid address.');
+        }
+
+        // Application-level uniqueness on `user` (no DB constraint —
+        // legacy table has dupes from spam-bot signups; we enforce
+        // forward-only).
+        $check = $this->prepared(
+            'SELECT id FROM ' . self::ident(self::$table) . ' WHERE user = ? AND id <> ? LIMIT 1',
+            [$user, $accountId]
+        )->fetch();
+        if (is_array($check) && (int) ($check['id'] ?? 0) > 0) {
+            throw new \RuntimeException('That username is already taken.');
+        }
+        if ($email !== null) {
+            $check = $this->prepared(
+                'SELECT id FROM ' . self::ident(self::$table) . ' WHERE email = ? AND id <> ? LIMIT 1',
+                [$email, $accountId]
+            )->fetch();
+            if (is_array($check) && (int) ($check['id'] ?? 0) > 0) {
+                throw new \RuntimeException('That email is already taken.');
+            }
+        }
+
+        $sql = 'UPDATE ' . self::ident(self::$table) . ' SET user = ?, email = ? WHERE id = ?';
+        $this->prepared($sql, [$user, $email, $accountId]);
+    }
+
     public function setRole(int $accountId, string $role): void
     {
         if (! in_array($role, self::ROLES, true)) {

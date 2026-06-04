@@ -3,6 +3,8 @@
  * @var string                  $base
  * @var string                  $csrfToken
  * @var array<string,mixed>     $driver
+ * @var string                  $username         3-32 chars [A-Za-z0-9._-]
+ * @var string                  $email            full address or empty
  * @var string                  $hireDate         YYYY-MM-DD or empty
  * @var string                  $shift            'day' | 'night'
  * @var string                  $payWeekStartDay  'sun' | 'mon' | ... | 'sat'
@@ -53,6 +55,31 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
 
     <form method="post" action="<?= e($base) ?>/profile" novalidate autocomplete="off">
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+
+        <p>
+            <label for="username"><strong>Username</strong></label><br>
+            <input id="username" name="username" type="text" required
+                   value="<?= e($username) ?>" pattern="[A-Za-z0-9._\-]{3,32}"
+                   minlength="3" maxlength="32" autocomplete="username"
+                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
+            <small class="muted">
+                3-32 characters &mdash; letters, digits, dot, underscore, dash.
+                No spaces or <code>@</code> (that's what Email is for).
+                Used to sign in.
+            </small>
+        </p>
+
+        <p>
+            <label for="email"><strong>Email</strong> <span class="muted">(optional, used for password reset)</span></label><br>
+            <input id="email" name="email" type="email"
+                   value="<?= e($email) ?>" maxlength="255" autocomplete="email"
+                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
+            <small class="muted">
+                Where admin-initiated password-reset links land.
+                Leave blank if you'd rather sign in by username only &mdash;
+                you'll need an admin to set a new password if you forget it.
+            </small>
+        </p>
 
         <p>
             <label for="hire_date"><strong>Hire date</strong> <span class="muted">(optional)</span></label><br>

@@ -80,6 +80,8 @@ return static function (Router $router): void {
     // 1h single-use password reset link. Role assignment lives behind
     // a Super-Admin-only surface that ships in a follow-up branch.
     $router->get('/admin',                              [AdminUsersController::class, 'index']);
+    $router->get('/admin/users/{id}/edit',              [AdminUsersController::class, 'edit']);
+    $router->post('/admin/users/{id}/edit',             [AdminUsersController::class, 'update']);
     $router->post('/admin/users/{id}/ban',              [AdminUsersController::class, 'ban']);
     $router->post('/admin/users/{id}/unban',            [AdminUsersController::class, 'unban']);
     $router->post('/admin/users/{id}/delete',           [AdminUsersController::class, 'delete']);

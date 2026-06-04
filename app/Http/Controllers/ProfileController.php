@@ -54,6 +54,8 @@ final class ProfileController extends Controller
             'base'             => $request->basePath(),
             'csrfToken'        => $this->csrf->token(),
             'driver'           => $account,
+            'username'         => is_string($account['user']  ?? null) ? (string) $account['user']  : '',
+            'email'            => is_string($account['email'] ?? null) ? (string) $account['email'] : '',
             'hireDate'         => is_string($account['hire_date'] ?? null) ? (string) $account['hire_date'] : '',
             'shift'            => is_string($account['shift'] ?? null) ? (string) $account['shift'] : 'day',
             'payWeekStartDay'  => is_string($account['pay_week_start_day'] ?? null) ? (string) $account['pay_week_start_day'] : 'sun',
@@ -72,9 +74,26 @@ final class ProfileController extends Controller
             return $this->failBack($request, 'Your session expired. Please try again.');
         }
 
+        $userRaw      = trim((string) $request->input('username', ''));
+        $emailRaw     = trim((string) $request->input('email', ''));
         $hireRaw      = trim((string) $request->input('hire_date', ''));
         $shiftRaw     = (string) $request->input('shift', 'day');
         $payWeekRaw   = (string) $request->input('pay_week_start_day', 'sun');
+
+        // Username + email: validated and persisted via Account::updateBasics
+        // which enforces the charset rule (USER_PATTERN, no '@' allowed),
+        // email format, and application-level uniqueness against the
+        // other accounts. Run this BEFORE updateProfile so a uniqueness
+        // collision doesn't leave the row partially updated.
+        try {
+            $this->accounts->updateBasics(
+                (int) $account['id'],
+                $userRaw,
+                $emailRaw === '' ? null : $emailRaw
+            );
+        } catch (\Throwable $e) {
+            return $this->failBack($request, $e->getMessage());
+        }
 
         // hire_date is optional — drivers who haven't filled it in keep
         // the legacy fallback (senior band). When supplied it must be a
@@ -108,7 +127,9 @@ final class ProfileController extends Controller
         }
 
         $this->session->put('_flash', sprintf(
-            'Profile saved. Tenure date: %s. Shift: %s. Pay week starts %s.',
+            'Profile saved. Username: %s. Email: %s. Tenure date: %s. Shift: %s. Pay week starts %s.',
+            $userRaw,
+            $emailRaw === '' ? '(unset)' : $emailRaw,
             $hireDate ?? 'unset (junior-band default)',
             ucfirst($shiftRaw),
             ucfirst($payWeekRaw)

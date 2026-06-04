@@ -185,6 +185,10 @@ $fmt = static function ($value): string {
                         <?php if ($isSelf): ?>
                             <span class="muted" style="font-size:12px;">No self-actions</span>
                         <?php else: ?>
+                            <a href="<?= e($base) ?>/admin/users/<?= $uId ?>/edit"
+                               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.25rem .6rem;border-radius:4px;text-decoration:none;font-size:13px;">
+                                Edit
+                            </a>
                             <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/reset-password" style="display:inline;">
                                 <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
                                 <button type="submit"
