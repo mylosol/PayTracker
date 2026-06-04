@@ -54,6 +54,7 @@ $apply             = in_array('--apply', $flags, true);
 $onlyCities        = in_array('--cities', $flags, true);
 $onlyUnlock        = in_array('--unlock', $flags, true);
 $onlyLoads         = in_array('--loads', $flags, true);
+$onlyAnnounce      = in_array('--announcements', $flags, true);
 $confirmProduction = in_array('--confirm-production', $flags, true);
 
 $customPattern = null;
@@ -80,10 +81,11 @@ $pattern = $customPattern ?? 'Qa Test %';
 
 // If no specific category flag is passed, do all three. Mirrors the common
 // "I just finished a QA pass, please tidy up" intent.
-$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads;
-$doCities = $onlyCities || ! $anySpecific;
-$doUnlock = $onlyUnlock || ! $anySpecific;
-$doLoads  = $onlyLoads  || ! $anySpecific;
+$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce;
+$doCities   = $onlyCities   || ! $anySpecific;
+$doUnlock   = $onlyUnlock   || ! $anySpecific;
+$doLoads    = $onlyLoads    || ! $anySpecific;
+$doAnnounce = $onlyAnnounce || ! $anySpecific;
 
 if (config('app.env') === 'production' && $apply && ! $confirmProduction) {
     fwrite(STDERR, "Refusing to run against APP_ENV=production without --confirm-production.\n");
@@ -186,6 +188,58 @@ try {
                 $del = $pdo->prepare('DELETE FROM `driver_loads` WHERE notes LIKE ?');
                 $del->execute([$loadPattern]);
                 echo "    → deleted.\n";
+            }
+        }
+    }
+
+    // --- 4. QA-test announcements -----------------------------------
+    // Section 19 of the QA plan creates rows with subject prefixed
+    // "QA TEST ". This block sweeps them and the matching dismissal
+    // records so a Playwright run on the next deploy doesn't see a
+    // stale modal blocking the welcome heading.
+    if ($doAnnounce) {
+        $annPattern = 'QA TEST %';
+
+        // Does the table even exist? Migration 2026_06_04_002 created
+        // it -- but qa-cleanup is also run against pre-migration
+        // preview databases during the workflow's seed step. SHOW
+        // TABLES guards the destructive path.
+        $exists = (bool) $pdo->query("SHOW TABLES LIKE 'announcements'")->fetchColumn();
+        if (! $exists) {
+            echo "  announcements: table not present, skipping.\n";
+        } else {
+            $find = $pdo->prepare(
+                'SELECT id, subject, is_active, is_template
+                   FROM `announcements`
+                  WHERE subject LIKE ?'
+            );
+            $find->execute([$annPattern]);
+            $rows = $find->fetchAll();
+
+            if ($rows === []) {
+                echo "  announcements: no rows match subject LIKE '{$annPattern}'.\n";
+            } else {
+                echo "  announcements: " . count($rows) . " row(s) match subject LIKE '{$annPattern}':\n";
+                foreach ($rows as $r) {
+                    printf(
+                        "    - id=%d active=%d template=%d subject=%s\n",
+                        (int) $r['id'],
+                        (int) ($r['is_active']   ?? 0),
+                        (int) ($r['is_template'] ?? 0),
+                        substr((string) ($r['subject'] ?? ''), 0, 60)
+                    );
+                }
+                if ($apply) {
+                    $delDismissals = $pdo->prepare(
+                        'DELETE d FROM `announcement_dismissals` d
+                          INNER JOIN `announcements` a ON a.id = d.announcement_id
+                          WHERE a.subject LIKE ?'
+                    );
+                    $delDismissals->execute([$annPattern]);
+                    $del = $pdo->prepare('DELETE FROM `announcements` WHERE subject LIKE ?');
+                    $del->execute([$annPattern]);
+                    echo "    → deleted (announcements + matching dismissals).\n";
+                }
             }
         }
     }

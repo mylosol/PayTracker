@@ -71,6 +71,12 @@ final class LoginController extends Controller
             return $this->failBack($request, 'Incorrect login or password.');
         }
 
+        // Arm the announcement modal: the user just logged in, so they
+        // should see the active announcement (if any) on their very
+        // next page render. The layout reads this flag, shows the
+        // modal once, and the dismiss endpoint clears it.
+        $this->session->put('announcement_pending', true);
+
         // PRG (Post-Redirect-Get) so a refresh on the dashboard doesn't
         // re-POST the login form.
         return $this->redirect($request->basePath() . '/');

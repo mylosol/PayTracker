@@ -101,3 +101,70 @@ if (! function_exists('layout')) {
         View::setLayout($template);
     }
 }
+
+if (! function_exists('active_announcement_for_modal')) {
+    /**
+     * Layout-time helper used by `layouts/app.php` to decide whether
+     * to render the announcement modal.
+     *
+     * Returns the active announcement row only when ALL of the
+     * following hold:
+     *   1. The user is signed in (currentAccount() returns non-null).
+     *   2. The session flag `announcement_pending` is set
+     *      (LoginController set it on successful sign-in; the
+     *      dismiss endpoint clears it).
+     *   3. There IS an active, non-template, non-expired
+     *      announcement on file.
+     *   4. The user hasn't permanently suppressed that specific
+     *      announcement via a prior "don't show again" click.
+     *
+     * Returns null in every other case, so the layout renders no
+     * modal markup at all (matching the spec's "show nothing if no
+     * active announcement" requirement).
+     *
+     * Resolved via the global container so view templates don't
+     * need to receive announcement data through every controller's
+     * view() call -- it's a layout-level concern.
+     *
+     * @return array<string,mixed>|null
+     */
+    function active_announcement_for_modal(): ?array
+    {
+        try {
+            $app = Application::instance();
+            /** @var \PayTracker\Auth\AuthService $auth */
+            $auth = $app->make(\PayTracker\Auth\AuthService::class);
+            $account = $auth->currentAccount();
+            if ($account === null) {
+                return null;
+            }
+            /** @var \PayTracker\Security\Session $session */
+            $session = $app->make(\PayTracker\Security\Session::class);
+            $session->start();
+            if (! $session->get('announcement_pending')) {
+                return null;
+            }
+            /** @var \PayTracker\Models\Announcement $announcements */
+            $announcements = $app->make(\PayTracker\Models\Announcement::class);
+            $active = $announcements->currentActive();
+            if ($active === null) {
+                return null;
+            }
+            /** @var \PayTracker\Models\AnnouncementDismissal $dismissals */
+            $dismissals = $app->make(\PayTracker\Models\AnnouncementDismissal::class);
+            if ($dismissals->isSuppressed((int) $active['id'], (int) $account['id'])) {
+                // User has permanently dismissed this one. Clear the
+                // session flag too so we don't keep hitting these
+                // queries on every page render this session.
+                $session->forget('announcement_pending');
+                return null;
+            }
+            return $active;
+        } catch (\Throwable) {
+            // Layout-time errors must NEVER crash a page render. If
+            // the DB is unavailable or the schema migration hasn't
+            // run yet, just render no modal.
+            return null;
+        }
+    }
+}

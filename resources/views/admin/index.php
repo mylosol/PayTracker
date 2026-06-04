@@ -65,6 +65,13 @@ $fmt = static function ($value): string {
            style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
             System diagnostics &rarr;
         </a>
+        <?php if ($isSuperAdmin): ?>
+            &nbsp;
+            <a href="<?= e($base) ?>/admin/announcements"
+               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                Announcements &rarr;
+            </a>
+        <?php endif; ?>
     </p>
 </div>
 

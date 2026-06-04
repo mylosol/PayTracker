@@ -1495,7 +1495,162 @@ This step requires a seeded test account with `role='admin'`.
 
 ---
 
-## 19. Production is untouched
+## 19. Announcements — login-modal broadcast
+
+Super Admin authors a subject + body announcement; every signed-
+in user sees it as a modal on their next page render after
+login. "Okay" dismisses for the session; "Don't show again"
+suppresses for that user permanently. Only one announcement
+can be active at a time. Templates can be saved for reuse and
+are never shown to users.
+
+Pre-req: signed in as the QA Super Admin account.
+
+### 19a. Admin surface renders + create
+
+1. Visit `/preview/admin`. Click **Announcements**.
+
+**Expected:**
+- Heading "Announcements" with the role pill.
+- A "+ New announcement" button and a table (likely empty
+  on a fresh preview).
+
+2. Click **+ New announcement**.
+
+**Expected:**
+- Form with Subject, Body, Expires at (datetime-local,
+  optional, marked UTC), "Activate immediately" checkbox,
+  "Save as template only" checkbox.
+
+3. Fill Subject = "QA TEST announcement", Body = "Hello drivers."
+   Leave expiry blank. Tick "Activate immediately". Save.
+
+**Expected:** redirect to the list with a green flash
+`Created announcement "QA TEST announcement" (id N) and
+activated.`. The row shows the **active** pill, viewer count 0.
+
+### 19b. Modal appears for users on next page render
+
+The QA Super Admin account ALSO sees the modal — broadcast
+includes admins.
+
+1. Sign out (top-right). Sign back in.
+
+**Expected:**
+- After successful login + redirect, the landing page renders
+  with a centered modal: subject as heading, body, "Okay"
+  button, and an unticked "Don't show this again" checkbox.
+- The page underneath (welcome card, etc.) is dimmed by the
+  backdrop overlay.
+
+### 19c. Plain dismiss returns next login
+
+1. Leave the checkbox unticked. Click **Okay**.
+
+**Expected:**
+- Modal closes; page reloads to the same URL with the
+  underlying content visible.
+- The seen-by report at `/preview/admin/announcements/<id>`
+  now lists your account with "Don't show again? — no — will
+  see again".
+
+2. Sign out, sign back in again.
+
+**Expected:** modal reappears (you didn't tick "don't show
+again").
+
+### 19d. Permanent dismiss sticks
+
+1. This time, tick **Don't show this again**. Click Okay.
+
+**Expected:**
+- Modal closes.
+- Seen-by row updates to "yes — permanent".
+
+2. Sign out, sign back in. Visit any page.
+
+**Expected:** no modal — the suppression record blocks it.
+
+### 19e. Audit log entries
+
+1. Visit `/preview/admin/audit?action=ANNOUNCEMENT_DISMISSED`.
+
+**Expected:** the dismissals from 19c-19d appear as
+`ANNOUNCEMENT_DISMISSED` rows with metadata
+`{"announcement_id":N,"suppressed":true|false}`.
+
+2. Filter by `action=ANNOUNCEMENT_CREATED` /
+   `ANNOUNCEMENT_ACTIVATED` and verify those rows from 19a
+   are present.
+
+### 19f. Only one active at a time
+
+1. Create a SECOND announcement (Subject = "QA TEST 2"), tick
+   Activate. Save.
+
+**Expected:**
+- The flash confirms activation.
+- The list shows announcement #2 as **active**; #1 has
+  reverted to **inactive** automatically. The deactivation
+  also fires an `ANNOUNCEMENT_DEACTIVATED` audit row for #1.
+
+### 19g. Templates are never shown
+
+1. Click **+ New announcement**. Fill Subject = "QA TEST template",
+   Body = "Holiday closure 2026.". Tick **Save as template only**
+   (do NOT tick Activate). Save.
+
+**Expected:**
+- Row appears with the **template** pill.
+- The Use template button appears on the row.
+
+2. Sign out + back in.
+
+**Expected:** modal still shows the currently active
+announcement (#2), NOT the template.
+
+3. From `/preview/admin/announcements`, click **Use template**
+   on the template row.
+
+**Expected:**
+- A NEW announcement (id 4) is created with the template's
+  subject + body and immediately activated.
+- The template stays as a template — same row, still flagged.
+- The previous active announcement (#2) is now inactive.
+
+### 19h. Expiry honored
+
+1. Edit announcement #4 to set Expires at = a time 5 minutes in
+   the past. Save.
+
+**Expected:** the list still shows #4 as "active" but the
+modal does NOT appear on next login (expiry filter at read time
+hides it).
+
+2. Edit #4 to clear the expiry (or set it 1 day in the future).
+
+**Expected:** modal returns on next login.
+
+### 19i. Delete cascades
+
+1. From the list, click **Delete** on the announcement that has
+   "Seen by N" > 0. Confirm.
+
+**Expected:**
+- Row vanishes from the list.
+- `/preview/admin/audit?action=ANNOUNCEMENT_DELETED` shows the
+  delete row.
+- Subsequent logins by the QA user no longer show the modal
+  (the table row is gone; no active announcement).
+
+Note: dismissals for the deleted announcement become orphan rows
+(no FK cascade since `account` is MyISAM and we don't enforce
+FKs). The seen-by report becomes inaccessible. A future cleanup
+can prune; not blocking.
+
+---
+
+## 20. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -1514,7 +1669,7 @@ This step requires a seeded test account with `role='admin'`.
 
 ---
 
-## 20. Security headers are present (optional — engineer-assisted)
+## 21. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

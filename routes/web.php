@@ -10,8 +10,10 @@ use PayTracker\Http\Controllers\LoadEntryController;
 use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
+use PayTracker\Http\Controllers\AdminAnnouncementsController;
 use PayTracker\Http\Controllers\AdminAuditController;
 use PayTracker\Http\Controllers\AdminUsersController;
+use PayTracker\Http\Controllers\AnnouncementController;
 use PayTracker\Http\Controllers\PasswordResetController;
 use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Controllers\ProfileController;
@@ -94,6 +96,20 @@ return static function (Router $router): void {
     // Audit + diagnostics — read-only viewers, admin+.
     $router->get('/admin/audit',         [AdminAuditController::class, 'audit']);
     $router->get('/admin/diagnostics',   [AdminAuditController::class, 'diagnostics']);
+
+    // --- Announcements (super_admin only on the admin surface; user-
+    // -facing dismiss endpoint is auth-required only) -----------------
+    $router->get('/admin/announcements',                       [AdminAnnouncementsController::class, 'index']);
+    $router->get('/admin/announcements/new',                   [AdminAnnouncementsController::class, 'create']);
+    $router->post('/admin/announcements',                      [AdminAnnouncementsController::class, 'store']);
+    $router->get('/admin/announcements/{id}',                  [AdminAnnouncementsController::class, 'show']);
+    $router->get('/admin/announcements/{id}/edit',             [AdminAnnouncementsController::class, 'editForm']);
+    $router->post('/admin/announcements/{id}/edit',            [AdminAnnouncementsController::class, 'update']);
+    $router->post('/admin/announcements/{id}/activate',        [AdminAnnouncementsController::class, 'activate']);
+    $router->post('/admin/announcements/{id}/deactivate',      [AdminAnnouncementsController::class, 'deactivate']);
+    $router->post('/admin/announcements/{id}/use-template',    [AdminAnnouncementsController::class, 'useTemplate']);
+    $router->post('/admin/announcements/{id}/delete',          [AdminAnnouncementsController::class, 'delete']);
+    $router->post('/announcements/{id}/dismiss',               [AnnouncementController::class,      'dismiss']);
 
     // --- Password reset claim (public, token-gated) -------------------
     // No auth requirement — the user can't log in, that's the whole
