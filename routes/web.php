@@ -84,6 +84,10 @@ return static function (Router $router): void {
     $router->post('/admin/users/{id}/unban',            [AdminUsersController::class, 'unban']);
     $router->post('/admin/users/{id}/delete',           [AdminUsersController::class, 'delete']);
     $router->post('/admin/users/{id}/reset-password',   [AdminUsersController::class, 'resetPassword']);
+    // Role assignment — Super Admin only. The controller enforces this
+    // separately from the rest of /admin so a base Admin can't even
+    // render the form-validation error (the 403 page is what they see).
+    $router->post('/admin/users/{id}/role',              [AdminUsersController::class, 'setRole']);
 
     // Audit + diagnostics — read-only viewers, admin+.
     $router->get('/admin/audit',         [AdminAuditController::class, 'audit']);

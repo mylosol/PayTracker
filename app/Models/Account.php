@@ -253,4 +253,41 @@ final class Account extends Model
         $sql = 'DELETE FROM ' . self::ident(self::$table) . ' WHERE id = ?';
         $this->prepared($sql, [$accountId]);
     }
+
+    /**
+     * Persist a new role on the given account. Rejects unknown roles
+     * with InvalidArgumentException so a controller-side typo can't
+     * silently corrupt the column (the column is VARCHAR(20); a stray
+     * value would just sit there).
+     *
+     * Does NOT enforce the self-demotion or sole-super-admin rules —
+     * those are policy concerns the controller owns. This method is
+     * just the underlying mutation.
+     */
+    public function setRole(int $accountId, string $role): void
+    {
+        if (! in_array($role, self::ROLES, true)) {
+            throw new \InvalidArgumentException(
+                'Unknown role: ' . $role . ' (must be one of: ' . implode(', ', self::ROLES) . ')'
+            );
+        }
+        $sql = 'UPDATE ' . self::ident(self::$table) . ' SET role = ? WHERE id = ?';
+        $this->prepared($sql, [$role, $accountId]);
+    }
+
+    /**
+     * Count accounts at a given role. Powers the sole-super-admin
+     * safeguard: a super_admin can only demote themselves while at
+     * least one other super_admin exists.
+     */
+    public function countByRole(string $role): int
+    {
+        if (! in_array($role, self::ROLES, true)) {
+            throw new \InvalidArgumentException(
+                'Unknown role: ' . $role . ' (must be one of: ' . implode(', ', self::ROLES) . ')'
+            );
+        }
+        $sql = 'SELECT COUNT(*) FROM ' . self::ident(self::$table) . ' WHERE role = ?';
+        return (int) $this->prepared($sql, [$role])->fetchColumn();
+    }
 }

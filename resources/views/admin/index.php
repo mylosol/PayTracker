@@ -7,6 +7,8 @@
  * @var ?string                    $flash
  * @var bool                       $isSuperAdmin
  */
+use PayTracker\Models\Account;
+
 layout('layouts/app');
 
 // Convenience: format a nullable UTC datetime for display. We
@@ -84,7 +86,29 @@ $fmt = static function ($value): string {
                         <?php endif; ?>
                     </td>
                     <td style="padding:.5rem .25rem;"><?= e((string) ($u['email'] ?? '—')) ?></td>
-                    <td style="padding:.5rem .25rem;"><code><?= e((string) ($u['role'] ?? 'user')) ?></code></td>
+                    <td style="padding:.5rem .25rem;">
+                        <?php $currentRole = is_string($u['role'] ?? null) ? (string) $u['role'] : 'user'; ?>
+                        <?php if ($isSuperAdmin && ! $isSelf): ?>
+                            <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/role"
+                                  style="display:flex;gap:.25rem;align-items:center;">
+                                <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+                                <select name="role"
+                                        style="padding:.25rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;font-size:13px;">
+                                    <?php foreach (Account::ROLES as $r): ?>
+                                        <option value="<?= e($r) ?>" <?= $currentRole === $r ? 'selected' : '' ?>>
+                                            <?= e($r) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit"
+                                        style="background:#fff;color:#101418;border:1px solid #cbd2da;padding:.25rem .5rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
+                                    Save
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <code><?= e($currentRole) ?></code>
+                        <?php endif; ?>
+                    </td>
                     <td style="padding:.5rem .25rem;"><?= e($fmt($u['last_login_at'] ?? null)) ?></td>
                     <td style="padding:.5rem .25rem;"><?= implode(' ', $statusPills) ?></td>
                     <td style="padding:.5rem .25rem;">
@@ -135,12 +159,6 @@ $fmt = static function ($value): string {
 </div>
 
 <div class="card">
-    <h2>Coming up</h2>
-    <ul class="muted">
-        <li><strong>Role assignment</strong> — a future branch lets a Super
-            Admin promote / demote other accounts directly from this surface.
-            Hidden until then.</li>
-    </ul>
     <p>
         <a href="<?= e($base) ?>/">&larr; Back home</a>
     </p>

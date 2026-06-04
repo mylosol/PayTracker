@@ -42,6 +42,7 @@ final class AuditLog extends Model
     public const ACTION_USER_DELETED        = 'USER_DELETED';
     public const ACTION_PASSWORD_RESET_SENT = 'PASSWORD_RESET_SENT';
     public const ACTION_PASSWORD_RESET_USED = 'PASSWORD_RESET_USED';
+    public const ACTION_USER_ROLE_CHANGED   = 'USER_ROLE_CHANGED';
 
     // ---- Failed-login reason constants. Mirrors the discriminators
     // in AuthService::attempt so a downstream "why is this account

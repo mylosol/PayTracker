@@ -1296,7 +1296,94 @@ appear with the actor (you), target user id, and IP recorded.
 
 ---
 
-## 18. Production is untouched
+## 18. Super Admin — role assignment
+
+The user table on `/admin` swaps the read-only role <code> badge
+for a role-select + Save button on every non-self row **when the
+viewer is Super Admin**. Plain Admin accounts continue to see
+the static badge.
+
+Pre-req: signed in as the QA Super Admin account.
+
+### 18a. Role dropdown is visible on non-self rows
+
+1. Visit `/preview/admin`. Scroll the Role column.
+
+**Expected:**
+- Your own row still shows your role as plain `super_admin`
+  text (no controls — self-target safeguard).
+- Every other row shows a `<select>` with the three options
+  `user / admin / super_admin` next to a **Save** button.
+- The current role is pre-selected in each dropdown.
+
+### 18b. Promotion fires audit + flash
+
+1. Pick a non-self test account currently at `user`. Change
+   the dropdown to `admin`. Click **Save**.
+
+**Expected:**
+- Flash banner: `Changed role of <user> (id N): user → admin.`
+- Reloading `/admin` shows the row with `admin` pre-selected.
+- `/admin/audit?action=USER_ROLE_CHANGED` lists a new row with
+  your id as the actor, the target id + name in the metadata
+  blob, and `"previous_role":"user","new_role":"admin"`.
+
+### 18c. Demotion fires the same path
+
+1. Change the same row back to `user`. Save.
+
+**Expected:** flash `Changed role of <user> (id N): admin → user.`
+A second `USER_ROLE_CHANGED` audit row exists with the inverse
+transition.
+
+### 18d. Same-role save is a no-op
+
+1. Change a row's dropdown back to its current value. Save.
+
+**Expected:**
+- Flash: `No change — <user> already has role "<role>".`
+- No new audit row is written.
+
+### 18e. Sole-Super-Admin safeguard
+
+This requires a SECOND Super Admin account on preview.
+
+1. Promote one other test account to `super_admin` first (so
+   there are two Super Admins on file).
+2. Demote that other account back to `admin`.
+
+**Expected:** the demotion succeeds because you remain a Super
+Admin afterwards.
+
+3. (Cannot test on a single-Super-Admin preview.) If the QA
+   account were the only Super Admin and a different Super
+   Admin tried to demote them, the action would refuse with
+   flash:
+   `change role failed: Refusing to demote the only Super
+   Admin — promote another account to Super Admin first.`
+
+The matching self-demotion is already blocked by the
+self-target guard from section 16g (`Cannot change role your own
+account from the admin panel.`).
+
+### 18f. Plain Admin sees the static role badge
+
+This step requires a seeded test account with `role='admin'`.
+
+1. Sign in as that account, visit `/preview/admin`.
+
+**Expected:**
+- The user table still renders (Admin has read access).
+- Every Role cell shows the static `<code>` badge, NOT the
+  select / Save form.
+- A POST against `/preview/admin/users/{id}/role` from this
+  account returns the 403 page (the controller enforces the
+  Super Admin gate at action entry; the missing UI is just
+  the visible mirror).
+
+---
+
+## 19. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -1315,7 +1402,7 @@ appear with the actor (you), target user id, and IP recorded.
 
 ---
 
-## 19. Security headers are present (optional — engineer-assisted)
+## 20. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

@@ -112,6 +112,92 @@ final class AdminUsersController extends Controller
         });
     }
 
+    /**
+     * POST /admin/users/{id}/role — assign a new role.
+     *
+     * Super-Admin ONLY (stricter than the rest of this controller,
+     * which is admin+). Role assignment carries enough blast radius
+     * (granting Admin = read+write access to pay rates) that we
+     * gate it at the highest tier even within the admin panel.
+     *
+     * Policy enforcement layered on top of the base mutate() guard:
+     *   1. Inside mutate() — the standard CSRF / id / target /
+     *      self-target checks.
+     *   2. Here — Super Admin requirement (stricter than admin+).
+     *   3. Here — sole-super-admin safeguard: cannot demote the
+     *      last Super Admin account, period (not even by a
+     *      different Super Admin, because there isn't one).
+     */
+    public function setRole(Request $request, string $id): Response
+    {
+        // Pre-flight Super Admin gate. We do this BEFORE entering
+        // mutate() so a base Admin can't even render the 'invalid
+        // role' error — the 403 page is what they see.
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_SUPER_ADMIN)) !== null) {
+            return $denied;
+        }
+
+        $newRole = (string) $request->input('role', '');
+        if (! in_array($newRole, Account::ROLES, true)) {
+            $this->session->start();
+            $this->session->put('_flash', 'Invalid role. Must be one of: ' . implode(', ', Account::ROLES) . '.');
+            return $this->redirect($request->basePath() . '/admin');
+        }
+
+        return $this->mutate($request, $id, 'change role', function (array $actor, array $target) use ($newRole): string {
+            $previousRole = is_string($target['role'] ?? null) ? (string) $target['role'] : 'user';
+            if ($previousRole === $newRole) {
+                return sprintf('No change — %s already has role "%s".', $target['user'], $newRole);
+            }
+
+            // Sole-super-admin safeguard: refuse to demote the LAST
+            // super_admin account. The self-target guard in mutate()
+            // already prevents self-demotion, so this only fires when
+            // a super_admin tries to demote ANOTHER super_admin who
+            // would be the last one (i.e., this actor is now demoting
+            // themselves into solitary master status -- still fine --
+            // OR the actor is being demoted by no one because there
+            // isn't a second super_admin to do so). The
+            // mutate() self-guard handles the latter; this branch
+            // covers the case where someone tries to demote the only
+            // other super_admin AND the actor isn't one. Belt and
+            // braces: even Super Admin can't strand the system
+            // without a master.
+            if ($previousRole === Account::ROLE_SUPER_ADMIN && $newRole !== Account::ROLE_SUPER_ADMIN) {
+                $superCount = $this->accounts->countByRole(Account::ROLE_SUPER_ADMIN);
+                if ($superCount <= 1) {
+                    throw new \RuntimeException(
+                        'Refusing to demote the only Super Admin — promote another account to Super Admin first.'
+                    );
+                }
+            }
+
+            $this->accounts->setRole((int) $target['id'], $newRole);
+            $this->audit->record(
+                AuditLog::ACTION_USER_ROLE_CHANGED,
+                userId: (int) $actor['id'],
+                ipAddress: $this->clientIp(),
+                metadata: [
+                    'target_user_id'   => (int) $target['id'],
+                    'target_user_name' => (string) $target['user'],
+                    'previous_role'    => $previousRole,
+                    'new_role'         => $newRole,
+                ],
+            );
+            return sprintf(
+                'Changed role of %s (id %d): %s → %s.',
+                $target['user'],
+                (int) $target['id'],
+                $previousRole,
+                $newRole
+            );
+        });
+    }
+
     public function delete(Request $request, string $id): Response
     {
         return $this->mutate($request, $id, 'delete', function (array $actor, array $target): string {
