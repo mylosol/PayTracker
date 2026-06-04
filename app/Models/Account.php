@@ -180,20 +180,53 @@ final class Account extends Model
      * Pattern that matches an account `user` handle we treat as legacy
      * spam-bot garbage. The legacy registration form had no input
      * validation; over the years bots filled it with SQL-injection
-     * probes, XSS payloads, URLs, etc. This predicate hides them by
+     * probes, XSS payloads, URLs, header-injection probes, path
+     * traversal probes, and so on. This predicate hides them by
      * default from the admin panel — the cleanup CLI
      * (scripts/cleanup-spam-accounts.php) uses the same set of clauses.
+     *
+     * Patterns calibrated against a real account.json dump from
+     * production (see commit history). The handful that weren't
+     * caught by the original v1 predicate added new clauses:
+     *
+     *   id 109  ""                                  -> empty / null
+     *   id 112  "\x00nweonk"                        -> null byte
+     *   id 119  "\r\nX-foo: bar"                    -> CR/LF
+     *   id 121  "../admin/noop.cgi?foo=bar"         -> traversal + .cgi
+     *   id 126  "%68%74%74%70..."                   -> URL-encoded
+     *   id 131  "http://rfi.nessus.org/rfi.txt"     -> URL (already caught)
+     *   id 141  "create.php"                        -> file probe
      *
      * @var list<string>
      */
     private const SPAM_PREDICATE = [
+        // SQL injection keyword payloads.
         "user REGEXP '(SELECT|WAITFOR|SLEEP|UNION|RAID|pg_sleep|EXTRACTVALUE|BENCHMARK)'",
+        // Tautology-style probes.
         "user REGEXP '\\\\b(OR|AND)\\\\b.*=.*'",
+        // URLs jammed into the handle.
         "user LIKE 'http://%' OR user LIKE 'https://%'",
+        // Spam test addresses.
         "user LIKE '%example.com%'",
+        // XSS / HTML payloads.
         "user LIKE '%<%>%'",
+        // Whitespace in handle.
         "user LIKE '% %'",
+        // Parens / quotes.
         "user LIKE '%(%' OR user LIKE '%)%' OR user LIKE '%\"%' OR user LIKE '%''%'",
+        // Empty / null handles.
+        "user IS NULL OR user = ''",
+        // Control characters: null byte, CR, LF, tab.
+        "LOCATE(CHAR(0),  user) > 0",
+        "LOCATE(CHAR(9),  user) > 0",
+        "LOCATE(CHAR(10), user) > 0",
+        "LOCATE(CHAR(13), user) > 0",
+        // Path traversal probes.
+        "user LIKE '%../%' OR user LIKE '%..\\\\%'",
+        // URL-encoded hex blobs (3+ consecutive %XX sequences).
+        "user REGEXP '(%[0-9a-fA-F]{2}){3,}'",
+        // File-extension probes -- no real handle ends in these.
+        "user REGEXP '\\\\.(php|cgi|asp|jsp|aspx|html?|xml|sh|bak|inc)$'",
     ];
 
     /**

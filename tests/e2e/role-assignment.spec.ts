@@ -45,7 +45,11 @@ test.describe('Super Admin — role assignment', () => {
     test('19c — role form posts to /admin/users/{id}/role with CSRF', async ({ page }) => {
         await signIn(page);
         await page.goto('admin');
-        const form = page.locator('form').filter({
+        // Narrow to forms INSIDE the table body -- the page also has a
+        // top-level filter form whose `select[name="role"]` is the role
+        // filter, not a per-row role-change form. Without this scope the
+        // assertion picks the filter form (action=/admin) instead.
+        const form = page.locator('tbody form').filter({
             has: page.locator('select[name="role"]'),
         }).first();
         await expect(form).toHaveAttribute('action', /\/admin\/users\/\d+\/role$/);

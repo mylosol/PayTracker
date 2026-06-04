@@ -71,6 +71,9 @@ try {
     //     correct single-backslash word-boundaries.
     //   - LIKE % patterns are case-insensitive on utf8mb4_unicode_ci
     //     by default — no extra UPPER() needed.
+    // Predicate clauses. MUST mirror Account::SPAM_PREDICATE so the
+    // admin-panel UI hides exactly the rows this script would delete.
+    // Calibrated against a real production account.json dump.
     $clauses = [
         // SQL injection keyword payloads.
         "user REGEXP '(SELECT|WAITFOR|SLEEP|UNION|RAID|pg_sleep|EXTRACTVALUE|BENCHMARK)'",
@@ -82,10 +85,23 @@ try {
         "user LIKE '%example.com%'",
         // XSS / HTML payloads.
         "user LIKE '%<%>%'",
-        // Whitespace in handle — never legitimate.
+        // Whitespace in handle.
         "user LIKE '% %'",
-        // Parens / quotes — also never legitimate.
+        // Parens / quotes.
         "user LIKE '%(%' OR user LIKE '%)%' OR user LIKE '%\"%' OR user LIKE '%''%'",
+        // Empty / null handles.
+        "user IS NULL OR user = ''",
+        // Control characters: null byte, CR, LF, tab.
+        "LOCATE(CHAR(0),  user) > 0",
+        "LOCATE(CHAR(9),  user) > 0",
+        "LOCATE(CHAR(10), user) > 0",
+        "LOCATE(CHAR(13), user) > 0",
+        // Path traversal probes.
+        "user LIKE '%../%' OR user LIKE '%..\\\\%'",
+        // URL-encoded hex blobs (3+ consecutive %XX sequences).
+        "user REGEXP '(%[0-9a-fA-F]{2}){3,}'",
+        // File-extension probes -- no real handle ends in these.
+        "user REGEXP '\\\\.(php|cgi|asp|jsp|aspx|html?|xml|sh|bak|inc)$'",
     ];
     $where = '(' . implode(') OR (', $clauses) . ')';
 

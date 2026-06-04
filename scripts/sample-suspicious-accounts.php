@@ -45,15 +45,26 @@ try {
     //   - Specific spam patterns: example.com
     //
     // We rely on MySQL's REGEXP / LIKE — no JSON or fancy stuff.
+    // Per-label clauses. Same set as Account::SPAM_PREDICATE and
+    // cleanup-spam-accounts.php; broken out per-label here so the
+    // survey can tell the operator which patterns are driving the
+    // total. Calibrated against a real production account.json dump.
     $patterns = [
-        'sql_injection'       => "user REGEXP '(SELECT|WAITFOR|SLEEP|UNION|RAID|pg_sleep|EXTRACTVALUE)'",
+        'sql_injection'       => "user REGEXP '(SELECT|WAITFOR|SLEEP|UNION|RAID|pg_sleep|EXTRACTVALUE|BENCHMARK)'",
         'sql_or_payload'      => "user REGEXP '\\\\bOR\\\\b.*=' OR user REGEXP '\\\\bAND\\\\b.*='",
         'url_in_handle'       => "user LIKE 'http://%' OR user LIKE 'https://%'",
         'example_com'         => "user LIKE '%example.com%'",
         'angle_bracket_xss'   => "user LIKE '%<%>%'",
         'has_whitespace'      => "user LIKE '% %'",
-        'has_parentheses'     => "user LIKE '%(%'",
+        'has_parentheses'     => "user LIKE '%(%' OR user LIKE '%)%'",
         'has_quotes'          => "user LIKE '%''%' OR user LIKE '%\"%'",
+        'empty_or_null'       => "user IS NULL OR user = ''",
+        'has_null_byte'       => "LOCATE(CHAR(0), user) > 0",
+        'has_cr_or_lf'        => "LOCATE(CHAR(10), user) > 0 OR LOCATE(CHAR(13), user) > 0",
+        'has_tab'             => "LOCATE(CHAR(9), user) > 0",
+        'path_traversal'      => "user LIKE '%../%' OR user LIKE '%..\\\\%'",
+        'url_encoded_blob'    => "user REGEXP '(%[0-9a-fA-F]{2}){3,}'",
+        'file_extension'      => "user REGEXP '\\\\.(php|cgi|asp|jsp|aspx|html?|xml|sh|bak|inc)$'",
     ];
 
     echo "=== `account` summary ===\n";
