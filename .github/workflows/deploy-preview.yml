@@ -245,8 +245,14 @@ jobs:
             echo "Playwright auth tests will skip themselves; non-auth tests still run."
             exit 0
           fi
+          # --role=super_admin: the QA account drives the Admin Panel
+          # walk-through (Sections 16-18 of the QA plan), which requires
+          # Super Admin for role assignment. Migration 2026_06_03_001
+          # already promotes mylosol@gmail.com to super_admin at migrate
+          # time; this --role flag preserves that posture across the
+          # deploy-time password sync that otherwise resets the column.
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/set-password.php '$QA_USER' '$QA_PASS' --role=admin"
+            "cd /home/robshe48/paytracker/preview && php scripts/set-password.php '$QA_USER' '$QA_PASS' --role=super_admin"
 
       - name: Smoke test (preview /health.json)
         run: |

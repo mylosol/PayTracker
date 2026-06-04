@@ -14,7 +14,7 @@ declare(strict_types=1);
  *   - Rotate a password from the command line without a web round-trip.
  *
  * Usage:
- *   php scripts/set-password.php <user_or_email> <new_password> [--email=foo@bar] [--role=admin]
+ *   php scripts/set-password.php <user_or_email> <new_password> [--email=foo@bar] [--role=user|admin|super_admin]
  *
  * Safety:
  *   - Refuses to run when APP_ENV=production unless the operator also
@@ -40,7 +40,7 @@ $flags = array_values(array_filter($args, static fn (string $a): bool => str_sta
 $positional = array_values(array_filter($args, static fn (string $a): bool => ! str_starts_with($a, '--')));
 
 if (count($positional) < 2) {
-    fwrite(STDERR, "Usage: php scripts/set-password.php <user_or_email> <new_password> [--email=foo] [--role=user|admin] [--confirm-production]\n");
+    fwrite(STDERR, "Usage: php scripts/set-password.php <user_or_email> <new_password> [--email=foo] [--role=user|admin|super_admin] [--confirm-production]\n");
     exit(2);
 }
 
