@@ -146,6 +146,11 @@ $fmt = static function ($value): string {
                 <?php
                 $uId      = (int) $u['id'];
                 $isSelf   = $uId === (int) $actor['id'];
+                // Privilege-chain check: can the actor act on THIS row?
+                // The server enforces the same rule; the UI just mirrors
+                // it so unprivileged buttons aren't dangled in front of
+                // users who'd hit a 403/flash on click.
+                $canMutate = ! $isSelf && Account::canMutate($actor, $u);
                 $banned   = is_string($u['banned_at'] ?? null) && $u['banned_at'] !== '';
                 $locked   = is_string($u['locked_until'] ?? null) && $u['locked_until'] !== ''
                             && strtotime((string) $u['locked_until']) > time();
@@ -165,7 +170,7 @@ $fmt = static function ($value): string {
                     <td style="padding:.5rem .25rem;"><?= e((string) ($u['email'] ?? '—')) ?></td>
                     <td style="padding:.5rem .25rem;">
                         <?php $currentRole = is_string($u['role'] ?? null) ? (string) $u['role'] : 'user'; ?>
-                        <?php if ($isSuperAdmin && ! $isSelf): ?>
+                        <?php if ($isSuperAdmin && $canMutate): ?>
                             <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/role"
                                   style="display:flex;gap:.25rem;align-items:center;">
                                 <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
@@ -191,6 +196,8 @@ $fmt = static function ($value): string {
                     <td style="padding:.5rem .25rem;">
                         <?php if ($isSelf): ?>
                             <span class="muted" style="font-size:12px;">No self-actions</span>
+                        <?php elseif (! $canMutate): ?>
+                            <span class="muted" style="font-size:12px;">Outranks you</span>
                         <?php else: ?>
                             <a href="<?= e($base) ?>/admin/users/<?= $uId ?>/edit"
                                style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.25rem .6rem;border-radius:4px;text-decoration:none;font-size:13px;">

@@ -97,6 +97,46 @@ final class Account extends Model
      *
      * @param array<string,mixed>|null $account
      */
+    /**
+     * Privilege-chain mutation guard.
+     *
+     * Returns true iff the actor's role is STRICTLY higher than the
+     * target's in the ROLES hierarchy. Used by AdminUsersController to
+     * gate every destructive action against another account: ban,
+     * unban, delete, reset-password, role-assignment, basics-edit.
+     *
+     * Implications worth knowing about:
+     *   - A Super Admin cannot modify another Super Admin via the UI.
+     *     That makes Super Admin effectively a one-way promotion --
+     *     a peer Super Admin can't demote them. Adjusting that
+     *     requires direct DB access. The trade-off is intentional:
+     *     no power struggle within the highest tier.
+     *   - The self-target guard in AdminUsersController::mutate is
+     *     a complementary check, not a substitute. canMutate() does
+     *     NOT short-circuit on identity -- a Super Admin targeting
+     *     themselves still returns false here because
+     *     actor_idx > target_idx is required.
+     *   - Anonymous or unknown-role values fail closed: an actor
+     *     row that lacks a known role can't mutate anything.
+     *
+     * @param array<string,mixed>|null $actor
+     * @param array<string,mixed>|null $target
+     */
+    public static function canMutate(?array $actor, ?array $target): bool
+    {
+        if ($actor === null || $target === null) {
+            return false;
+        }
+        $actorRole  = is_string($actor['role']  ?? null) ? (string) $actor['role']  : '';
+        $targetRole = is_string($target['role'] ?? null) ? (string) $target['role'] : '';
+        $actorIdx   = array_search($actorRole,  self::ROLES, true);
+        $targetIdx  = array_search($targetRole, self::ROLES, true);
+        if ($actorIdx === false || $targetIdx === false) {
+            return false;
+        }
+        return $targetIdx < $actorIdx;
+    }
+
     public static function hasRole(?array $account, string $minimumRole): bool
     {
         if (! in_array($minimumRole, self::ROLES, true)) {

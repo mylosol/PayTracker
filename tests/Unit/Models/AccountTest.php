@@ -75,4 +75,45 @@ final class AccountTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         Account::hasRole(['role' => 'super_admin'], 'unknown_role');
     }
+
+    // ===== canMutate -- privilege-chain mutation guard =================
+
+    public function testCanMutateRequiresStrictlyHigherRole(): void
+    {
+        $user       = ['role' => 'user'];
+        $admin      = ['role' => 'admin'];
+        $superAdmin = ['role' => 'super_admin'];
+
+        // Higher acts on lower: yes.
+        $this->assertTrue(Account::canMutate($admin,      $user));
+        $this->assertTrue(Account::canMutate($superAdmin, $user));
+        $this->assertTrue(Account::canMutate($superAdmin, $admin));
+
+        // Peers: no. Two same-tier actors cannot reach each other --
+        // no super-admin power struggle, no peer-admin sniping.
+        $this->assertFalse(Account::canMutate($user,       $user));
+        $this->assertFalse(Account::canMutate($admin,      $admin));
+        $this->assertFalse(Account::canMutate($superAdmin, $superAdmin));
+
+        // Lower acts on higher: no. Even if the UI somehow surfaced
+        // a button, the server-side guard refuses.
+        $this->assertFalse(Account::canMutate($user,  $admin));
+        $this->assertFalse(Account::canMutate($user,  $superAdmin));
+        $this->assertFalse(Account::canMutate($admin, $superAdmin));
+    }
+
+    public function testCanMutateFailsClosedOnNullsAndUnknownRoles(): void
+    {
+        $superAdmin = ['role' => 'super_admin'];
+        $user       = ['role' => 'user'];
+
+        $this->assertFalse(Account::canMutate(null,        $user));
+        $this->assertFalse(Account::canMutate($superAdmin, null));
+        $this->assertFalse(Account::canMutate(null,        null));
+
+        // Unknown role values get no privilege at all.
+        $this->assertFalse(Account::canMutate(['role' => 'guest'], $user));
+        $this->assertFalse(Account::canMutate($superAdmin,         ['role' => 'guest']));
+        $this->assertFalse(Account::canMutate([],                  $user));
+    }
 }

@@ -253,6 +253,15 @@ final class AdminUsersController extends Controller
         }
 
         $this->session->start();
+        // Privilege-chain guard: refuse to RENDER the edit form for
+        // a row the actor isn't allowed to mutate. The POST handler
+        // (mutate()) catches the same case, but redirecting here
+        // means the actor never even sees a misleading form.
+        if (! Account::canMutate($account, $target)) {
+            $this->session->put('_flash', 'Cannot edit an account at your role tier or higher.');
+            return $this->redirect($request->basePath() . '/admin');
+        }
+
         return $this->view('admin/edit-user', [
             'base'      => $request->basePath(),
             'csrfToken' => $this->csrf->token(),
@@ -458,6 +467,21 @@ HTML;
         if ((int) $account['id'] === $targetId) {
             return $this->failBack($request, sprintf(
                 'Cannot %s your own account from the admin panel.',
+                $action
+            ));
+        }
+
+        // Privilege-chain guard. An actor can only mutate accounts
+        // whose role sits STRICTLY below theirs in the ROLES
+        // hierarchy. Without this an Admin could edit / ban /
+        // delete a Super Admin via the UI; with it, the destructive
+        // surface is bounded by the actor's tier. The matching UI
+        // hides the buttons too, but the server check is the real
+        // line of defence -- a hand-crafted POST or a stale
+        // browser session still get refused here.
+        if (! Account::canMutate($account, $target)) {
+            return $this->failBack($request, sprintf(
+                'Cannot %s an account at your role tier or higher.',
                 $action
             ));
         }

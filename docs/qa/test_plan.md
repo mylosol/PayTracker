@@ -1322,6 +1322,43 @@ php scripts/cleanup-spam-accounts.php --apply
   who set a password).
 - Never deletes accounts that own any `driver_loads` rows.
 
+### 16g-chain. Privilege-chain protection
+
+The actor can only mutate accounts whose role is **strictly
+lower** than their own. The same rule applies across edit,
+ban / unban, delete, reset-password, and role assignment.
+
+1. Sign in as the QA Super Admin.
+2. Promote a test account to **Admin** (via the role dropdown).
+3. Sign out. Sign in as that **Admin** account.
+4. Visit `/preview/admin`. Find your Super Admin row in the
+   table.
+
+**Expected:**
+- The Super Admin row shows the muted text **"Outranks you"** in
+  the Actions column instead of any buttons.
+- The Role cell on the Super Admin row is read-only — no
+  dropdown (Super Admin is restricted to the
+  role-assignment surface, which Admin can't reach anyway).
+- Other Admin rows ALSO show "Outranks you" — peer Admins
+  can't mutate each other either.
+
+5. Attempt to visit `/preview/admin/users/<super-admin-id>/edit`
+   directly.
+
+**Expected:** redirect back to `/admin` with the flash
+`Cannot edit an account at your role tier or higher.`
+
+6. Attempt a hand-crafted POST to
+   `/preview/admin/users/<super-admin-id>/ban` (use the browser
+   dev-tools console with a known CSRF token).
+
+**Expected:** flash `Cannot ban an account at your role tier
+or higher.` and no state change.
+
+7. Sign back in as Super Admin. Demote the test Admin back to
+   User to clean up.
+
 ### 16g. Self-target protection
 
 1. From `/admin`, copy a button URL for one of YOUR OWN row's
