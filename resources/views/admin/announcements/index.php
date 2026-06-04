@@ -7,9 +7,9 @@
  */
 layout('layouts/app');
 
-$fmt = static function ($value): string {
-    return is_string($value) && $value !== '' ? $value . ' UTC' : '—';
-};
+// Stored as UTC; render in admin's local tz with the
+// abbreviation appended.
+$fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $value : null);
 ?>
 <div class="card">
     <h1>Announcements <span class="pill ok">super_admin</span></h1>
@@ -56,9 +56,16 @@ $fmt = static function ($value): string {
                 $rId       = (int) ($r['id'] ?? 0);
                 $isTplt    = (int) ($r['is_template'] ?? 0) === 1;
                 $isActive  = (int) ($r['is_active']   ?? 0) === 1;
-                $expired   = is_string($r['expires_at'] ?? null)
-                             && $r['expires_at'] !== ''
-                             && strtotime((string) $r['expires_at']) < time();
+                // Stored value is UTC; parse it explicitly so the
+                // expiry check works regardless of the PHP default
+                // timezone (which strtotime would otherwise honour).
+                $expired = false;
+                if (is_string($r['expires_at'] ?? null) && $r['expires_at'] !== '') {
+                    try {
+                        $expired = (new \DateTimeImmutable((string) $r['expires_at'], new \DateTimeZone('UTC')))
+                                       ->getTimestamp() < time();
+                    } catch (\Throwable) {}
+                }
                 $pills = [];
                 if ($isTplt)            { $pills[] = '<span class="pill warn">template</span>'; }
                 if ($isActive && ! $isTplt && ! $expired) { $pills[] = '<span class="pill ok">active</span>'; }

@@ -9,12 +9,9 @@
  */
 layout('layouts/app');
 
-// datetime-local wants YYYY-MM-DDTHH:MM. Storage is YYYY-MM-DD HH:MM:SS.
-$expiresInput = '';
-$rawExpires   = $row['expires_at'] ?? null;
-if (is_string($rawExpires) && $rawExpires !== '') {
-    $expiresInput = str_replace(' ', 'T', substr($rawExpires, 0, 16));
-}
+// Convert stored UTC value back to admin's local timezone so the
+// picker shows the same wall-clock time they typed at create.
+$expiresInput = utc_to_local_for_input(is_string($row['expires_at'] ?? null) ? (string) $row['expires_at'] : null);
 ?>
 <div class="card">
     <h1>Edit announcement #<?= (int) ($row['id'] ?? 0) ?></h1>
@@ -47,7 +44,8 @@ if (is_string($rawExpires) && $rawExpires !== '') {
         </p>
 
         <p>
-            <label for="expires_at"><strong>Expires at</strong> <span class="muted">(optional, UTC)</span></label><br>
+            <label for="expires_at"><strong>Expires at</strong>
+                <span class="muted">(optional, <?= e(app_tz_abbrev()) ?>)</span></label><br>
             <input id="expires_at" name="expires_at" type="datetime-local"
                    value="<?= e($expiresInput) ?>"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">

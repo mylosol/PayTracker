@@ -33,9 +33,9 @@ layout('layouts/app');
             <span class="pill">inactive</span>
         <?php endif; ?>
         &middot; Created by <code><?= e((string) ($row['created_by_user'] ?? '—')) ?></code>
-        on <?= e((string) ($row['created_at'] ?? '—')) ?> UTC
+        on <?= e(utc_to_local_display(is_string($row['created_at'] ?? null) ? (string) $row['created_at'] : null)) ?>
         <?php if (is_string($row['expires_at'] ?? null) && $row['expires_at'] !== ''): ?>
-            &middot; Expires <strong><?= e((string) $row['expires_at']) ?> UTC</strong>
+            &middot; Expires <strong><?= e(utc_to_local_display((string) $row['expires_at'])) ?></strong>
         <?php endif; ?>
     </p>
     <hr>
@@ -55,7 +55,7 @@ layout('layouts/app');
                     <th style="padding:.3rem .25rem;">Account ID</th>
                     <th style="padding:.3rem .25rem;">User</th>
                     <th style="padding:.3rem .25rem;">Email</th>
-                    <th style="padding:.3rem .25rem;">Dismissed at (UTC)</th>
+                    <th style="padding:.3rem .25rem;">Dismissed at</th>
                     <th style="padding:.3rem .25rem;">Don't show again?</th>
                 </tr>
             </thead>
@@ -65,7 +65,7 @@ layout('layouts/app');
                         <td style="padding:.3rem .25rem;"><code><?= (int) ($v['account_id'] ?? 0) ?></code></td>
                         <td style="padding:.3rem .25rem;"><?= e((string) ($v['user'] ?? '(deleted)')) ?></td>
                         <td style="padding:.3rem .25rem;"><?= e((string) ($v['email'] ?? '—')) ?></td>
-                        <td style="padding:.3rem .25rem;"><?= e((string) ($v['dismissed_at'] ?? '—')) ?></td>
+                        <td style="padding:.3rem .25rem;"><?= e(utc_to_local_display(is_string($v['dismissed_at'] ?? null) ? (string) $v['dismissed_at'] : null)) ?></td>
                         <td style="padding:.3rem .25rem;">
                             <?php if ((int) ($v['suppressed'] ?? 0) === 1): ?>
                                 <span class="pill ok">yes — permanent</span>

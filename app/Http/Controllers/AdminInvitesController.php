@@ -358,18 +358,16 @@ final class AdminInvitesController extends Controller
         return null;
     }
 
+    /**
+     * Treat the form's datetime-local value as APP_TIMEZONE local
+     * time and convert to UTC for storage. The browser doesn't
+     * send tzinfo with datetime-local; we anchor it to the
+     * configured app timezone so admins don't have to translate
+     * UTC in their head while filling out the form.
+     */
     private function normalizeExpiry(string $expiresAt): ?string
     {
-        if ($expiresAt === '') {
-            return null;
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $expiresAt) === 1) {
-            return str_replace('T', ' ', $expiresAt) . ':00';
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $expiresAt) === 1) {
-            return $expiresAt . ':00';
-        }
-        return $expiresAt;
+        return local_input_to_utc($expiresAt);
     }
 
     private function buildInviteUrl(Request $request, string $code): string

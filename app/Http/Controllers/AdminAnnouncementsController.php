@@ -436,28 +436,15 @@ final class AdminAnnouncementsController extends Controller
     }
 
     /**
-     * Convert the form's datetime-local value (YYYY-MM-DDTHH:MM)
-     * to MySQL's DATETIME format (YYYY-MM-DD HH:MM:SS), or pass
-     * through a value that's already in MySQL form. Empty input
-     * → null (means "no expiry").
-     *
-     * The conversion treats the local-time input as UTC; the
-     * admin UI labels the field as "UTC" so the operator isn't
-     * surprised. Cross-timezone offset support is a future
-     * polish.
+     * Convert the form's datetime-local value (YYYY-MM-DDTHH:MM
+     * in APP_TIMEZONE local time) to the UTC DATETIME format
+     * MySQL stores. Empty input → null (= "no expiry"). Centralised
+     * in local_input_to_utc() so the matching invite-codes surface
+     * uses the same conversion.
      */
     private function normalizeExpiry(string $expiresAt): ?string
     {
-        if ($expiresAt === '') {
-            return null;
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $expiresAt) === 1) {
-            return str_replace('T', ' ', $expiresAt) . ':00';
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $expiresAt) === 1) {
-            return $expiresAt . ':00';
-        }
-        return $expiresAt; // already YYYY-MM-DD HH:MM:SS
+        return local_input_to_utc($expiresAt);
     }
 
     private function failBack(string $url, string $message): Response

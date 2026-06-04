@@ -38,14 +38,16 @@ layout('layouts/app');
         </p>
 
         <p>
-            <label for="expires_at"><strong>Expires at</strong> <span class="muted">(optional, UTC)</span></label><br>
+            <label for="expires_at"><strong>Expires at</strong>
+                <span class="muted">(optional, <?= e(app_tz_abbrev()) ?>)</span></label><br>
             <input id="expires_at" name="expires_at" type="datetime-local"
                    value="<?= e($old['expires_at']) ?>"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
             <small class="muted">
                 Leave blank to keep the code live until manually revoked
-                or consumed. Stored in UTC; the picker shows your
-                local time but the server treats it as UTC.
+                or consumed. Pick a time in your local clock
+                (<?= e(app_tz_abbrev()) ?>); the server converts to UTC
+                for storage.
             </small>
         </p>
 

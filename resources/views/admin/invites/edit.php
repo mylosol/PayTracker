@@ -7,12 +7,11 @@
  */
 layout('layouts/app');
 
-$expiresInput = '';
-$rawExpires   = $row['expires_at'] ?? null;
-if (is_string($rawExpires) && $rawExpires !== '') {
-    $expiresInput = str_replace(' ', 'T', substr($rawExpires, 0, 16));
-}
-$autoDelete = (int) ($row['auto_delete'] ?? 0) === 1;
+// Pre-fill the datetime-local input by converting the stored UTC
+// value back to the admin's local timezone so the picker shows
+// the same wall-clock time the admin typed when creating.
+$expiresInput = utc_to_local_for_input(is_string($row['expires_at'] ?? null) ? (string) $row['expires_at'] : null);
+$autoDelete   = (int) ($row['auto_delete'] ?? 0) === 1;
 ?>
 <div class="card">
     <h1>Edit invite <code><?= e((string) ($row['code'] ?? '')) ?></code></h1>
@@ -37,7 +36,8 @@ $autoDelete = (int) ($row['auto_delete'] ?? 0) === 1;
         </p>
 
         <p>
-            <label for="expires_at"><strong>Expires at</strong> <span class="muted">(UTC; blank = no expiry)</span></label><br>
+            <label for="expires_at"><strong>Expires at</strong>
+                <span class="muted">(<?= e(app_tz_abbrev()) ?>; blank = no expiry)</span></label><br>
             <input id="expires_at" name="expires_at" type="datetime-local"
                    value="<?= e($expiresInput) ?>"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">

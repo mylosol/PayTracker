@@ -102,6 +102,115 @@ if (! function_exists('layout')) {
     }
 }
 
+if (! function_exists('app_timezone')) {
+    /**
+     * The app's configured local timezone, defaulting to UTC when
+     * APP_TIMEZONE isn't set. Centralises the lookup so callers
+     * don't repeat the config('app.timezone', 'UTC') boilerplate.
+     */
+    function app_timezone(): \DateTimeZone
+    {
+        return new \DateTimeZone((string) (config('app.timezone', 'UTC') ?? 'UTC'));
+    }
+}
+
+if (! function_exists('app_tz_abbrev')) {
+    /**
+     * Short timezone abbreviation for display in form hints + list
+     * columns (e.g. "CST" / "CDT" / "UTC"). Computed against
+     * "now" so the abbreviation tracks DST transitions automatically.
+     */
+    function app_tz_abbrev(): string
+    {
+        try {
+            return (new \DateTime('now', app_timezone()))->format('T');
+        } catch (\Throwable) {
+            return 'UTC';
+        }
+    }
+}
+
+if (! function_exists('utc_to_local_for_input')) {
+    /**
+     * Convert a stored UTC DATETIME string into the value an
+     * <input type="datetime-local"> expects (YYYY-MM-DDTHH:MM in
+     * the app's local timezone). Empty / null input returns ''.
+     *
+     * The form input has no tzinfo, so the server-side normaliser
+     * must read it as local time. utc_to_local_for_input is the
+     * inverse of that normaliser -- it's how we pre-fill an edit
+     * form with the same value the create form saw.
+     */
+    function utc_to_local_for_input(?string $utcDatetime): string
+    {
+        if (! is_string($utcDatetime) || $utcDatetime === '') {
+            return '';
+        }
+        try {
+            $utc   = new \DateTimeImmutable($utcDatetime, new \DateTimeZone('UTC'));
+            $local = $utc->setTimezone(app_timezone());
+            return $local->format('Y-m-d\TH:i');
+        } catch (\Throwable) {
+            // Best-effort fallback: strip seconds, replace space with T.
+            return str_replace(' ', 'T', substr($utcDatetime, 0, 16));
+        }
+    }
+}
+
+if (! function_exists('utc_to_local_display')) {
+    /**
+     * Pretty-print a stored UTC datetime as the admin's local time
+     * with the timezone abbreviation appended. Used in list
+     * columns ("Expires" / "Created") so an admin doesn't have to
+     * translate UTC in their head.
+     */
+    function utc_to_local_display(?string $utcDatetime): string
+    {
+        if (! is_string($utcDatetime) || $utcDatetime === '') {
+            return '—';
+        }
+        try {
+            $utc   = new \DateTimeImmutable($utcDatetime, new \DateTimeZone('UTC'));
+            $local = $utc->setTimezone(app_timezone());
+            return $local->format('Y-m-d H:i') . ' ' . $local->format('T');
+        } catch (\Throwable) {
+            return $utcDatetime . ' UTC';
+        }
+    }
+}
+
+if (! function_exists('local_input_to_utc')) {
+    /**
+     * Inverse of utc_to_local_for_input(): take the value a
+     * <input type="datetime-local"> POSTed (YYYY-MM-DDTHH:MM in
+     * local time) and return the corresponding UTC DATETIME string
+     * ready for MySQL.
+     *
+     * Also accepts YYYY-MM-DD HH:MM[:SS] for callers that round-trip
+     * a stored value without re-parsing. Returns null when the input
+     * is empty (= "no expiry"). Returns the input unchanged when
+     * we can't parse it so the caller's downstream validation can
+     * still produce a clear error.
+     */
+    function local_input_to_utc(string $localInput): ?string
+    {
+        $localInput = trim($localInput);
+        if ($localInput === '') {
+            return null;
+        }
+        $normalized = str_replace('T', ' ', $localInput);
+        if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $normalized) === 1) {
+            $normalized .= ':00';
+        }
+        try {
+            $local = new \DateTimeImmutable($normalized, app_timezone());
+            return $local->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        } catch (\Throwable) {
+            return $localInput;
+        }
+    }
+}
+
 if (! function_exists('active_announcement_for_modal')) {
     /**
      * Layout-time helper used by `layouts/app.php` to decide whether

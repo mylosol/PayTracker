@@ -9,9 +9,9 @@
  */
 layout('layouts/app');
 
-$fmt = static function ($value): string {
-    return is_string($value) && $value !== '' ? $value . ' UTC' : '—';
-};
+// All stored datetimes are UTC; render in the admin's local tz
+// so they don't have to translate in their head.
+$fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $value : null);
 ?>
 <div class="card">
     <h1>Invite codes</h1>
@@ -58,8 +58,16 @@ $fmt = static function ($value): string {
                 $rId      = (int) ($r['id'] ?? 0);
                 $code     = (string) ($r['code'] ?? '');
                 $used     = is_string($r['used_at']    ?? null) && $r['used_at']    !== '';
-                $expired  = is_string($r['expires_at'] ?? null) && $r['expires_at'] !== ''
-                            && strtotime((string) $r['expires_at']) < time();
+                // Stored value is UTC; parse it explicitly so the
+                // expiry check works regardless of the PHP default
+                // timezone (which strtotime would otherwise honour).
+                $expired  = false;
+                if (is_string($r['expires_at'] ?? null) && $r['expires_at'] !== '') {
+                    try {
+                        $expired = (new \DateTimeImmutable((string) $r['expires_at'], new \DateTimeZone('UTC')))
+                                       ->getTimestamp() < time();
+                    } catch (\Throwable) {}
+                }
                 $active   = ! $used && ! $expired;
                 $autoDel  = (int) ($r['auto_delete'] ?? 0) === 1;
                 $pills = [];
