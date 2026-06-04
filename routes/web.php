@@ -16,6 +16,7 @@ use PayTracker\Http\Controllers\AdminInvitesController;
 use PayTracker\Http\Controllers\AdminUsersController;
 use PayTracker\Http\Controllers\AnnouncementController;
 use PayTracker\Http\Controllers\PasswordResetController;
+use PayTracker\Http\Controllers\RegistrationController;
 use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Controllers\ProfileController;
 use PayTracker\Http\Controllers\StaticPagesController;
@@ -47,6 +48,10 @@ return static function (Router $router): void {
     $router->get('/login',  [LoginController::class, 'showForm']);
     $router->post('/login', [LoginController::class, 'submit']);
     $router->post('/logout', [LoginController::class, 'logout']);
+
+    // --- Invite-only registration (public; gated by invite code) -------
+    $router->get('/register',  [RegistrationController::class, 'show']);
+    $router->post('/register', [RegistrationController::class, 'submit']);
 
     // --- Driver dashboard (signed-in) ---------------------------------
     // "My pay" page: the signed-in driver's loads for a date window

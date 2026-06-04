@@ -1849,7 +1849,112 @@ php scripts/qa-cleanup.php --invites --apply
 
 ---
 
-## 21. Production is untouched
+## 21. Invite-only registration (`/register`)
+
+The public path to a brand-new account. No auth required (the
+whole point is for someone WITHOUT an account to use it). The
+invite code from Section 20 is the gate.
+
+### 21a. Form renders from a URL invite
+
+1. From `/preview/admin/invites`, copy an active code's
+   `/register?invite=…` URL.
+2. Open a private tab, paste the URL.
+
+**Expected:**
+- Heading "Create your PayTracker account".
+- Invite-code field is pre-populated with the code from the URL.
+- Email field is pre-populated with the row's `invitee_email`
+  if one was set (admin pre-filled it at mint time).
+- Username, password, confirm-password fields are blank.
+- Hidden `_csrf` field exists.
+
+### 21b. Successful registration auto-logs you in
+
+1. Fill in:
+   - Invite: leave the URL-pre-filled value as-is.
+   - Username: `qareg<unique-suffix>` (matches `[A-Za-z0-9._-]{3,32}`).
+   - Email: any valid address (you can change the pre-filled one).
+   - Password: ≥ 12 characters.
+   - Confirm password: matches.
+2. Click **Create account & sign in**.
+
+**Expected:**
+- Redirect to `/preview/` (home).
+- Green flash banner: `Welcome, <username> — your account is ready.`
+- The home page shows the welcome card for your new account.
+- `/preview/admin/audit?action=USER_REGISTERED` shows a row with
+  your new account id, username, and email in the metadata.
+- `/preview/admin/audit?action=INVITE_USED` shows the matching
+  consume row with the code.
+- The invite code in the admin list: if it was auto-delete=on, it's
+  gone; if auto-delete=off, it shows "used by `<username>`".
+
+### 21c. Validation errors preserve the form
+
+Repeat 21b but with one bad field each — verify the flash text
+matches and the OTHER fields stay populated on redirect (no
+re-typing required, except passwords which are intentionally
+not preserved). Test cases:
+
+- Missing invite code → `You need an invite code…`
+- Malformed invite (≠ 8 chars) → `That doesn't look like a valid invite code.`
+- Bad username (`a b c` or `bad@user`) → `Username must be 3-32 characters…`
+- Bad email → `Email is required and must be a valid address.`
+- Short password (e.g. 6 chars) → `Password must be at least 12 characters.`
+- Mismatched confirm → `Passwords do not match.`
+- Existing username → `That username is already taken.`
+- Existing email → `An account already exists for that email.`
+
+Each failure also lands a row at
+`/preview/admin/audit?action=USER_REGISTER_FAILED` with a
+`reason` discriminator (`missing_invite`, `malformed_invite`,
+`bad_username`, `bad_email`, `weak_password`, `password_mismatch`,
+`user_taken`, `email_taken`).
+
+### 21d. Consumed code cannot be reused
+
+1. Take a code that was just successfully consumed in 21b (only
+   relevant when auto_delete was off, otherwise the row's gone).
+2. Visit `/preview/register?invite=<that-code>`. Submit with
+   any valid form values.
+
+**Expected:**
+- Red flash: `That invite is no longer valid. It may have been
+  used, expired, or revoked. Ask the admin for a new one.`
+- No new account row.
+- Audit shows `USER_REGISTER_FAILED` with reason `invite_not_live`.
+
+### 21e. Expired code refused
+
+1. Edit a code in `/admin/invites/<id>/edit` and set expires_at
+   a few minutes in the past. Save.
+2. Visit the registration URL with that code.
+
+**Expected:** same flash as 21d (`That invite is no longer
+valid…`). The user-facing message intentionally doesn't
+distinguish "expired" from "used" — both are equally final from
+the registrant's perspective.
+
+### 21f. Concurrent submission lands at most one account
+
+This is the transactional-consume invariant. Hard to script
+manually; the documented test is to open the same registration
+URL in two private tabs and submit both within a second or two
+with different usernames/emails. Exactly ONE submission should
+succeed; the other gets the "invite no longer valid" flash.
+
+### 21g. Login page links here
+
+1. Visit `/preview/login` while signed out.
+
+**Expected:** the muted footer now reads
+*"Have an invite code? Create an account →"* with a working link
+to `/preview/register`.
+
+---
+
+## 22. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -1868,7 +1973,7 @@ php scripts/qa-cleanup.php --invites --apply
 
 ---
 
-## 22. Security headers are present (optional — engineer-assisted)
+## 23. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 

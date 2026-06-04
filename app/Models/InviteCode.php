@@ -220,4 +220,94 @@ final class InviteCode extends Model
         $sql = 'DELETE FROM ' . self::ident(self::$table) . ' WHERE id = ?';
         $this->prepared($sql, [$id]);
     }
+
+    /**
+     * Atomic consume + account creation.
+     *
+     * Wraps the SELECT ... FOR UPDATE (re-check liveness),
+     * INSERT INTO account (the new row), and UPDATE
+     * invite_codes SET used_at = NOW(), used_by_id = ?
+     * (or DELETE when auto_delete) inside a single transaction.
+     * Two concurrent submissions of the same code result in
+     * exactly one success -- the loser's FOR UPDATE blocks
+     * until the winner commits, then sees used_at populated
+     * and refuses.
+     *
+     * The caller (RegistrationController) supplies the
+     * account row as a fully-baked array. We INSERT it here
+     * so the password_hash + role + email all happen inside
+     * the same transaction that consumes the invite.
+     *
+     * Returns the new account's id on success or null when
+     * the invite is no longer live (consumed mid-flight,
+     * deleted, expired).
+     *
+     * @param array{user:string, email:?string, password_hash:string, role:string} $accountFields
+     */
+    public function consume(string $rawCode, array $accountFields): ?int
+    {
+        $normalized = self::normalize($rawCode);
+        if ($normalized === '' || strlen($normalized) !== self::CODE_LEN) {
+            return null;
+        }
+        $pdo = $this->connection->pdo();
+        $pdo->beginTransaction();
+        try {
+            // Re-check liveness with a row lock so a concurrent
+            // consume can't slip past.
+            $select = $pdo->prepare(
+                'SELECT id, auto_delete
+                   FROM `invite_codes`
+                  WHERE code = ?
+                    AND used_at IS NULL
+                    AND (expires_at IS NULL OR expires_at > UTC_TIMESTAMP())
+                  LIMIT 1
+                  FOR UPDATE'
+            );
+            $select->execute([$normalized]);
+            $row = $select->fetch(PDO::FETCH_ASSOC);
+            if (! is_array($row)) {
+                $pdo->rollBack();
+                return null;
+            }
+
+            // Insert the new account inside the transaction so a
+            // failure (unique-email collision, schema mishap)
+            // rolls the invite UPDATE back too.
+            $ins = $pdo->prepare(
+                'INSERT INTO `account`
+                    (user, email, password_hash, role, accountValid, agree, joinDate, paidDate)
+                 VALUES (?, ?, ?, ?, 1, 1, CURDATE(), CURDATE())'
+            );
+            $ins->execute([
+                $accountFields['user'],
+                $accountFields['email'],
+                $accountFields['password_hash'],
+                $accountFields['role'],
+            ]);
+            $newAccountId = (int) $pdo->lastInsertId();
+
+            // Mark used (or delete the row entirely when
+            // auto_delete is on -- removes the trail beyond
+            // the audit log).
+            if ((int) ($row['auto_delete'] ?? 0) === 1) {
+                $del = $pdo->prepare('DELETE FROM `invite_codes` WHERE id = ?');
+                $del->execute([(int) $row['id']]);
+            } else {
+                $upd = $pdo->prepare(
+                    'UPDATE `invite_codes`
+                        SET used_at = UTC_TIMESTAMP(),
+                            used_by_id = ?
+                      WHERE id = ?'
+                );
+                $upd->execute([$newAccountId, (int) $row['id']]);
+            }
+
+            $pdo->commit();
+            return $newAccountId;
+        } catch (\Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
 }

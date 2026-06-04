@@ -54,6 +54,8 @@ final class AuditLog extends Model
     public const ACTION_INVITE_UPDATED          = 'INVITE_UPDATED';
     public const ACTION_INVITE_EMAILED          = 'INVITE_EMAILED';
     public const ACTION_INVITE_REVOKED          = 'INVITE_REVOKED';
+    public const ACTION_INVITE_USED             = 'INVITE_USED';
+    public const ACTION_USER_REGISTERED         = 'USER_REGISTERED';
 
     // ---- Failed-login reason constants. Mirrors the discriminators
     // in AuthService::attempt so a downstream "why is this account

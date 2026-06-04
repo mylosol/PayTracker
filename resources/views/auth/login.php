@@ -39,8 +39,9 @@ layout('layouts/app');
     </form>
 
     <p class="muted" style="margin-top:1.5rem;font-size:13px;">
-        Accounts on the preview channel are seeded by an administrator using
-        <code>scripts/set-password.php</code>. Talk to engineering if you need
-        a test login.
+        Have an invite code?
+        <a href="<?= e($base) ?>/register">Create an account &rarr;</a>.
+        Otherwise, ask an administrator to send you one
+        (<a href="<?= e($base) ?>/contact">/contact</a>).
     </p>
 </div>
