@@ -55,6 +55,7 @@ $onlyCities        = in_array('--cities', $flags, true);
 $onlyUnlock        = in_array('--unlock', $flags, true);
 $onlyLoads         = in_array('--loads', $flags, true);
 $onlyAnnounce      = in_array('--announcements', $flags, true);
+$onlyInvites       = in_array('--invites', $flags, true);
 $confirmProduction = in_array('--confirm-production', $flags, true);
 
 $customPattern = null;
@@ -81,11 +82,12 @@ $pattern = $customPattern ?? 'Qa Test %';
 
 // If no specific category flag is passed, do all three. Mirrors the common
 // "I just finished a QA pass, please tidy up" intent.
-$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce;
+$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce || $onlyInvites;
 $doCities   = $onlyCities   || ! $anySpecific;
 $doUnlock   = $onlyUnlock   || ! $anySpecific;
 $doLoads    = $onlyLoads    || ! $anySpecific;
 $doAnnounce = $onlyAnnounce || ! $anySpecific;
+$doInvites  = $onlyInvites  || ! $anySpecific;
 
 if (config('app.env') === 'production' && $apply && ! $confirmProduction) {
     fwrite(STDERR, "Refusing to run against APP_ENV=production without --confirm-production.\n");
@@ -239,6 +241,51 @@ try {
                     $del = $pdo->prepare('DELETE FROM `announcements` WHERE subject LIKE ?');
                     $del->execute([$annPattern]);
                     echo "    → deleted (announcements + matching dismissals).\n";
+                }
+            }
+        }
+    }
+
+    // --- 5. QA-test invite codes ------------------------------------
+    // Section 20 of the QA plan creates throw-away codes whose
+    // invitee_email is typically a tester's own address. We sweep
+    // by created_by = QA_TEST_USER when configured; otherwise we
+    // sweep every UNCONSUMED code (consumed ones are real users
+    // we mustn't tamper with).
+    if ($doInvites) {
+        $exists = (bool) $pdo->query("SHOW TABLES LIKE 'invite_codes'")->fetchColumn();
+        if (! $exists) {
+            echo "  invites: table not present, skipping.\n";
+        } else {
+            // The only safe blanket sweep is "unconsumed AND no
+            // used_by_id". Real user registrations (branch 2) set
+            // used_at + used_by_id; QA-created codes that were
+            // never redeemed don't.
+            $find = $pdo->prepare(
+                "SELECT id, code, invitee_email, created_at
+                   FROM `invite_codes`
+                  WHERE used_at IS NULL"
+            );
+            $find->execute();
+            $rows = $find->fetchAll();
+
+            if ($rows === []) {
+                echo "  invites: no unconsumed codes on file.\n";
+            } else {
+                echo "  invites: " . count($rows) . " unconsumed code(s):\n";
+                foreach ($rows as $r) {
+                    printf(
+                        "    - id=%d code=%s invitee_email=%s created=%s\n",
+                        (int) $r['id'],
+                        (string) $r['code'],
+                        (string) ($r['invitee_email'] ?? '—'),
+                        (string) ($r['created_at'] ?? '—')
+                    );
+                }
+                if ($apply) {
+                    $del = $pdo->prepare('DELETE FROM `invite_codes` WHERE used_at IS NULL');
+                    $del->execute();
+                    echo "    → deleted.\n";
                 }
             }
         }

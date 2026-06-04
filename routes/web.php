@@ -12,6 +12,7 @@ use PayTracker\Http\Controllers\LocationController;
 use PayTracker\Http\Controllers\LoginController;
 use PayTracker\Http\Controllers\AdminAnnouncementsController;
 use PayTracker\Http\Controllers\AdminAuditController;
+use PayTracker\Http\Controllers\AdminInvitesController;
 use PayTracker\Http\Controllers\AdminUsersController;
 use PayTracker\Http\Controllers\AnnouncementController;
 use PayTracker\Http\Controllers\PasswordResetController;
@@ -96,6 +97,20 @@ return static function (Router $router): void {
     // Audit + diagnostics — read-only viewers, admin+.
     $router->get('/admin/audit',         [AdminAuditController::class, 'audit']);
     $router->get('/admin/diagnostics',   [AdminAuditController::class, 'diagnostics']);
+
+    // --- Invite codes (admin+) ---------------------------------------
+    // Mint / edit / re-send / revoke single-use registration tokens
+    // that gate the public /register path. Admin and Super Admin can
+    // both reach this surface -- code issuance is a routine
+    // operational tool, not the kind of cross-cutting action we
+    // restricted to Super Admin (role assignment, announcements).
+    $router->get('/admin/invites',                  [AdminInvitesController::class, 'index']);
+    $router->get('/admin/invites/new',              [AdminInvitesController::class, 'create']);
+    $router->post('/admin/invites',                 [AdminInvitesController::class, 'store']);
+    $router->get('/admin/invites/{id}/edit',        [AdminInvitesController::class, 'editForm']);
+    $router->post('/admin/invites/{id}/edit',       [AdminInvitesController::class, 'update']);
+    $router->post('/admin/invites/{id}/email',      [AdminInvitesController::class, 'email']);
+    $router->post('/admin/invites/{id}/revoke',     [AdminInvitesController::class, 'revoke']);
 
     // --- Announcements (super_admin only on the admin surface; user-
     // -facing dismiss endpoint is auth-required only) -----------------

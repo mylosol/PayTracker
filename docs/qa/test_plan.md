@@ -1738,7 +1738,118 @@ can prune; not blocking.
 
 ---
 
-## 20. Production is untouched
+## 20. Invite codes (admin-managed, single-use)
+
+Admin and above can mint 8-character uppercase alphanumeric codes
+that gate the public `/register` path (registration ships in a
+follow-up branch). Each code is single-use, optionally expiring,
+and optionally tied to an invitee email so Resend can deliver
+the link automatically.
+
+Pre-req: signed in as the QA Super Admin (Admin works too).
+
+### 20a. Admin surface renders
+
+1. Visit `/preview/admin`. Click **Invite codes →**.
+
+**Expected:**
+- Heading "Invite codes".
+- A "+ New invite" button and a table (likely empty on a fresh
+  preview).
+
+### 20b. Mint a code without email
+
+1. Click **+ New invite**. Leave the email + expiry blank. Pick
+   "Auto-delete the row" (default). Click **Mint code**.
+
+**Expected:**
+- Redirect to `/admin/invites` with a flash banner:
+  `Created invite XXXXXXXX (no email on file): https://paytracker.xyz/preview/register?invite=XXXXXXXX`
+- The list shows the new row with the **active** pill, the
+  invite URL shown beneath the code for easy copy/paste, and
+  invitee email `—`.
+- `/preview/admin/audit?action=INVITE_CREATED` shows a new row
+  with the code, expiry (null), and `email_status: "no email
+  on file"` in the metadata blob.
+
+### 20c. Mint a code WITH email (Resend delivery)
+
+Pre-req: Resend configured + `MAIL_FROM` set to a verified
+sender on preview.
+
+1. Mint again. Set invitee email = a real address you can read.
+   Leave expiry blank. Save.
+
+**Expected:**
+- Flash banner reads
+  `Created invite YYYYYYYY (emailed to <email> (msg <id>)): https://…`
+- The email arrives in the recipient's inbox with subject
+  "You're invited to PayTracker" and a "Create your account"
+  button pointing at the same URL.
+- Audit metadata `email_status` reads
+  `emailed to <email> (msg …)`.
+
+When Resend is unconfigured the flash reads `Resend not
+configured` and the URL is still shown for manual copy/paste.
+When Resend returns an error the flash reads `email to <addr>
+FAILED — see Resend logs`.
+
+### 20d. Edit + re-send
+
+1. From the list, click **Edit** on an active code.
+
+**Expected:**
+- Form pre-populated with the current invitee email, expiry,
+  and auto-delete radio.
+
+2. Change the email to a different address. Save.
+
+**Expected:** flash `Updated invite YYYYYYYY.` and a new
+`INVITE_UPDATED` audit row.
+
+3. Click **Re-send email** on the row.
+
+**Expected:** flash with the latest email-status string, plus
+an `INVITE_EMAILED` audit row attributing the re-send to the
+admin actor.
+
+### 20e. Expiry honored on the list
+
+1. Edit a code, set expires_at to a time a few minutes in the
+   past. Save.
+
+**Expected:** the row's state pill flips from **active** to
+**expired**. The invite URL no longer renders under the code
+(it's already invalid; rendering it would invite confusion).
+
+### 20f. Cannot edit a consumed code
+
+This step is informational until branch 2 ships — currently
+nothing consumes codes. Once /register lands, edits on a
+consumed row should fail with
+`Cannot edit an invite that has already been consumed.`
+
+### 20g. Revoke
+
+1. Click **Revoke** on any row. Confirm.
+
+**Expected:** flash `Revoked invite XXXXXXXX.`; row vanishes
+from the list; `INVITE_REVOKED` audit row attributed to you.
+
+### 20h. Cleanup
+
+QA-test invites are caught by the qa-cleanup script's
+`--invites` category (default category set). Run on the host:
+```
+ssh ...preview
+cd /home/robshe48/paytracker/preview
+php scripts/qa-cleanup.php --invites
+php scripts/qa-cleanup.php --invites --apply
+```
+
+---
+
+## 21. Production is untouched
 
 1. In a separate tab, visit **https://paytracker.xyz/** (no `/preview`).
 
@@ -1757,7 +1868,7 @@ can prune; not blocking.
 
 ---
 
-## 21. Security headers are present (optional — engineer-assisted)
+## 22. Security headers are present (optional — engineer-assisted)
 
 If you are comfortable with browser developer tools:
 
