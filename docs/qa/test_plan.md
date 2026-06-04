@@ -1516,6 +1516,34 @@ transition.
 - Flash: `No change — <user> already has role "<role>".`
 - No new audit row is written.
 
+### 18d.1. Peer Super Admin can be demoted (escape hatch)
+
+The privilege-chain rule from section 16g-chain is STRICT
+"strictly lower" for ban / unban / delete / reset-pw / edit.
+**Role assignment is the deliberate exception:** a Super Admin
+can demote a peer Super Admin back down. Without this, a
+mistaken promotion would leave only a DB-edit recovery path.
+
+1. From `/admin`, promote a test User account to **Super Admin**.
+
+**Expected:** the role dropdown saves; the row now shows
+`super_admin`.
+
+2. Without signing out, find the same row again.
+
+**Expected:**
+- The Role cell STILL shows a working role dropdown (the
+  peer-Super-Admin carve-out).
+- The Actions cell still shows **"Outranks you"** — Edit / Ban
+  / Delete / Reset PW are still blocked. Only role-change
+  flows under the carve-out.
+
+3. Change the dropdown back to `user`. Save.
+
+**Expected:** flash `Changed role of <user> (id N): super_admin → user.`
+The audit log records `USER_ROLE_CHANGED` with both values in
+the metadata.
+
 ### 18e. Sole-Super-Admin safeguard
 
 This requires a SECOND Super Admin account on preview.

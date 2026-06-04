@@ -178,6 +178,10 @@ final class AdminUsersController extends Controller
         }
 
         return $this->mutate($request, $id, 'change role', function (array $actor, array $target) use ($newRole): string {
+            // Peer-Super-Admin carve-out happens upstream in mutate();
+            // here we still enforce the sole-Super-Admin safeguard so
+            // the system can never end up with zero Super Admins via
+            // this surface.
             $previousRole = is_string($target['role'] ?? null) ? (string) $target['role'] : 'user';
             if ($previousRole === $newRole) {
                 return sprintf('No change — %s already has role "%s".', $target['user'], $newRole);
@@ -224,7 +228,7 @@ final class AdminUsersController extends Controller
                 $previousRole,
                 $newRole
             );
-        });
+        }, allowPeerForRoleChange: true);
     }
 
     /**
@@ -436,7 +440,7 @@ HTML;
      *        Action body receiving (actor, target) and returning the success
      *        flash message.
      */
-    private function mutate(Request $request, string $idRaw, string $action, callable $body): Response
+    private function mutate(Request $request, string $idRaw, string $action, callable $body, bool $allowPeerForRoleChange = false): Response
     {
         $account = $this->auth->currentAccount();
         if ($account === null) {
@@ -475,11 +479,18 @@ HTML;
         // whose role sits STRICTLY below theirs in the ROLES
         // hierarchy. Without this an Admin could edit / ban /
         // delete a Super Admin via the UI; with it, the destructive
-        // surface is bounded by the actor's tier. The matching UI
-        // hides the buttons too, but the server check is the real
-        // line of defence -- a hand-crafted POST or a stale
-        // browser session still get refused here.
-        if (! Account::canMutate($account, $target)) {
+        // surface is bounded by the actor's tier.
+        //
+        // Carve-out: role assignment passes $allowPeerForRoleChange,
+        // letting a Super Admin demote a peer Super Admin. This is
+        // the escape hatch for mistaken promotions -- without it,
+        // Super Admin would be a one-way trip through the UI. The
+        // sole-Super-Admin safeguard inside setRole's body still
+        // prevents stranding the system with zero Super Admins.
+        $chainOk = $allowPeerForRoleChange
+            ? Account::canChangeRoleOf($account, $target)
+            : Account::canMutate($account, $target);
+        if (! $chainOk) {
             return $this->failBack($request, sprintf(
                 'Cannot %s an account at your role tier or higher.',
                 $action

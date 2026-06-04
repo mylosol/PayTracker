@@ -150,7 +150,14 @@ $fmt = static function ($value): string {
                 // The server enforces the same rule; the UI just mirrors
                 // it so unprivileged buttons aren't dangled in front of
                 // users who'd hit a 403/flash on click.
-                $canMutate = ! $isSelf && Account::canMutate($actor, $u);
+                //
+                // canMutate is the strict "strictly lower" rule used
+                // for ban / edit / delete / reset-pw. canChangeRoleOf
+                // is the slightly looser variant that ALSO lets a
+                // Super Admin demote a peer Super Admin -- the escape
+                // hatch for mistaken promotions.
+                $canMutate     = ! $isSelf && Account::canMutate($actor, $u);
+                $canChangeRole = ! $isSelf && Account::canChangeRoleOf($actor, $u);
                 $banned   = is_string($u['banned_at'] ?? null) && $u['banned_at'] !== '';
                 $locked   = is_string($u['locked_until'] ?? null) && $u['locked_until'] !== ''
                             && strtotime((string) $u['locked_until']) > time();
@@ -170,7 +177,7 @@ $fmt = static function ($value): string {
                     <td style="padding:.5rem .25rem;"><?= e((string) ($u['email'] ?? '—')) ?></td>
                     <td style="padding:.5rem .25rem;">
                         <?php $currentRole = is_string($u['role'] ?? null) ? (string) $u['role'] : 'user'; ?>
-                        <?php if ($isSuperAdmin && $canMutate): ?>
+                        <?php if ($isSuperAdmin && $canChangeRole): ?>
                             <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/role"
                                   style="display:flex;gap:.25rem;align-items:center;">
                                 <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">

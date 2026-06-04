@@ -116,4 +116,50 @@ final class AccountTest extends TestCase
         $this->assertFalse(Account::canMutate($superAdmin,         ['role' => 'guest']));
         $this->assertFalse(Account::canMutate([],                  $user));
     }
+
+    // ===== canChangeRoleOf -- role-assignment peer carve-out ============
+
+    public function testCanChangeRoleOfMatchesCanMutateBelowSuperAdminTier(): void
+    {
+        // Below the top tier, canChangeRoleOf is identical to canMutate.
+        $user       = ['role' => 'user'];
+        $admin      = ['role' => 'admin'];
+        $superAdmin = ['role' => 'super_admin'];
+
+        // Admin -> User: allowed for both.
+        $this->assertTrue(Account::canChangeRoleOf($admin, $user));
+        // Super Admin -> Admin: allowed for both.
+        $this->assertTrue(Account::canChangeRoleOf($superAdmin, $admin));
+        // Admin -> Admin (peer below the carve-out tier): blocked.
+        $this->assertFalse(Account::canChangeRoleOf($admin, $admin));
+        // User -> anything: blocked.
+        $this->assertFalse(Account::canChangeRoleOf($user, $user));
+        $this->assertFalse(Account::canChangeRoleOf($user, $admin));
+    }
+
+    public function testCanChangeRoleOfAllowsSuperAdminPeerDemote(): void
+    {
+        // The carve-out: a Super Admin CAN target another Super Admin
+        // for role-change. canMutate proper still says no -- this is
+        // the entire reason the helper exists.
+        $superA = ['role' => 'super_admin'];
+        $superB = ['role' => 'super_admin'];
+
+        $this->assertFalse(Account::canMutate($superA, $superB));
+        $this->assertTrue(Account::canChangeRoleOf($superA, $superB));
+    }
+
+    public function testCanChangeRoleOfFailsClosedOnNullsAndNonSuperAdminActors(): void
+    {
+        $superAdmin = ['role' => 'super_admin'];
+
+        $this->assertFalse(Account::canChangeRoleOf(null, $superAdmin));
+        $this->assertFalse(Account::canChangeRoleOf($superAdmin, null));
+        $this->assertFalse(Account::canChangeRoleOf(null, null));
+
+        // An Admin can NOT demote a peer Super Admin via the carve-out
+        // -- the carve-out applies only when the actor is Super Admin.
+        $admin = ['role' => 'admin'];
+        $this->assertFalse(Account::canChangeRoleOf($admin, $superAdmin));
+    }
 }

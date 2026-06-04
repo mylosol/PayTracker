@@ -137,6 +137,38 @@ final class Account extends Model
         return $targetIdx < $actorIdx;
     }
 
+    /**
+     * Variant of canMutate that ALSO allows a Super Admin to act on a
+     * peer Super Admin. Used by the role-assignment surface (and only
+     * by it) so a Super Admin can fix a mistaken promotion -- demote
+     * another Super Admin back down to Admin or User.
+     *
+     * canMutate proper still gates ban / unban / delete / reset-pw /
+     * basics-edit at the stricter "strictly lower" rule, so this
+     * carve-out is intentionally narrow: peer-on-peer SET ROLE is
+     * fine, peer-on-peer BAN is not. A malicious Super Admin trying
+     * to weaponise this would need a multi-step demote-then-ban
+     * sequence, both of which audit-log the actor.
+     *
+     * The sole-Super-Admin safeguard in
+     * AdminUsersController::setRole still prevents demoting the
+     * last super_admin, so this can't strand the system.
+     *
+     * @param array<string,mixed>|null $actor
+     * @param array<string,mixed>|null $target
+     */
+    public static function canChangeRoleOf(?array $actor, ?array $target): bool
+    {
+        if (self::canMutate($actor, $target)) {
+            return true;
+        }
+        // Peer Super Admin carve-out.
+        return self::hasRole($actor, self::ROLE_SUPER_ADMIN)
+            && is_array($target)
+            && is_string($target['role'] ?? null)
+            && (string) $target['role'] === self::ROLE_SUPER_ADMIN;
+    }
+
     public static function hasRole(?array $account, string $minimumRole): bool
     {
         if (! in_array($minimumRole, self::ROLES, true)) {
