@@ -13,8 +13,10 @@ layout('layouts/app');
 $isProduction  = $env === 'production';
 $authenticated = is_array($account);
 // RBAC role helpers for the nav. Admin+ sees the admin surfaces;
-// Super Admin will get a future Admin Panel link when that lands.
+// Super Admin gets the cross-driver Driver loads survey + the
+// Admin Panel button.
 $isAdmin       = $authenticated && Account::hasRole($account, Account::ROLE_ADMIN);
+$isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPER_ADMIN);
 ?>
 <div class="card">
     <h1><?= e($appName) ?> <span class="pill <?= $isProduction ? 'ok' : 'warn' ?>"><?= e($env) ?></span></h1>
@@ -46,11 +48,13 @@ $isAdmin       = $authenticated && Account::hasRole($account, Account::ROLE_ADMI
                style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
                 My pay (today) &rarr;
             </a>
-            &nbsp;
-            <a href="<?= e($base) ?>/loads"
-               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                Driver loads &rarr;
-            </a>
+            <?php if ($isSuperAdmin): ?>
+                &nbsp;
+                <a href="<?= e($base) ?>/loads"
+                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                    Driver loads &rarr;
+                </a>
+            <?php endif; ?>
             <?php if ($isAdmin): ?>
                 &nbsp;
                 <a href="<?= e($base) ?>/locations"

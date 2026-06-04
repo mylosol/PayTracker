@@ -7,6 +7,7 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Models\Account;
 use PayTracker\Models\DriverLoad;
 use PayTracker\Security\Session;
 
@@ -29,8 +30,19 @@ final class LoadsController extends Controller
 
     public function index(Request $request): Response
     {
-        if ($this->auth->currentAccount() === null) {
+        // /loads is an admin-survey surface that lists EVERY driver's
+        // loads. Regular drivers must never see other drivers' data
+        // (the per-driver scope lives on /dashboard). Gate at the
+        // super_admin tier rather than admin+ because this is a
+        // raw QA-grade dump of the rebuilt driver_loads table --
+        // admins can drill in via /dashboard?date=... per driver if
+        // they need to.
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
             return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_SUPER_ADMIN)) !== null) {
+            return $denied;
         }
 
         // Optional `?driver_id=N` filter so a QA tester can spot-check one

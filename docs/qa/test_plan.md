@@ -400,12 +400,19 @@ behind the same auth gate as `/locations`.
 
 ## 8. Driver loads (normalized per-driver tables)
 
-> Requires sign-in (Section 5b).
+> Requires sign-in as the **Super Admin** QA account (Section 5b).
 
 This section verifies the **`driver_loads`** backfill — a migration that
 copies the 21 legacy `loadsNN` per-driver tables (where `N` is the
 driver's `account.id`) into a single relational table keyed by
 `driver_id` + `frtl`. The new table is read-only for now.
+
+**Access:** `/preview/loads` is the cross-driver survey surface — it
+shows every driver's loads. Gated at **Super Admin** so a regular User
+or Admin can't enumerate other drivers' data. Anonymous → `/login`;
+User / Admin → 403 "Access denied"; Super Admin → 200. Per-driver
+load entry (`/loads/new`, edit, delete) remains open to any
+authenticated user against their OWN driver_id only.
 
 ### 8a. The page loads and reports plausible counts
 
