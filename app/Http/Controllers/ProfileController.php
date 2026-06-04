@@ -86,10 +86,12 @@ final class ProfileController extends Controller
         // other accounts. Run this BEFORE updateProfile so a uniqueness
         // collision doesn't leave the row partially updated.
         try {
+            // Email is required across every account-mutation surface;
+            // updateBasics throws if it's missing or malformed.
             $this->accounts->updateBasics(
                 (int) $account['id'],
                 $userRaw,
-                $emailRaw === '' ? null : $emailRaw
+                $emailRaw
             );
         } catch (\Throwable $e) {
             return $this->failBack($request, $e->getMessage());
@@ -129,7 +131,7 @@ final class ProfileController extends Controller
         $this->session->put('_flash', sprintf(
             'Profile saved. Username: %s. Email: %s. Tenure date: %s. Shift: %s. Pay week starts %s.',
             $userRaw,
-            $emailRaw === '' ? '(unset)' : $emailRaw,
+            $emailRaw,
             $hireDate ?? 'unset (junior-band default)',
             ucfirst($shiftRaw),
             ucfirst($payWeekRaw)

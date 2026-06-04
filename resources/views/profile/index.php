@@ -70,14 +70,13 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
         </p>
 
         <p>
-            <label for="email"><strong>Email</strong> <span class="muted">(optional, used for password reset)</span></label><br>
-            <input id="email" name="email" type="email"
+            <label for="email"><strong>Email</strong></label><br>
+            <input id="email" name="email" type="email" required
                    value="<?= e($email) ?>" maxlength="255" autocomplete="email"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
             <small class="muted">
-                Where admin-initiated password-reset links land.
-                Leave blank if you'd rather sign in by username only &mdash;
-                you'll need an admin to set a new password if you forget it.
+                Required. Where admin-issued password-reset links and
+                other operational mail land.
             </small>
         </p>
 

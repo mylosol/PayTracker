@@ -45,14 +45,14 @@ $isSelf = (int) ($actor['id'] ?? 0) === (int) ($target['id'] ?? 0);
         </p>
 
         <p>
-            <label for="email"><strong>Email</strong> <span class="muted">(optional)</span></label><br>
-            <input id="email" name="email" type="email"
+            <label for="email"><strong>Email</strong></label><br>
+            <input id="email" name="email" type="email" required
                    value="<?= e((string) ($target['email'] ?? '')) ?>"
                    maxlength="255"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
             <small class="muted">
-                Where admin-initiated password-reset links land.
-                Leave blank to disable outbound email for this account.
+                Required. Where admin-issued password-reset links and
+                operational mail land.
             </small>
         </p>
 

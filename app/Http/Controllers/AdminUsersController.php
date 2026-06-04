@@ -291,10 +291,11 @@ final class AdminUsersController extends Controller
 
             // updateBasics throws on validation / uniqueness errors;
             // the mutate() shell catches and surfaces them as a flash.
+            // Email is REQUIRED -- updateBasics enforces it.
             $this->accounts->updateBasics(
                 (int) $target['id'],
                 $userRaw,
-                $emailRaw === '' ? null : $emailRaw
+                $emailRaw
             );
 
             $this->audit->record(
@@ -314,7 +315,7 @@ final class AdminUsersController extends Controller
                 'Updated user %d: username=%s, email=%s.',
                 (int) $target['id'],
                 $userRaw,
-                $emailRaw === '' ? '(unset)' : $emailRaw
+                $emailRaw
             );
         });
     }

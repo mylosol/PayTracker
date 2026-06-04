@@ -476,13 +476,10 @@ final class Account extends Model
      * @throws \InvalidArgumentException on validation failure
      * @throws \RuntimeException on uniqueness collision
      */
-    public function updateBasics(int $accountId, string $user, ?string $email): void
+    public function updateBasics(int $accountId, string $user, string $email): void
     {
         $user  = trim($user);
-        $email = $email !== null ? trim($email) : null;
-        if ($email === '') {
-            $email = null;
-        }
+        $email = trim($email);
 
         // Grandfather clause: legacy accounts have their email stored
         // in the `user` column (e.g. "mylosol@gmail.com"), which
@@ -507,7 +504,18 @@ final class Account extends Model
         if ($user === '') {
             throw new \InvalidArgumentException('Username is required.');
         }
-        if ($email !== null && filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+
+        // Email is REQUIRED. Every account needs a working address so
+        // the admin-issued password-reset path can reach them. The
+        // backfill migration (2026_06_04_001) already populated this
+        // for every legacy account whose login handle looked like an
+        // email; the remaining handful with a non-email-shaped handle
+        // are forced to type one in on next save -- the right time
+        // to demand it, given we're now hard-requiring it elsewhere.
+        if ($email === '') {
+            throw new \InvalidArgumentException('Email is required.');
+        }
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             throw new \InvalidArgumentException('Email is not a valid address.');
         }
 
@@ -521,14 +529,12 @@ final class Account extends Model
         if (is_array($check) && (int) ($check['id'] ?? 0) > 0) {
             throw new \RuntimeException('That username is already taken.');
         }
-        if ($email !== null) {
-            $check = $this->prepared(
-                'SELECT id FROM ' . self::ident(self::$table) . ' WHERE email = ? AND id <> ? LIMIT 1',
-                [$email, $accountId]
-            )->fetch();
-            if (is_array($check) && (int) ($check['id'] ?? 0) > 0) {
-                throw new \RuntimeException('That email is already taken.');
-            }
+        $check = $this->prepared(
+            'SELECT id FROM ' . self::ident(self::$table) . ' WHERE email = ? AND id <> ? LIMIT 1',
+            [$email, $accountId]
+        )->fetch();
+        if (is_array($check) && (int) ($check['id'] ?? 0) > 0) {
+            throw new \RuntimeException('That email is already taken.');
         }
 
         $sql = 'UPDATE ' . self::ident(self::$table) . ' SET user = ?, email = ? WHERE id = ?';

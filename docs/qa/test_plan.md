@@ -925,7 +925,8 @@ Visit `https://paytracker.xyz/preview/profile`.
 - **Email** input pre-populated with the current `account.email`
   value (after migration `2026_06_04_001`, this is backfilled from
   `user` for every legacy account whose handle looked like an
-  email). Optional; leave blank to disable outbound mail.
+  email). **Required.** Every account must have a working address
+  so admin-issued password-reset links can reach them.
 - **Hire date** is an optional `<input type="date">` with `max=today`.
 - Below the input is a "Current band: …" preview that maps the
   selected hire date to a tenure band (`6 / 12 / 24 / 60 / 108 / 168 / max`).
@@ -961,7 +962,13 @@ it back to an email-shaped value via this UI.
 
 **Expected:** error flash: `Email is not a valid address.`
 
-3. Change Username to a value already held by another account.
+3. Clear the Email field entirely. Save.
+
+**Expected:** error flash: `Email is required.`
+(Email is no longer optional — every account must have a working
+address so password-reset emails can reach them.)
+
+4. Change Username to a value already held by another account.
    Save.
 
 **Expected:** error flash: `That username is already taken.`
