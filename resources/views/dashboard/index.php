@@ -167,7 +167,6 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                 <tr style="text-align:left;border-bottom:1px solid #e4e8ee;">
                     <th style="padding:.3rem .5rem;width:1.5rem;"></th>
                     <th style="padding:.3rem .5rem;">FRTL</th>
-                    <th style="padding:.3rem .5rem;">Time</th>
                     <th style="padding:.3rem .5rem;">Type</th>
                     <th style="padding:.3rem .5rem;">Pickup &rarr; Delivery</th>
                     <th style="padding:.3rem .5rem;text-align:right;">Load Pay</th>
@@ -187,7 +186,6 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                             <?php endif; ?>
                         </td>
                         <td style="padding:.25rem .5rem;"><code><?= (int) $row['frtl'] ?></code></td>
-                        <td style="padding:.25rem .5rem;"><code><?= e(substr((string) $row['date'], 11, 5)) ?></code></td>
                         <td style="padding:.25rem .5rem;"><?= e($loadTypeLabel($row['load_type'])) ?></td>
                         <td style="padding:.25rem .5rem;">
                             <?= e((string) ($row['pickup_city'] ?? '?')) ?>
@@ -211,7 +209,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                     </tr>
                     <?php if ($bd !== null): ?>
                         <tr style="background:#f8fafc;border-bottom:1px solid #f0f2f6;">
-                            <td colspan="7" style="padding:.6rem 1.2rem;">
+                            <td colspan="6" style="padding:.6rem 1.2rem;">
                                 <details>
                                     <summary style="cursor:pointer;color:var(--accent);font-weight:600;">
                                         Pay breakdown &mdash; <?= e((string) ($bd['trip_label'] ?? '?')) ?>
