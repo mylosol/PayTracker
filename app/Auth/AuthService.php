@@ -46,12 +46,28 @@ final class AuthService
     }
 
     /**
-     * Attempt a login. Returns the account id on success or null on any
-     * failure. The CALLER is responsible for translating null into a
-     * user-facing error — this method never reveals which of "wrong
-     * handle", "wrong password", or "locked" was the cause.
+     * Attempt a login.
+     *
+     * Returns either the account id (int) on success OR a LoginFailure
+     * enum case describing why we said no. The two failure cases are
+     * deliberately asymmetric:
+     *
+     *   BadCredentials  -- catch-all "no" for wrong-handle / wrong-
+     *                      password / locked-after-too-many-tries.
+     *                      Identical UX so attackers can't distinguish
+     *                      "user doesn't exist" from "wrong password"
+     *                      via response shape or timing.
+     *   AccountSuspended -- ONLY returned AFTER we've verified the
+     *                      caller holds the right password. Safe to
+     *                      reveal at that point because an attacker
+     *                      with the correct password already wins
+     *                      in the non-banned case; revealing the
+     *                      suspension flag adds no new attack surface
+     *                      and lets the suspended legitimate user
+     *                      stop re-typing their (correct) password
+     *                      in confusion.
      */
-    public function attempt(string $handle, string $password): ?int
+    public function attempt(string $handle, string $password): int|LoginFailure
     {
         $this->session->start();
         $pdo = $this->connection->pdo();
@@ -84,29 +100,14 @@ final class AuthService
                 metadata: $auditMeta,
             );
             $this->equalizeFailureLatency();
-            return null;
+            return LoginFailure::BadCredentials;
         }
 
-        // Banned accounts: refuse the login with the same opaque "no" we
-        // give bad passwords. We do NOT reveal that the account is banned
-        // (that would let a banned user farm "still banned?" probes, and
-        // tells an attacker which accounts exist + are suspended). The
-        // admin panel surfaces ban state to admins.
-        if (is_string($row['banned_at'] ?? null) && $row['banned_at'] !== '') {
-            $this->audit->record(
-                AuditLog::ACTION_USER_LOGIN_FAILED,
-                userId: (int) $row['id'],
-                reason: AuditLog::REASON_BANNED,
-                ipAddress: $auditIp,
-                metadata: $auditMeta,
-            );
-            $this->equalizeFailureLatency();
-            return null;
-        }
-
-        // Honour an active lockout window. We deliberately do NOT count a
-        // login attempt while locked — that would let an attacker extend
-        // the lockout forever and effectively DOS the account.
+        // Lockout BEFORE password verify -- a locked account refuses
+        // attempts without bumping the counter so an attacker can't
+        // extend the cool-off period indefinitely. The legitimate
+        // user still sees the generic message; surfacing "you're
+        // locked" would let an attacker probe state cheaply.
         if ($this->isLocked($row)) {
             $this->audit->record(
                 AuditLog::ACTION_USER_LOGIN_FAILED,
@@ -116,7 +117,7 @@ final class AuthService
                 metadata: $auditMeta,
             );
             $this->equalizeFailureLatency();
-            return null;
+            return LoginFailure::BadCredentials;
         }
 
         if (! $this->hasher->verify($password, $row['password_hash'])) {
@@ -129,7 +130,28 @@ final class AuthService
                 metadata: $auditMeta,
             );
             $this->equalizeFailureLatency();
-            return null;
+            return LoginFailure::BadCredentials;
+        }
+
+        // Password verified. NOW check the ban flag. Surfacing the
+        // suspension to a caller with the correct password is the
+        // friendly UX: a legitimate user who's been suspended sees
+        // "your account has been suspended" instead of "wrong
+        // password" and stops re-typing. The security implication is
+        // bounded -- the attacker has already proved password
+        // ownership, so revealing the suspension grants no new
+        // attack surface vs. a non-banned account where they'd just
+        // be in.
+        if (is_string($row['banned_at'] ?? null) && $row['banned_at'] !== '') {
+            $this->audit->record(
+                AuditLog::ACTION_USER_LOGIN_FAILED,
+                userId: (int) $row['id'],
+                reason: AuditLog::REASON_BANNED,
+                ipAddress: $auditIp,
+                metadata: $auditMeta,
+            );
+            $this->equalizeFailureLatency();
+            return LoginFailure::AccountSuspended;
         }
 
         // Success. Reset counters, persist the new hash if the cost moved,

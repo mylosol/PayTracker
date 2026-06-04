@@ -1235,19 +1235,35 @@ button returns to `/login`.
 
 **Expected:** flash banner "Banned `<user>` (id `N`)."
 
-2. Open a private tab. Try to sign in as the banned account.
+2. Open a private tab. Try to sign in as the banned account with
+   the **WRONG** password.
 
 **Expected:**
-- Login fails with the same generic "wrong credentials" message
-  as a real bad password (the ban is deliberately not revealed).
+- Generic "Incorrect login or password." error (same as any
+  bad-password attempt — the ban isn't revealed to someone who
+  hasn't proved they hold the password).
 
-3. Return to `/admin`, click **Unban**.
+3. Try to sign in as the banned account with the **CORRECT**
+   password.
+
+**Expected:**
+- Error message:
+  *"This account has been suspended. Please contact an
+  administrator at /contact for assistance."*
+- The user is NOT redirected into the app; they stay on the
+  login page with the explanatory flash.
+- An audit row appears at
+  `/preview/admin/audit?action=USER_LOGIN_FAILED` with
+  reason=`banned` (only fires when the password verified).
+
+4. Return to `/admin`, click **Unban**.
 
 **Expected:** flash banner "Lifted ban on `<user>` (id `N`)."
 
-4. Retry the login from step 2.
+5. Retry the login with the correct password.
 
-**Expected:** sign-in succeeds.
+**Expected:** sign-in succeeds; the suspension message no longer
+appears.
 
 ### 16f. Delete is final
 

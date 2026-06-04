@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PayTracker\Http\Controllers;
 
 use PayTracker\Auth\AuthService;
+use PayTracker\Auth\LoginFailure;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
 use PayTracker\Security\Csrf;
@@ -66,10 +67,26 @@ final class LoginController extends Controller
             return $this->failBack($request, 'Enter your login and password.');
         }
 
-        $accountId = $this->auth->attempt($handle, $password);
-        if ($accountId === null) {
-            return $this->failBack($request, 'Incorrect login or password.');
+        $result = $this->auth->attempt($handle, $password);
+        if ($result instanceof LoginFailure) {
+            // Map the failure case to a user-facing message. The
+            // BadCredentials wording is intentionally identical to
+            // the pre-enrichment behaviour so no attacker probe
+            // surface widens. AccountSuspended is only reachable
+            // after the password verified, so revealing the state
+            // is safe AND avoids the "I'm sure my password is
+            // right!" rabbit hole a banned user otherwise falls
+            // into.
+            $message = match ($result) {
+                LoginFailure::BadCredentials   => 'Incorrect login or password.',
+                LoginFailure::AccountSuspended => 'This account has been suspended. Please contact an administrator at /contact for assistance.',
+            };
+            return $this->failBack($request, $message);
         }
+
+        // After the instanceof check above, $result is the int account
+        // id (success path). We don't currently surface it past this
+        // point; the session was already populated inside attempt().
 
         // Arm the announcement modal: the user just logged in, so they
         // should see the active announcement (if any) on their very
