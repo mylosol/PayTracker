@@ -207,7 +207,7 @@ jobs:
           # MAIL_FROM defaults in config to a verified-domain sender, but
           # the deploy secret overrides for env-specific addresses.
           RESEND_API=${RESEND_KEY}
-          MAIL_FROM=${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}
+          MAIL_FROM="${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}"
 
           # Build provenance — surfaced on /health for traceability.
           BUILD_BRANCH=${BRANCH}

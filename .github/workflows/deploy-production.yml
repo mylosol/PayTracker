@@ -167,7 +167,7 @@ jobs:
 
           # Resend transactional email (admin-initiated password reset).
           RESEND_API=${RESEND_KEY}
-          MAIL_FROM=${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}
+          MAIL_FROM="${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}"
           EOF
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/.env"
 
