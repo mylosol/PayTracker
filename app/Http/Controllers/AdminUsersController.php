@@ -68,13 +68,42 @@ final class AdminUsersController extends Controller
         }
         $this->session->start();
 
+        // --- Filter / search / pagination params -----------------------
+        // Defaults: 50 per page, no search, no role filter, hide spam
+        // (the legacy DB has years of bot-registration junk we don't
+        // want crowding the table). All toggleable from the form.
+        $search       = trim((string) $request->input('search', ''));
+        $roleRaw      = (string) $request->input('role', '');
+        $roleFilter   = in_array($roleRaw, Account::ROLES, true) ? $roleRaw : null;
+        $includeSpam  = (string) $request->input('include_spam', '') === '1';
+        $perPageRaw   = (string) $request->input('per_page', '50');
+        $perPage      = ctype_digit($perPageRaw) && (int) $perPageRaw > 0 ? min(200, (int) $perPageRaw) : 50;
+        $pageRaw      = (string) $request->input('page', '1');
+        $page         = ctype_digit($pageRaw) && (int) $pageRaw > 0 ? (int) $pageRaw : 1;
+        $offset       = ($page - 1) * $perPage;
+
+        $page_data = $this->accounts->pageForAdmin($perPage, $offset, $search, $roleFilter, $includeSpam);
+
         return $this->view('admin/index', [
             'base'      => $request->basePath(),
             'csrfToken' => $this->csrf->token(),
             'actor'     => $account,
-            'users'     => $this->accounts->allForAdmin(),
+            'users'     => $page_data['rows'],
             'flash'     => $this->popFlash(),
             'isSuperAdmin' => Account::hasRole($account, Account::ROLE_SUPER_ADMIN),
+            'filters'   => [
+                'search'        => $search,
+                'role'          => $roleRaw,
+                'include_spam'  => $includeSpam,
+                'per_page'      => $perPage,
+                'page'          => $page,
+            ],
+            'counts' => [
+                'total'        => $page_data['total'],
+                'shown'        => count($page_data['rows']),
+                'matching'     => $page_data['totalAfterFilters'],
+                'total_pages'  => max(1, (int) ceil($page_data['totalAfterFilters'] / max(1, $perPage))),
+            ],
         ]);
     }
 

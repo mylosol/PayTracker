@@ -1110,13 +1110,40 @@ Pre-req: signed in as the QA Super Admin account.
 
 **Expected:**
 - Heading **Admin Panel** with a role pill showing your role.
-- A "User accounts" card listing every account with columns:
-  ID, User, Email, Role, Last login, Status, Actions.
+- A "User accounts" card with a filter row (search box, role
+  dropdown, per-page selector, "Show spam-looking handles"
+  checkbox, Apply, Clear) above the table.
+- A count summary like "50 shown of N matching; M total in DB,
+  spam-handles hidden".
+- Default view hides obvious legacy spam-bot handles (SQL-
+  injection probes, XSS payloads, URLs as usernames, names
+  with whitespace / parens / quotes). Tick **Show spam-looking
+  handles** to see everything.
+- The table lists matching accounts with columns: ID, User,
+  Email, Role, Last login, Status, Actions.
+- Pagination (First / Prev / Next / Last) at the bottom when
+  more than one page of results.
 - Your own row carries a small **you** badge next to the user
   name AND shows "No self-actions" in the Actions column —
   the server-side guard against banning / deleting yourself
   is mirrored in the UI.
 - Other rows show a **Reset PW**, **Ban**, and **Delete** button.
+
+### 16b.1. Filters compose correctly
+
+1. Type your email's local part into **Search**, click Apply.
+
+**Expected:** the table narrows to rows whose user OR email
+contains the substring. The count summary updates.
+
+2. Pick **admin** in the Role dropdown, Apply.
+
+**Expected:** only rows with role=admin remain (intersected with
+the search).
+
+3. Click **Clear**.
+
+**Expected:** filters reset, default view restored.
 
 ### 16c. Reset link is generated AND emailed
 
@@ -1186,6 +1213,30 @@ button returns to `/login`.
 - The deleted account can no longer sign in (login still
   shows the generic "wrong credentials" message — we do not
   reveal "no such account").
+
+### 16g.0. Bulk-clean legacy spam (admin-led, SSH)
+
+The legacy `account` table contains years of bot-registration
+junk (SQL-injection probes used as usernames, URLs as handles,
+XSS payloads, etc.). The admin panel hides them by default
+(see 16b "spam-handles hidden"), but to actually purge the
+rows from the DB run the cleanup script over SSH:
+
+```
+ssh ...preview
+cd /home/robshe48/paytracker/preview
+php scripts/sample-suspicious-accounts.php   # read-only audit
+php scripts/cleanup-spam-accounts.php        # dry-run, shows what would delete
+php scripts/cleanup-spam-accounts.php --apply
+```
+
+**Hard safety rails** baked into the cleanup script:
+- Dry-run by default; needs `--apply` to delete.
+- Refuses APP_ENV=production unless `--confirm-production` is
+  also supplied.
+- Never deletes accounts that have a `password_hash` (real users
+  who set a password).
+- Never deletes accounts that own any `driver_loads` rows.
 
 ### 16g. Self-target protection
 

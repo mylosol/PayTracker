@@ -173,16 +173,99 @@ final class Account extends Model
      */
     public function allForAdmin(int $limit = 200): array
     {
-        $limit = max(1, min(1000, $limit));
-        $sql = 'SELECT id, user, email, role,
-                       last_login_at, banned_at, locked_until
-                  FROM ' . self::ident(self::$table) . '
-                 ORDER BY (last_login_at IS NULL) ASC,
-                          last_login_at DESC,
-                          id DESC
-                 LIMIT ' . $limit;
-        $rows = $this->prepared($sql)->fetchAll();
-        return is_array($rows) ? $rows : [];
+        return $this->pageForAdmin($limit, 0, '', null, false)['rows'];
+    }
+
+    /**
+     * Pattern that matches an account `user` handle we treat as legacy
+     * spam-bot garbage. The legacy registration form had no input
+     * validation; over the years bots filled it with SQL-injection
+     * probes, XSS payloads, URLs, etc. This predicate hides them by
+     * default from the admin panel — the cleanup CLI
+     * (scripts/cleanup-spam-accounts.php) uses the same set of clauses.
+     *
+     * @var list<string>
+     */
+    private const SPAM_PREDICATE = [
+        "user REGEXP '(SELECT|WAITFOR|SLEEP|UNION|RAID|pg_sleep|EXTRACTVALUE|BENCHMARK)'",
+        "user REGEXP '\\\\b(OR|AND)\\\\b.*=.*'",
+        "user LIKE 'http://%' OR user LIKE 'https://%'",
+        "user LIKE '%example.com%'",
+        "user LIKE '%<%>%'",
+        "user LIKE '% %'",
+        "user LIKE '%(%' OR user LIKE '%)%' OR user LIKE '%\"%' OR user LIKE '%''%'",
+    ];
+
+    /**
+     * Paginated user list for the admin panel.
+     *
+     * @param int     $limit     1-200 rows per page.
+     * @param int     $offset    Rows to skip.
+     * @param string  $search    Optional substring match against `user`
+     *                           OR `email`. Empty means no filter.
+     * @param ?string $roleFilter Optional exact role filter. null/'' = any.
+     * @param bool    $includeSpam When false (default), rows matching the
+     *                            SPAM_PREDICATE are hidden -- the legacy
+     *                            DB has years of bot-registration junk
+     *                            that crowds the table otherwise.
+     *
+     * @return array{rows:list<array<string,mixed>>, total:int, totalAfterFilters:int}
+     *         total              = COUNT(*) on the table (unfiltered).
+     *         totalAfterFilters  = matching rows after search/role/spam filters.
+     */
+    public function pageForAdmin(
+        int $limit = 50,
+        int $offset = 0,
+        string $search = '',
+        ?string $roleFilter = null,
+        bool $includeSpam = false,
+    ): array {
+        $limit  = max(1, min(200, $limit));
+        $offset = max(0, $offset);
+        $where  = [];
+        $params = [];
+
+        if (! $includeSpam) {
+            // Wrap each clause group so we negate the WHOLE set.
+            $spam   = '(' . implode(') OR (', self::SPAM_PREDICATE) . ')';
+            $where[] = 'NOT (' . $spam . ')';
+        }
+        if ($search !== '') {
+            $where[]  = '(user LIKE ? OR email LIKE ?)';
+            $needle   = '%' . $search . '%';
+            $params[] = $needle;
+            $params[] = $needle;
+        }
+        if ($roleFilter !== null && $roleFilter !== '' && in_array($roleFilter, self::ROLES, true)) {
+            $where[]  = 'role = ?';
+            $params[] = $roleFilter;
+        }
+        $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
+
+        $total = (int) $this->prepared(
+            'SELECT COUNT(*) FROM ' . self::ident(self::$table)
+        )->fetchColumn();
+
+        $totalAfterFilters = (int) $this->prepared(
+            'SELECT COUNT(*) FROM ' . self::ident(self::$table) . $whereSql,
+            $params
+        )->fetchColumn();
+
+        $rowsSql = 'SELECT id, user, email, role,
+                           last_login_at, banned_at, locked_until
+                      FROM ' . self::ident(self::$table)
+                  . $whereSql
+                  . ' ORDER BY (last_login_at IS NULL) ASC,
+                              last_login_at DESC,
+                              id DESC
+                     LIMIT ' . $limit . ' OFFSET ' . $offset;
+        $rows = $this->prepared($rowsSql, $params)->fetchAll();
+
+        return [
+            'rows'              => is_array($rows) ? $rows : [],
+            'total'             => $total,
+            'totalAfterFilters' => $totalAfterFilters,
+        ];
     }
 
     /**

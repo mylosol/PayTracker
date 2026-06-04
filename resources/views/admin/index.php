@@ -6,10 +6,34 @@
  * @var list<array<string,mixed>>  $users
  * @var ?string                    $flash
  * @var bool                       $isSuperAdmin
+ * @var array{search:string,role:string,include_spam:bool,per_page:int,page:int} $filters
+ * @var array{total:int,shown:int,matching:int,total_pages:int}                   $counts
  */
 use PayTracker\Models\Account;
 
 layout('layouts/app');
+
+/**
+ * Build a /admin URL preserving the current filters with one or more
+ * overrides. Used by the pagination links so navigating pages doesn't
+ * drop the search / role / spam filters.
+ *
+ * @param array<string,string|int|bool> $overrides
+ */
+$buildUrl = static function (array $overrides) use ($base, $filters): string {
+    $params = [
+        'search'       => $filters['search'],
+        'role'         => $filters['role'],
+        'include_spam' => $filters['include_spam'] ? '1' : '',
+        'per_page'     => (int) $filters['per_page'],
+        'page'         => (int) $filters['page'],
+    ];
+    foreach ($overrides as $k => $v) {
+        $params[$k] = is_bool($v) ? ($v ? '1' : '') : (string) $v;
+    }
+    $params = array_filter($params, static fn ($v) => $v !== '' && $v !== 0);
+    return $base . '/admin' . ($params === [] ? '' : '?' . http_build_query($params));
+};
 
 // Convenience: format a nullable UTC datetime for display. We
 // don't localise — admins reading this surface generally want
@@ -51,7 +75,53 @@ $fmt = static function ($value): string {
 <?php endif; ?>
 
 <div class="card">
-    <h2>User accounts <span class="muted" style="font-size:14px;">(<?= count($users) ?> shown)</span></h2>
+    <h2>User accounts
+        <span class="muted" style="font-size:14px;">
+            (<?= (int) $counts['shown'] ?> shown of <?= (int) $counts['matching'] ?> matching;
+            <?= (int) $counts['total'] ?> total in DB<?= $filters['include_spam'] ? '' : ', spam-handles hidden' ?>)
+        </span>
+    </h2>
+
+    <form method="get" action="<?= e($base) ?>/admin"
+          style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
+        <label>
+            <strong>Search (user or email)</strong><br>
+            <input type="text" name="search" value="<?= e($filters['search']) ?>" maxlength="120"
+                   style="padding:.4rem;border:1px solid #cbd2da;border-radius:4px;width:18rem;">
+        </label>
+        <label>
+            <strong>Role</strong><br>
+            <select name="role"
+                    style="padding:.4rem;border:1px solid #cbd2da;border-radius:4px;width:11rem;">
+                <option value="">Any</option>
+                <?php foreach (Account::ROLES as $r): ?>
+                    <option value="<?= e($r) ?>" <?= $filters['role'] === $r ? 'selected' : '' ?>>
+                        <?= e($r) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label>
+            <strong>Per page</strong><br>
+            <select name="per_page"
+                    style="padding:.4rem;border:1px solid #cbd2da;border-radius:4px;width:6rem;">
+                <?php foreach ([25, 50, 100, 200] as $pp): ?>
+                    <option value="<?= $pp ?>" <?= (int) $filters['per_page'] === $pp ? 'selected' : '' ?>>
+                        <?= $pp ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+        <label style="margin-bottom:.4rem;">
+            <input type="checkbox" name="include_spam" value="1" <?= $filters['include_spam'] ? 'checked' : '' ?>>
+            <strong>Show spam-looking handles</strong>
+        </label>
+        <button type="submit"
+                style="background:var(--accent);color:#fff;border:0;padding:.5rem 1rem;border-radius:4px;font:inherit;cursor:pointer;">
+            Apply
+        </button>
+        <a href="<?= e($base) ?>/admin" style="align-self:center;text-decoration:none;">Clear</a>
+    </form>
     <table style="width:100%;border-collapse:collapse;">
         <thead>
             <tr style="text-align:left;border-bottom:2px solid #cbd2da;">
@@ -156,6 +226,26 @@ $fmt = static function ($value): string {
             <?php endforeach; ?>
         </tbody>
     </table>
+
+    <?php if ((int) $counts['total_pages'] > 1): ?>
+        <?php
+        $currentPage = (int) $filters['page'];
+        $totalPages  = (int) $counts['total_pages'];
+        $prevPage    = max(1, $currentPage - 1);
+        $nextPage    = min($totalPages, $currentPage + 1);
+        ?>
+        <p style="margin-top:1rem;display:flex;gap:.5rem;align-items:center;">
+            <?php if ($currentPage > 1): ?>
+                <a href="<?= e($buildUrl(['page' => 1])) ?>">&laquo; First</a>
+                <a href="<?= e($buildUrl(['page' => $prevPage])) ?>">&larr; Prev</a>
+            <?php endif; ?>
+            <span class="muted">Page <?= $currentPage ?> of <?= $totalPages ?></span>
+            <?php if ($currentPage < $totalPages): ?>
+                <a href="<?= e($buildUrl(['page' => $nextPage])) ?>">Next &rarr;</a>
+                <a href="<?= e($buildUrl(['page' => $totalPages])) ?>">Last &raquo;</a>
+            <?php endif; ?>
+        </p>
+    <?php endif; ?>
 </div>
 
 <div class="card">
