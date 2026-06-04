@@ -201,11 +201,11 @@ final class DriverLoad extends Model
      * Insert a single load.
      *
      * Performs the full write transaction:
-     *   1. Lock the driver's existing rows briefly and compute the next
-     *      `frtl` as MAX(frtl)+1 (or 1 if the driver has no rows yet).
-     *      The composite PK (driver_id, frtl) guarantees no collisions
-     *      INSIDE the transaction; a separate concurrent submission for
-     *      the SAME driver retries via the duplicate-key catch.
+     *   1. The caller MUST pass a positive `frtl` — it's the user's
+     *      dispatch number and is part of the composite PK. Drivers
+     *      without paperwork use the localStorage scratchpad path
+     *      (see LoadEntryController::preview) and never land here.
+     *      Throws InvalidArgumentException on missing/invalid frtl.
      *   2. Re-build the legacy `variables` / `loadinfo` / `paid` strings
      *      so unported legacy pages and the read-only /loads view
      *      keep working.
@@ -394,17 +394,20 @@ final class DriverLoad extends Model
         // "submitted, unpaid" state — first slot 1, rest 0.
         $paid = '1-0-0-0-0-0-0-0';
 
-        // FRTL is normally a USER-PROVIDED dispatch identifier, but the
-        // form makes it optional — drivers who don't have the paperwork
-        // handy can submit and we synthesise the next-available number
-        // per driver. When the caller passes a positive int, we use it
-        // verbatim and let the composite PK reject duplicates (the
-        // controller pre-flights via frtlExists() for a friendly error).
-        // When the caller passes 0/missing, we compute MAX(frtl)+1 with
-        // a small retry loop in case two submissions race for the same
-        // slot.
+        // FRTL is a REQUIRED, user-supplied dispatch identifier. It's
+        // the PK alongside driver_id; no row exists without one. Drivers
+        // who don't have the paperwork in hand use the localStorage
+        // scratchpad path (/loads/preview) — that flow never reaches
+        // this method until they edit the entry and supply a real FRTL.
+        // The controller pre-flights via frtlExists() for a friendly
+        // duplicate-error message; a race-condition collision still
+        // bubbles up as a PDOException, which is the right behaviour.
         $frtl = (int) ($data['frtl'] ?? 0);
-        $autoAssign = $frtl <= 0;
+        if ($frtl <= 0) {
+            throw new InvalidArgumentException(
+                'DriverLoad::insertOne requires a positive frtl; got ' . var_export($data['frtl'] ?? null, true)
+            );
+        }
 
         // np / op default to 0.00 when the caller doesn't pass them. The
         // load-entry controller computes them via PayCalculator before
@@ -456,63 +459,22 @@ final class DriverLoad extends Model
                     ?, ?, 0
                 )';
 
-        // When auto-assigning, retry on PK collision so two concurrent
-        // submissions for the same driver don't both claim MAX+1. Bounded
-        // to a small number of attempts — a sustained collision rate would
-        // indicate a runaway client and is better surfaced as an error
-        // than silently absorbed.
-        $maxAttempts = $autoAssign ? 5 : 1;
-        $lastError   = null;
-        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
-            if ($autoAssign) {
-                $frtl = $this->nextFrtlFor((int) $data['driver_id']);
-            }
-            try {
-                $params = [$data['driver_id'], $frtl];
-                if ($dateValue !== null) {
-                    $params[] = $dateValue;
-                }
-                $params = array_merge($params, [
-                    $variables, $loadinfo, $paid, $data['notes'] ?? null,
-                    $np, $op, $payBreakdown,
-                    $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
-                    $data['end_empty_city'] ?? null, (int) ($data['end_empty_miles'] ?? 0),
-                    $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
-                    number_format($data['extra_pay'], 2, '.', ''),
-                    $data['dem_minutes'], $data['break_minutes'],
-                    $data['out_of_route_ind'], $data['out_of_route_miles'],
-                ]);
-                $this->prepared($sql, $params);
-                return $frtl;
-            } catch (\PDOException $e) {
-                // 23000 / 1062 = duplicate PK. On auto-assign we loop and
-                // try the next number; on user-supplied frtl we re-throw
-                // (controller pre-flights but a race could still land here).
-                $isDupe = $e->getCode() === '23000'
-                    || (isset($e->errorInfo[1]) && (int) $e->errorInfo[1] === 1062);
-                if (! $isDupe || ! $autoAssign) {
-                    throw $e;
-                }
-                $lastError = $e;
-            }
+        $params = [$data['driver_id'], $frtl];
+        if ($dateValue !== null) {
+            $params[] = $dateValue;
         }
-        throw new \RuntimeException(
-            'Could not assign a free FRTL after ' . $maxAttempts . ' attempts',
-            0,
-            $lastError
-        );
-    }
-
-    /**
-     * Compute the next-available FRTL for a driver: MAX(frtl)+1, or 1 if
-     * the driver has no rows yet. Not collision-safe on its own; callers
-     * that race must wrap with a retry loop on PK violations.
-     */
-    private function nextFrtlFor(int $driverId): int
-    {
-        $sql = 'SELECT COALESCE(MAX(frtl), 0) + 1 FROM `driver_loads` WHERE driver_id = ?';
-        $next = $this->prepared($sql, [$driverId])->fetchColumn();
-        return (int) $next > 0 ? (int) $next : 1;
+        $params = array_merge($params, [
+            $variables, $loadinfo, $paid, $data['notes'] ?? null,
+            $np, $op, $payBreakdown,
+            $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
+            $data['end_empty_city'] ?? null, (int) ($data['end_empty_miles'] ?? 0),
+            $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
+            number_format($data['extra_pay'], 2, '.', ''),
+            $data['dem_minutes'], $data['break_minutes'],
+            $data['out_of_route_ind'], $data['out_of_route_miles'],
+        ]);
+        $this->prepared($sql, $params);
+        return $frtl;
     }
 
     /**

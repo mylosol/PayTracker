@@ -31,14 +31,15 @@ test.describe('load entry (write path)', () => {
         await expect(page.locator('input[name="_csrf"]')).toHaveCount(1);
     });
 
-    test('9c — empty submission is rejected', async ({ page }) => {
+    test('9c — empty submission is rejected (FRTL required)', async ({ page }) => {
         await signIn(page);
         await page.goto('loads/new');
         await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.getByRole('button', { name: /add load/i }).click();
-        // FRTL is optional now — the first required check is pickup
-        // terminal / delivery city.
-        await expect(page.getByText(/pick-up and delivery cities are required/i)).toBeVisible();
+        // FRTL is the FIRST required check now — drivers who don't
+        // have one should use the "Store Load Info" scratchpad path
+        // instead (covered in loads-scratchpad.spec.ts).
+        await expect(page.getByText(/frtl # is required to save a load/i)).toBeVisible();
     });
 
     // Pick a FRTL well above the existing-data range so reruns don't collide
@@ -89,19 +90,22 @@ test.describe('load entry (write path)', () => {
         await expect(page.getByText(/Panama City, FL.*Lynn Haven, FL/i)).toBeVisible();
     });
 
-    test('9g — blank FRTL auto-assigns next available number', async ({ page }) => {
+    test('9g — blank FRTL with disabled HTML5 validation is server-rejected', async ({ page }) => {
         await signIn(page);
         await page.goto('loads/new');
 
-        // Leave #frtl untouched — the model assigns MAX+1 per driver.
+        // The HTML5 `required` attribute on #frtl would normally block
+        // submission. We disable it here to exercise the SERVER's
+        // required-FRTL rule (defense in depth — JS-off clients hit
+        // the same friendly error).
+        await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Lynn Haven, FL');
         await page.locator('input[name="load_type"][value="0"]').check();
         await page.locator('#extra_pay').fill('0');
-        await page.locator('#notes').fill('QA TEST automated load-entry (auto-frtl) — safe to clean up');
+        await page.locator('#notes').fill('QA TEST automated load-entry (blank frtl) — safe to clean up');
         await page.getByRole('button', { name: /add load/i }).click();
 
-        await expect(page).toHaveURL(/\/loads$/);
-        await expect(page.getByText(/added load frtl=\d+ \(auto-assigned\)/i)).toBeVisible();
+        await expect(page.getByText(/frtl # is required to save a load/i)).toBeVisible();
     });
 });

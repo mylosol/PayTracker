@@ -154,23 +154,25 @@ final class LoadEntryController extends Controller
         $this->session->put('_old_out_of_route_miles', $outOfRouteRaw);
 
         // --- validate ---------------------------------------------------
-        // FRTL is the driver's dispatch number — typed in from paperwork
-        // when available. It's OPTIONAL: a driver who doesn't have the
-        // number handy can leave it blank and we'll auto-assign MAX+1
-        // for their account in DriverLoad::insertOne. When supplied,
-        // it must be a positive int unique per driver.
-        $frtl = 0; // 0 = "let the model auto-assign"
-        if ($frtlRaw !== '') {
-            if (! ctype_digit($frtlRaw) || (int) $frtlRaw <= 0) {
-                return $this->failBack($request, 'FRTL must be a positive number, or left blank to auto-assign.');
-            }
-            $frtl = (int) $frtlRaw;
-            if ($frtl > 2147483647) {
-                return $this->failBack($request, 'FRTL is too large to be valid.');
-            }
-            if ($this->loads->frtlExists((int) $account['id'], $frtl)) {
-                return $this->failBack($request, sprintf('FRTL %d is already on file for this driver.', $frtl));
-            }
+        // FRTL is the driver's dispatch number — typed in from paperwork.
+        // It is REQUIRED for any save-to-DB submission: it's the PK
+        // alongside driver_id and the legacy reconciliation flow has no
+        // way to match a load back to dispatch records without it. A
+        // driver who doesn't have the paperwork in hand should leave the
+        // "Store Load Info" checkbox OFF and the load lives in the
+        // browser's localStorage scratchpad (see /loads/preview).
+        if ($frtlRaw === '') {
+            return $this->failBack($request, 'FRTL # is required to save a load. To enter a load without one, turn off "Store Load Info" at the top of the form.');
+        }
+        if (! ctype_digit($frtlRaw) || (int) $frtlRaw <= 0) {
+            return $this->failBack($request, 'FRTL must be a positive number.');
+        }
+        $frtl = (int) $frtlRaw;
+        if ($frtl > 2147483647) {
+            return $this->failBack($request, 'FRTL is too large to be valid.');
+        }
+        if ($this->loads->frtlExists((int) $account['id'], $frtl)) {
+            return $this->failBack($request, sprintf('FRTL %d is already on file for this driver.', $frtl));
         }
 
         if ($pickup === '' || $delivery === '') {
@@ -369,11 +371,9 @@ final class LoadEntryController extends Controller
         }
 
         $sourceNote = $usedGoogleMaps ? ' (via Google Maps, now cached)' : '';
-        $frtlNote   = $frtlRaw === '' ? ' (auto-assigned)' : '';
         $this->session->put('_flash', sprintf(
-            'Added load frtl=%d%s: %s → %s, %d miles%s. Pay: $%s.',
+            'Added load frtl=%d: %s → %s, %d miles%s. Pay: $%s.',
             $frtl,
-            $frtlNote,
             $pickup,
             $delivery,
             $emptyMiles,

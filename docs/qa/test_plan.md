@@ -504,10 +504,12 @@ spec exercises.
 
 **Expected:**
 - Heading "Add a load".
-- **FRTL #** is optional — leave blank to auto-assign MAX+1 for this
-  driver, or type the dispatch number from your paperwork. When
-  supplied it must be a positive integer not already on file for
-  this driver.
+- **FRTL #** is REQUIRED (HTML5 `required` + server-side check).
+  Type the dispatch number from your paperwork. Must be a positive
+  integer not already on file for this driver. Drivers without a
+  number in hand should use the **Store Load Info** scratchpad path
+  (covered in Section 21) — the FRTL field is hidden when that
+  checkbox is OFF.
 - **Load date** is a `<input type="date">` defaulting to **today**,
   with `max=today` (can't enter future dates). Set it to the actual
   delivery date if you're entering paperwork after the fact — the
@@ -536,8 +538,9 @@ spec exercises.
    (use the browser's "Inspect → form noValidate" trick if the
    native validators block the submit).
 
-**Expected:** flash banner "Pick-up and delivery cities are required."
-FRTL is optional, so a missing FRTL no longer trips the first check.
+**Expected:** flash banner starts with "FRTL # is required to save a
+load." FRTL is the first server-side check now; pickup/delivery
+errors only surface after FRTL is supplied.
 
 ### 9d. Same pickup and delivery rejected
 1. FRTL = a fresh 9-digit number (e.g. `999100001`).

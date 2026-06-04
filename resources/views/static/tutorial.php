@@ -36,8 +36,12 @@ layout('layouts/app');
         directly to <a href="<?= e($base) ?>/loads/new"><code>/loads/new</code></a>.
     </p>
     <ul>
-        <li><strong>FRTL #</strong> is optional &mdash; leave blank to
-            auto-assign the next number for your account.</li>
+        <li><strong>FRTL #</strong> is required to save the load &mdash;
+            it's your dispatch number and the system uses it to match
+            loads to pay records. If you don't have it in hand, leave
+            <em>Store Load Info</em> turned OFF: the load lives in the
+            browser scratchpad and you can add the FRTL later by editing
+            the entry.</li>
         <li><strong>Load date</strong> defaults to today; back-date if
             you're entering paperwork after the fact.</li>
         <li><strong>Load type</strong>: Loaded one-way or Round-trip.

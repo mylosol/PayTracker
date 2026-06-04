@@ -43,18 +43,16 @@ if ($dateValue === '') {
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
 
         <p>
-            <label for="frtl"><strong>FRTL #</strong>
-                <?= $isEdit ? '' : '<span class="muted">(optional)</span>' ?>
-            </label><br>
+            <label for="frtl"><strong>FRTL #</strong></label><br>
             <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]*"
                    value="<?= e((string) $old['frtl']) ?>"
-                   <?= $isEdit ? 'readonly' : '' ?>
+                   <?= $isEdit ? 'readonly' : 'required' ?>
                    style="width:14rem;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;<?= $isEdit ? 'background:#f1f5f9;color:#475569;' : '' ?>">
             <small class="muted">
                 <?php if ($isEdit): ?>
                     The FRTL number is locked. To change it, delete this load and re-add.
                 <?php else: ?>
-                    From your dispatch paperwork. Leave blank to auto-assign the next number.
+                    From your dispatch paperwork. Required to save the load to your account.
                 <?php endif; ?>
             </small>
         </p>
