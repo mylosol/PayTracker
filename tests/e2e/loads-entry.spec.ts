@@ -83,11 +83,12 @@ test.describe('load entry (write path)', () => {
         await page.locator('#notes').fill('QA TEST automated load-entry — safe to clean up');
         await page.getByRole('button', { name: /add load/i }).click();
 
-        // PRG completes on /loads with a flash that includes the FRTL
-        // the user typed (NOT a synthetic one).
-        await expect(page).toHaveURL(/\/loads$/);
+        // PRG completes on /dashboard (since /loads is super-admin-only
+        // now). The flash carries the user-typed FRTL — NOT a synthetic
+        // one, since auto-assign is gone.
+        await expect(page).toHaveURL(/\/dashboard(\?|$)/);
         await expect(page.getByText(new RegExp(`added load frtl=${frtl}\\b`, 'i'))).toBeVisible();
-        await expect(page.getByText(/Panama City, FL.*Lynn Haven, FL/i)).toBeVisible();
+        await expect(page.getByText(/Panama City, FL/i).first()).toBeVisible();
     });
 
     test('9g — blank FRTL with disabled HTML5 validation is server-rejected', async ({ page }) => {

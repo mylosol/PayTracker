@@ -574,7 +574,7 @@ The form preserves your typed inputs so you can correct the FRTL.
 3. Submit.
 
 **Expected:**
-- Redirect to `/preview/loads`.
+- Redirect to `/preview/dashboard`.
 - Flash banner: `Added load frtl=NNN: Panama City, FL → Lynn Haven, FL, NN miles. Pay: $X.XX.`
   (the trailing `(via Google Maps, now cached)` only appears the first
    time a pair is resolved that wasn't already in `city_distances`;
@@ -2063,7 +2063,7 @@ FRTL block is hidden. Heading says "Edit unsaved load".
 
 **Expected:**
 
-- Lands on `/preview/loads` with flash "Added load frtl=999900050".
+- Lands on `/preview/dashboard` with flash "Added load frtl=999900050".
 - Back on the dashboard, the scratchpad row is GONE (the localId
   was consumed). The new DB-backed row appears instead with the
   real FRTL in the column.

@@ -238,7 +238,11 @@ final class LoadEntryController extends Controller
             $sourceNote,
             number_format($pay['np'], 2)
         ));
-        return $this->redirect($request->basePath() . '/loads');
+        // /loads is now Super-Admin-only (diagnostic surface). Drivers
+        // land on their dashboard, where the new row + pay totals are
+        // already visible — matches the user's mental model better
+        // than the legacy "back to the list" pattern anyway.
+        return $this->redirect($request->basePath() . '/dashboard');
     }
 
     /**
