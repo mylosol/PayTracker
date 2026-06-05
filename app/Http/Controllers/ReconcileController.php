@@ -171,19 +171,19 @@ final class ReconcileController extends Controller
 
             // Disputed components: an array of pay-component keys the
             // driver checked (base_pay, empty_pay, shift_pay, …). The
-            // model sanitises further; we just normalise to a list.
-            $componentsInput = $request->input('disputed_components', []);
-            if ($componentsInput instanceof \ArrayAccess || is_iterable($componentsInput)) {
-                $components = [];
-                foreach ($componentsInput as $v) {
+            // Request::input() helper is scalar-only so we reach into
+            // the public `post` array for the multi-value form field
+            // (HTML name="disputed_components[]") directly.
+            $components = [];
+            $raw = $request->post['disputed_components'] ?? null;
+            if (is_array($raw)) {
+                foreach ($raw as $v) {
                     if (is_string($v) && $v !== '') {
                         $components[] = $v;
                     }
                 }
-            } elseif (is_string($componentsInput) && $componentsInput !== '') {
-                $components = [$componentsInput];
-            } else {
-                $components = [];
+            } elseif (is_string($raw) && $raw !== '') {
+                $components[] = $raw;
             }
 
             // Other amount: optional catch-all for shortfalls that
