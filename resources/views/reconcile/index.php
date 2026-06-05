@@ -266,7 +266,7 @@ $renderRow = static function (array $row, ?array $reconRow) use (
                                       placeholder="What should payroll know?"></textarea>
                         </label>
                         <label style="display:block;font-size:12px;margin:.4rem 0;">
-                            <input type="checkbox" name="notify_email" value="1">
+                            <input type="checkbox" name="notify_email" value="1" data-notify-toggle>
                             Include in next payroll batch email
                         </label>
                         <label style="display:block;font-size:12px;margin:.4rem 0;">
@@ -435,45 +435,60 @@ $renderRow = static function (array $row, ?array $reconRow) use (
 
 <script>
     // -------------------------------------------------------------------
-    // "Send me a copy" persistent toggle.
+    // Persistent toggle preferences.
     //
-    // Every checkbox marked [data-cc-self-toggle] mirrors the same
-    // localStorage key (`paytracker.disputeCcSelf`). Ticking ANY of
-    // them flips the global preference; on page render every one
-    // reads the same value. The Send Batch form has a hidden field
-    // (`#send-batch-cc-self`) the submit handler populates so the
-    // controller sees the right value.
+    // Two driver preferences are remembered across sessions via
+    // localStorage and mirrored across every matching checkbox on
+    // the page (so toggling on one form updates them all):
+    //
+    //   [data-cc-self-toggle]  → paytracker.disputeCcSelf
+    //     "Send me a copy when the batch goes out". Appears on every
+    //     dispute form AND on the Send Batch card. Also drives the
+    //     hidden #send-batch-cc-self field the batch form POSTs.
+    //
+    //   [data-notify-toggle]   → paytracker.disputeNotifyEmail
+    //     "Include in next payroll batch email". Appears on every
+    //     dispute form. Persisted so a driver who batches every
+    //     dispute doesn't have to re-tick the box for each load.
+    //
+    // Both use the same bind helper; mirroring keeps each toggle in
+    // sync on the page without a reload.
     // -------------------------------------------------------------------
     (function () {
-        const KEY = 'paytracker.disputeCcSelf';
-        const read = () => {
-            try { return localStorage.getItem(KEY) === '1'; }
-            catch (e) { return false; }
-        };
-        const write = (on) => {
-            try { localStorage.setItem(KEY, on ? '1' : '0'); }
-            catch (e) {}
-        };
-
-        const initial = read();
-        const toggles = document.querySelectorAll('[data-cc-self-toggle]');
-        toggles.forEach(box => {
-            box.checked = initial;
-            box.addEventListener('change', () => {
-                write(box.checked);
-                // Mirror into every other toggle on the page so the
-                // dispute form's box and the batch card's box stay
-                // in sync without a reload.
-                toggles.forEach(b => { if (b !== box) b.checked = box.checked; });
-                // Update the hidden field on the batch form too.
-                const hidden = document.getElementById('send-batch-cc-self');
-                if (hidden) hidden.value = box.checked ? '1' : '0';
+        const bindPersistentToggles = (selector, storageKey, onChange) => {
+            const read = () => {
+                try { return localStorage.getItem(storageKey) === '1'; }
+                catch (e) { return false; }
+            };
+            const write = (on) => {
+                try { localStorage.setItem(storageKey, on ? '1' : '0'); }
+                catch (e) {}
+            };
+            const initial = read();
+            const toggles = document.querySelectorAll(selector);
+            toggles.forEach(box => {
+                box.checked = initial;
+                box.addEventListener('change', () => {
+                    write(box.checked);
+                    toggles.forEach(b => { if (b !== box) b.checked = box.checked; });
+                    if (onChange) onChange(box.checked);
+                });
             });
-        });
+            if (onChange) onChange(initial);
+        };
 
-        // Ensure the hidden field on the batch form reflects the
-        // current preference on page load.
-        const hidden = document.getElementById('send-batch-cc-self');
-        if (hidden) hidden.value = initial ? '1' : '0';
+        bindPersistentToggles(
+            '[data-cc-self-toggle]',
+            'paytracker.disputeCcSelf',
+            (on) => {
+                const hidden = document.getElementById('send-batch-cc-self');
+                if (hidden) hidden.value = on ? '1' : '0';
+            }
+        );
+        bindPersistentToggles(
+            '[data-notify-toggle]',
+            'paytracker.disputeNotifyEmail',
+            null
+        );
     })();
 </script>

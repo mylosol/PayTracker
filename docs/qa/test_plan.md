@@ -2154,7 +2154,9 @@ to the default tint and `pending` pill.
 - **Other shortfall ($)** — optional, numeric. Catch-all for gaps
   that don't map to a single component.
 - **Note** — required textarea.
-- **Include in next payroll batch email** — checkbox.
+- **Include in next payroll batch email** — checkbox. State is
+  persisted in `localStorage` under `paytracker.disputeNotifyEmail`
+  so the next dispute on this device defaults to the same choice.
 - **Send me a copy when this batch goes out** — checkbox. State is
   persisted in `localStorage` under `paytracker.disputeCcSelf`; ticking
   it here also ticks the matching toggle on the Pending payroll
