@@ -2002,6 +2002,95 @@ or `X-Content-Type-Options` are missing):
 
 ---
 
+## 24. Scratchpad — "Store Load Info" OFF (localStorage path)
+
+Drivers who don't have the dispatch FRTL # in hand can turn the
+**Store Load Info** checkbox OFF at the top of `/loads/new`. The
+load is computed by the server (so the pay math is identical),
+returned as JSON, and stashed in the browser's `localStorage` under
+the key `paytracker.unsavedLoads`. Entries auto-expire after 24
+hours from creation.
+
+### 24a. Toggle hides FRTL + reveals pitfall box
+
+1. Sign in. Visit `/preview/loads/new`.
+2. Confirm **Store Load Info** is ON (default), the FRTL # field
+   is visible, and the amber "Heads up" pitfall list is hidden.
+3. Click the checkbox to turn it OFF.
+
+**Expected:** the FRTL block collapses, the pitfall list appears
+(bullets: today-only on dashboard, lost on browser/device change,
+can't reconcile until edited to add FRTL, 24h auto-clear). Reloading
+the page persists the OFF state.
+
+### 24b. Scratchpad submit lands in localStorage and renders on dashboard
+
+1. With **Store Load Info** OFF, fill pickup = `Panama City, FL`,
+   delivery = `Lynn Haven, FL`, load type one-way, extra pay 0,
+   notes `QA TEST scratchpad — safe to clean up`. Submit.
+
+**Expected:**
+
+- Lands on `/preview/dashboard`.
+- Today's **Loads** table shows the new row at the top with FRTL `—`,
+  the pay value the server computed, and the muted "unsaved — in
+  this browser only" footer.
+- The **Today** + **This Week** totals cards are bumped: Loads
+  count +1, Net Pay shaded amber with a tooltip "Includes 1
+  unsaved load(s)", Miles +(pickup→delivery distance).
+- The PHP database has NO new row.
+- Browser DevTools → Application → Local Storage shows a
+  `paytracker.unsavedLoads` key with the entry inside.
+
+### 24c. Past-date dashboard hides scratchpad rows
+
+1. From the dashboard, click the `← <yesterday>` arrow.
+
+**Expected:** the scratchpad row from 24b does NOT appear (past
+dates show only DB-backed loads — by spec).
+
+### 24d. Edit unsaved row, type FRTL → auto-flip + save
+
+1. Return to today's dashboard.
+2. Click **Edit** on the scratchpad row.
+
+**Expected:** lands at `/preview/loads/new?unsaved=<localId>`.
+Form prefills with the stored values, **Store Load Info** is OFF,
+FRTL block is hidden. Heading says "Edit unsaved load".
+
+3. Toggle the checkbox ON (FRTL block reveals). Type a fresh
+   FRTL like `999900050`. Submit.
+
+**Expected:**
+
+- Lands on `/preview/loads` with flash "Added load frtl=999900050".
+- Back on the dashboard, the scratchpad row is GONE (the localId
+  was consumed). The new DB-backed row appears instead with the
+  real FRTL in the column.
+- The Today totals are unchanged from before — the scratchpad
+  amount was already counted; now the DB row contributes the same
+  amount via the server-rendered totals.
+
+### 24e. Discard button
+
+1. Add another scratchpad load (24b steps).
+2. On the dashboard, click **Discard** on that row. Confirm the
+   prompt.
+
+**Expected:** page reloads; the row is gone from both the table
+and `localStorage`.
+
+### 24f. Rolling 24-hour expiry (engineer-assisted)
+
+1. With one scratchpad entry on the dashboard, open DevTools and
+   manually edit the `created_at` field on the entry to
+   `Date.now() - 25*60*60*1000` (25 hours ago). Reload.
+
+**Expected:** the entry is purged from `localStorage` on next read
+and the dashboard row vanishes.
+
+---
+
 ## Reporting template
 
 Copy this into the issue / chat thread when filing a bug:

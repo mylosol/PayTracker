@@ -157,12 +157,11 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
     </form>
 </div>
 
-<div class="card">
+<div class="card" data-loads-card data-is-today="<?= $isToday ? '1' : '0' ?>" data-date="<?= e($date) ?>">
     <h2>Loads</h2>
-    <?php if ($rows === []): ?>
-        <p class="muted">No loads on <?= e($date) ?>.</p>
-    <?php else: ?>
-        <table style="border-collapse:collapse;font-size:13px;width:100%;">
+    <p class="muted" id="dashboard-no-loads-msg"<?= $rows !== [] ? ' hidden' : '' ?>>No loads on <?= e($date) ?>.</p>
+    <?php if ($rows !== [] || $isToday): ?>
+        <table id="dashboard-loads-table" style="border-collapse:collapse;font-size:13px;width:100%;<?= $rows === [] ? 'display:none;' : '' ?>">
             <thead>
                 <tr style="text-align:left;border-bottom:1px solid #e4e8ee;">
                     <th style="padding:.3rem .5rem;width:1.5rem;"></th>
@@ -328,3 +327,160 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
         click <strong>Refresh my pay</strong> to backfill them.
     </p>
 </div>
+
+<?php if ($isToday): ?>
+<script>
+    // -------------------------------------------------------------------
+    // Scratchpad hydration. Reads localStorage entries (rolling 24h),
+    // injects rows into today's Loads table, and bumps the Today + Week
+    // totals using ONLY the precomputed np figures from each entry
+    // (never re-running the pay formula client-side).
+    //
+    // Past/future dates do not run this script — past-date views are
+    // intentionally history-only per the FRTL-required design.
+    // -------------------------------------------------------------------
+    (function () {
+        const ENTRIES_KEY = 'paytracker.unsavedLoads';
+        const TTL_MS      = 24 * 60 * 60 * 1000;
+        const basePath    = <?= json_encode($base) ?>;
+
+        function readEntries() {
+            let raw;
+            try { raw = localStorage.getItem(ENTRIES_KEY); }
+            catch (e) { return []; }
+            if (!raw) return [];
+            let arr;
+            try { arr = JSON.parse(raw); }
+            catch (e) { return []; }
+            if (!Array.isArray(arr)) return [];
+            const now = Date.now();
+            const live = arr.filter(e => e && typeof e === 'object'
+                && typeof e.created_at === 'number'
+                && (now - e.created_at) < TTL_MS);
+            if (live.length !== arr.length) {
+                try { localStorage.setItem(ENTRIES_KEY, JSON.stringify(live)); } catch (e) {}
+            }
+            return live;
+        }
+        function writeEntries(arr) {
+            try { localStorage.setItem(ENTRIES_KEY, JSON.stringify(arr)); } catch (e) {}
+        }
+
+        // Consume the pending-clear handoff from a scratchpad → DB save.
+        // If the form on /loads/new POSTed successfully with an unsaved_id,
+        // the dashboard drops that entry from localStorage on first paint.
+        try {
+            const pendingId = sessionStorage.getItem('paytracker.consumeLocalId');
+            if (pendingId) {
+                writeEntries(readEntries().filter(e => e.local_id !== pendingId));
+                sessionStorage.removeItem('paytracker.consumeLocalId');
+            }
+        } catch (e) { /* fail silent */ }
+
+        const card = document.querySelector('[data-loads-card]');
+        if (!card) return;
+        const date = card.dataset.date; // YYYY-MM-DD for "today"
+        // Only entries matching today's date land here. The form
+        // disallows future dates and load_date defaults to today,
+        // so this is effectively "all live entries" — but the date
+        // filter is the explicit gate the spec asked for.
+        const todays = readEntries().filter(e =>
+            e && e.computed && typeof e.computed.date === 'string'
+            && e.computed.date.slice(0, 10) === date);
+        if (todays.length === 0) return;
+
+        const typeLabel = (t) => t === 0 ? 'One-way'
+                              : t === 1 ? 'Round-trip'
+                              : t === 4 ? 'Trainer'
+                              : String(t);
+        const money = (v) => '$' + Number(v).toFixed(2);
+
+        const tbody = document.querySelector('#dashboard-loads-table tbody');
+        const table = document.getElementById('dashboard-loads-table');
+        const noMsg = document.getElementById('dashboard-no-loads-msg');
+        if (!tbody || !table) return;
+
+        let injectedNp    = 0;
+        let injectedMiles = 0;
+        todays.forEach((entry) => {
+            const c  = entry.computed;
+            const id = entry.local_id;
+            injectedNp    += Number(c.np)          || 0;
+            injectedMiles += Number(c.empty_miles) || 0;
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #f0f2f6';
+            tr.style.verticalAlign = 'top';
+            tr.style.background = '#fffbeb'; // pale amber: this is a scratchpad row
+            tr.innerHTML = `
+                <td style="padding:.25rem .5rem;text-align:center;" title="Unsaved scratchpad load">&#x270D;</td>
+                <td style="padding:.25rem .5rem;color:#92400e;" title="No FRTL # yet — edit to add one and save"><code>—</code></td>
+                <td style="padding:.25rem .5rem;">${typeLabel(c.load_type)}</td>
+                <td style="padding:.25rem .5rem;">
+                    ${escapeHtml(c.pickup_city || '?')} &nbsp;&rarr;&nbsp; ${escapeHtml(c.delivery_city || '?')}
+                    <br><small class="muted" style="color:#92400e;">unsaved &mdash; in this browser only</small>
+                </td>
+                <td style="padding:.25rem .5rem;text-align:right;"><code>${money(c.np)}</code></td>
+                <td style="padding:.25rem .5rem;text-align:right;white-space:nowrap;">
+                    <a href="${basePath}/loads/new?unsaved=${encodeURIComponent(id)}"
+                       style="color:var(--accent);text-decoration:none;font-size:12px;margin-right:.3rem;"
+                       title="Edit this scratchpad load">Edit</a>
+                    <button type="button" data-discard-local-id="${id}"
+                            style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;padding:0;font:inherit;text-decoration:underline;"
+                            title="Discard this scratchpad load">Discard</button>
+                </td>`;
+            tbody.appendChild(tr);
+        });
+        table.style.display = '';
+        if (noMsg) noMsg.hidden = true;
+
+        // Wire Discard buttons.
+        tbody.querySelectorAll('button[data-discard-local-id]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-discard-local-id');
+                if (!confirm('Discard this unsaved load? It cannot be recovered.')) return;
+                writeEntries(readEntries().filter(e => e.local_id !== id));
+                window.location.reload();
+            });
+        });
+
+        // --- Bump the Today + Week totals -----------------------------
+        // Walk every .card whose first h2 starts with "Today" or
+        // "This Week" and add the precomputed np / miles / count to
+        // the displayed totals (which represent authoritative DB
+        // figures). We never re-run pay math — only sum.
+        document.querySelectorAll('.card').forEach(c => {
+            const h2 = c.querySelector('h2');
+            if (!h2) return;
+            const txt = h2.textContent.trim();
+            if (!txt.startsWith('Today') && !txt.startsWith('This Week')) return;
+            c.querySelectorAll('tbody tr').forEach(tr => {
+                const label = tr.querySelector('td strong');
+                const cell  = tr.querySelectorAll('td code')[0];
+                if (!label || !cell || cell.dataset.scratchpadBumped === '1') return;
+                const t = label.textContent.trim();
+                if (t === 'Loads') {
+                    cell.textContent = String((parseInt(cell.textContent, 10) || 0) + todays.length);
+                } else if (t === 'Net Pay') {
+                    const cur = parseFloat(cell.textContent.replace(/[^0-9.\-]/g, '')) || 0;
+                    cell.textContent = '$' + (cur + injectedNp).toFixed(2)
+                        .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                    cell.style.background = '#fef3c7';
+                    cell.style.color      = '#92400e';
+                    cell.title            = 'Includes ' + todays.length + ' unsaved load(s)';
+                } else if (t === 'Miles') {
+                    const cur = parseInt(cell.textContent.replace(/[^0-9]/g, ''), 10) || 0;
+                    cell.textContent = (cur + injectedMiles).toLocaleString('en-US');
+                } else {
+                    return;
+                }
+                cell.dataset.scratchpadBumped = '1';
+            });
+        });
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g,
+                c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+    })();
+</script>
+<?php endif; ?>

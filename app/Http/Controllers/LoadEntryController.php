@@ -175,168 +175,26 @@ final class LoadEntryController extends Controller
             return $this->failBack($request, sprintf('FRTL %d is already on file for this driver.', $frtl));
         }
 
-        if ($pickup === '' || $delivery === '') {
-            return $this->failBack($request, 'Pick-up and delivery cities are required.');
+        $assembled = $this->assembleLoadContext($request, $account);
+        if (! $assembled['ok']) {
+            return $this->failBack($request, $assembled['error']);
         }
-        if ($pickup === $delivery) {
-            return $this->failBack($request, 'Pick-up and delivery cannot be the same city.');
-        }
-        if (! is_numeric($typeRaw) || ! in_array((int) $typeRaw, self::ALLOWED_LOAD_TYPES, true)) {
-            return $this->failBack($request, 'Load type must be loaded one-way or round-trip.');
-        }
-        $loadType = (int) $typeRaw;
-
-        $isSplit   = $splitRaw === '1' ? 1 : 0;
-        $isWeekend = $wkRaw === '1' ? 1 : 0;
-
-        if (! is_numeric($demRaw) || (int) $demRaw < 0 || (int) $demRaw > self::MAX_MINUTES) {
-            return $this->failBack($request, 'Demurrage minutes must be between 0 and ' . self::MAX_MINUTES . '.');
-        }
-        if (! is_numeric($brkRaw) || (int) $brkRaw < 0 || (int) $brkRaw > self::MAX_MINUTES) {
-            return $this->failBack($request, 'Breakdown minutes must be between 0 and ' . self::MAX_MINUTES . '.');
-        }
-        if (! is_numeric($extraRaw) || (float) $extraRaw < 0 || (float) $extraRaw > self::MAX_EXTRA_PAY) {
-            return $this->failBack($request, 'Extra pay must be between 0 and ' . self::MAX_EXTRA_PAY . '.');
-        }
-
-        // Load date: required field, must be a real calendar day, and we
-        // refuse future dates because the dashboard groups by `date` and a
-        // future row would silently disappear off "today" until that day
-        // arrives. Defaulting empty → today keeps the legacy "submit now"
-        // behaviour working from old form posts.
-        if ($dateRaw === '') {
-            $dateRaw = date('Y-m-d');
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) !== 1) {
-            return $this->failBack($request, 'Load date must be in YYYY-MM-DD format.');
-        }
-        $parsedDate = \DateTimeImmutable::createFromFormat('Y-m-d', $dateRaw);
-        if ($parsedDate === false || $parsedDate->format('Y-m-d') !== $dateRaw) {
-            return $this->failBack($request, 'Load date is not a valid calendar date.');
-        }
-        if ($parsedDate > new \DateTimeImmutable('tomorrow')) {
-            return $this->failBack($request, 'Load date cannot be in the future.');
-        }
-        // Store as the same midnight-of-day datetime the legacy column
-        // expects. Keeps the (driver_id, date) index well-clustered and
-        // avoids per-row time-of-day creep that would make day-bucket
-        // queries miss rows.
-        $loadDate = $dateRaw . ' 00:00:00';
-
-        if (! is_numeric($beginEmptyRaw) || (int) $beginEmptyRaw < 0 || (int) $beginEmptyRaw > self::MAX_MILES) {
-            return $this->failBack($request, 'Begin empty miles must be between 0 and ' . self::MAX_MILES . '.');
-        }
-        if (! is_numeric($outOfRouteRaw) || (int) $outOfRouteRaw < 0 || (int) $outOfRouteRaw > self::MAX_MILES) {
-            return $this->failBack($request, 'Out-of-route miles must be between 0 and ' . self::MAX_MILES . '.');
-        }
-        $beginEmptyMiles = (int) $beginEmptyRaw;
-        $outOfRouteMiles = (int) $outOfRouteRaw;
-        // Round-trip loads don't have a separate empty pre-leg in the
-        // legacy formula — the return is implicit in the round-trip
-        // rate. Silently drop a stray begin-empty value so a driver
-        // who toggled between types after typing doesn't accidentally
-        // get paid for an empty leg the formula doesn't expect.
-        // (Mirrors the same one-way-only guard on End Empty.)
-        if ((int) $typeRaw !== 0) {
-            $beginEmptyMiles = 0;
-        }
-        // Legacy `out_of_route_ind` is a boolean flag the calculator
-        // checks before applying the rewrite. Deriving it from
-        // miles>0 keeps the form to one input — the driver doesn't
-        // need to think about a separate "is this an out-of-route
-        // load?" toggle.
-        $outOfRouteInd = $outOfRouteMiles > 0 ? 1 : 0;
-
-        // Pick-up MUST be a known terminal — drivers fuel at terminals and
-        // load there. This is a stricter check than "is this a known city"
-        // because the city list is much larger than the terminal list.
-        if (! $this->terminals->isKnown($pickup)) {
-            return $this->failBack($request, sprintf('Pick-up "%s" is not a known terminal. Pick from the list.', $pickup));
-        }
-
-        // Delivery can be any city the matrix knows about. The add-city
-        // flow is the proper way to introduce a new one.
-        if ($this->cities->findByName($delivery) === null) {
-            return $this->failBack($request, sprintf('Delivery city "%s" is not in the city list. Add it first.', $delivery));
-        }
-
-        // --- mile lookup -----------------------------------------------
-        // The legacy column name is misleading: $emptyMiles here is the
-        // pickup → delivery LOADED leg distance. The actual empty leg
-        // (delivery → end_empty) lands in $endEmptyMiles below.
-        $milesBefore = $this->distances->between($pickup, $delivery);
-        $emptyMiles  = $this->distances->lookupOrFetch($pickup, $delivery);
-        if ($emptyMiles === null) {
-            return $this->failBack(
-                $request,
-                sprintf(
-                    'Could not find a mileage for %s → %s, and Google Maps could not resolve it either.',
-                    $pickup,
-                    $delivery
-                )
-            );
-        }
-        $usedGoogleMaps = count($milesBefore) === 0 ? 1 : 0;
-
-        // End-empty leg: only meaningful for one-way (load_type=0). For
-        // round-trip we silently ignore even if a value was typed.
-        $endEmptyMiles = 0;
-        if ($loadType === 0 && $endEmpty !== '') {
-            if ($endEmpty === $delivery) {
-                return $this->failBack($request, 'End Empty must differ from the delivery city.');
-            }
-            $resolved = $this->distances->lookupOrFetch($delivery, $endEmpty);
-            if ($resolved === null) {
-                return $this->failBack(
-                    $request,
-                    sprintf(
-                        'Could not find an empty-leg mileage for %s → %s.',
-                        $delivery,
-                        $endEmpty
-                    )
-                );
-            }
-            $endEmptyMiles = $resolved;
-        }
-
-        // --- compute pay -------------------------------------------------
-        // Run PayCalculator now so the dashboard's totals are accurate
-        // immediately. Loads inserted with np=0 would surface the
-        // dashboard's "ask admin to recompute" stale banner; computing
-        // here avoids that for the everyday flow. The admin recompute
-        // path (/pay-admin/recompute) still exists for the bulk
-        // "rates changed, replay history" case.
-        // Naming gotcha: $emptyMiles in this controller is actually the
-        // resolved pickup→delivery distance, not the empty-return leg
-        // (it's the value CityDistance returned). For the calculator we
-        // pass it as load_miles (the loaded leg) and set empty_miles=0
-        // because the modern form has no separate empty-return field.
-        // Drivers expecting empty pay on a one-way should pick Round-trip
-        // instead; that path uses the round-trip rate table without
-        // double-billing.
-        // Build the variables blob from the driver's profile (hire_date
-        // → tenure band, shift → night-bonus toggle). When hire_date is
-        // unset the builder falls back to "6-day--0" (junior floor, day
-        // shift) — the under-pay side of the line, which we prefer over
-        // the historical "168-night--0" hardcode that inflated pay for
-        // every driver regardless of tenure or shift.
-        $variablesBlob = $this->blobBuilder->build($account);
-
-        $payInput = new LoadInputs(
-            load_type:          $loadType,
-            load_miles:         $emptyMiles,
-            empty_miles:        $endEmptyMiles,
-            begin_empty_miles:  $beginEmptyMiles,
-            is_split:           $isSplit,
-            is_weekend:         $isWeekend,
-            extra_pay:          (float) $extraRaw,
-            dem_minutes:        (int) $demRaw,
-            break_minutes:      (int) $brkRaw,
-            variables_blob:     $variablesBlob,
-            out_of_route_ind:   $outOfRouteInd,
-            out_of_route_miles: $outOfRouteMiles,
-        );
-        $pay = $this->calculator->computeFor($payInput);
+        $ctx             = $assembled['data'];
+        $pickup          = $ctx['pickup_city'];
+        $delivery        = $ctx['delivery_city'];
+        $endEmpty        = $ctx['end_empty_city_raw'];
+        $loadType        = $ctx['load_type'];
+        $isSplit         = $ctx['is_split'];
+        $isWeekend       = $ctx['is_weekend'];
+        $emptyMiles      = $ctx['empty_miles'];
+        $endEmptyMiles   = $ctx['end_empty_miles'];
+        $beginEmptyMiles = $ctx['begin_empty_miles'];
+        $outOfRouteMiles = $ctx['out_of_route_miles'];
+        $outOfRouteInd   = $ctx['out_of_route_ind'];
+        $usedGoogleMaps  = $ctx['used_google_maps'];
+        $loadDate        = $ctx['date'];
+        $variablesBlob   = $ctx['variables'];
+        $pay             = $ctx['pay_breakdown'];
 
         // --- insert -----------------------------------------------------
         $frtl = $this->loads->insertOne([
@@ -682,5 +540,225 @@ final class LoadEntryController extends Controller
         $flash = $this->session->get('_flash');
         $this->session->forget('_flash');
         return is_string($flash) ? $flash : null;
+    }
+
+    /**
+     * POST /loads/preview — XHR endpoint backing the localStorage
+     * scratchpad path. Runs the same validation + mile-lookup +
+     * PayCalculator pipeline as store(), but writes nothing to the
+     * database. Returns the computed row as JSON for the client to
+     * stash in localStorage.
+     *
+     * Authoritative pay math stays on the server: the JS module never
+     * implements the formula, only sums precomputed np/op figures it
+     * receives from this endpoint. That guarantees "Store" and
+     * "don't store" loads produce identical pay numbers.
+     *
+     * Response shape:
+     *   { ok: true,  computed: {...row fields incl np/op/breakdown...} }
+     *   { ok: false, error: "human-friendly message" }
+     */
+    public function preview(Request $request): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->json(['ok' => false, 'error' => 'Your session expired. Please reload and sign in again.'], 401);
+        }
+        $this->session->start();
+
+        if (! $this->csrf->verify($request->input('_csrf'))) {
+            return $this->json(['ok' => false, 'error' => 'Your session expired. Please reload the page.'], 419);
+        }
+
+        $assembled = $this->assembleLoadContext($request, $account);
+        if (! $assembled['ok']) {
+            return $this->json(['ok' => false, 'error' => $assembled['error']]);
+        }
+        $ctx = $assembled['data'];
+
+        // Slim the response: client only needs display-relevant fields
+        // plus the breakdown for dashboard hydration. Internal blobs
+        // (`variables`, `loadinfo`) are server-only and never travel
+        // back to a future save (the convert-to-saved flow re-submits
+        // through /loads which rebuilds the blob from current profile).
+        return $this->json([
+            'ok'       => true,
+            'computed' => [
+                'date'                 => substr((string) $ctx['date'], 0, 10),
+                'load_type'            => $ctx['load_type'],
+                'pickup_city'          => $ctx['pickup_city'],
+                'delivery_city'        => $ctx['delivery_city'],
+                'end_empty_city'       => $ctx['end_empty_city'],
+                'end_empty_miles'      => $ctx['end_empty_miles'],
+                'empty_miles'          => $ctx['empty_miles'],
+                'begin_empty_miles'    => $ctx['begin_empty_miles'],
+                'is_split'             => $ctx['is_split'],
+                'is_weekend'           => $ctx['is_weekend'],
+                'extra_pay'            => $ctx['extra_pay'],
+                'dem_minutes'          => $ctx['dem_minutes'],
+                'break_minutes'        => $ctx['break_minutes'],
+                'out_of_route_miles'   => $ctx['out_of_route_miles'],
+                'notes'                => $ctx['notes'],
+                'np'                   => (float) $ctx['pay_breakdown']['np'],
+                'op'                   => (float) $ctx['pay_breakdown']['op'],
+                'pay_breakdown'        => $ctx['pay_breakdown'],
+                'used_google_maps'     => $ctx['used_google_maps'],
+            ],
+        ]);
+    }
+
+    /**
+     * Shared validation + mile-lookup + pay-compute pipeline.
+     *
+     * Reads everything-but-FRTL from the request, validates ranges
+     * and types, resolves both pickup→delivery and (when one-way)
+     * delivery→end-empty mileages via CityDistance::lookupOrFetch,
+     * builds the variables blob from the driver profile, and runs
+     * PayCalculator. Returns the populated context dict or the
+     * first validation error.
+     *
+     * Pure: does not touch the DB except via reads, never inserts.
+     *
+     * @param array<string,mixed> $account
+     * @return array{ok:true, data:array<string,mixed>}|array{ok:false, error:string}
+     */
+    private function assembleLoadContext(Request $request, array $account): array
+    {
+        $pickup    = trim((string) $request->input('pickup_city', ''));
+        $delivery  = trim((string) $request->input('delivery_city', ''));
+        $endEmpty  = trim((string) $request->input('end_empty_city', ''));
+        $typeRaw   = (string) $request->input('load_type', '');
+        $splitRaw  = (string) $request->input('is_split', '0');
+        $wkRaw     = (string) $request->input('is_weekend', '0');
+        $demRaw    = (string) $request->input('dem_minutes', '0');
+        $brkRaw    = (string) $request->input('break_minutes', '0');
+        $extraRaw  = (string) $request->input('extra_pay', '0');
+        $dateRaw   = trim((string) $request->input('load_date', ''));
+        $beginEmptyRaw = (string) $request->input('begin_empty_miles', '0');
+        $outOfRouteRaw = (string) $request->input('out_of_route_miles', '0');
+        $notes     = trim((string) $request->input('notes', ''));
+
+        if ($pickup === '' || $delivery === '') {
+            return ['ok' => false, 'error' => 'Pick-up and delivery cities are required.'];
+        }
+        if ($pickup === $delivery) {
+            return ['ok' => false, 'error' => 'Pick-up and delivery cannot be the same city.'];
+        }
+        if (! is_numeric($typeRaw) || ! in_array((int) $typeRaw, self::ALLOWED_LOAD_TYPES, true)) {
+            return ['ok' => false, 'error' => 'Load type must be loaded one-way or round-trip.'];
+        }
+        $loadType  = (int) $typeRaw;
+        $isSplit   = $splitRaw === '1' ? 1 : 0;
+        $isWeekend = $wkRaw === '1' ? 1 : 0;
+
+        if (! is_numeric($demRaw) || (int) $demRaw < 0 || (int) $demRaw > self::MAX_MINUTES) {
+            return ['ok' => false, 'error' => 'Demurrage minutes must be between 0 and ' . self::MAX_MINUTES . '.'];
+        }
+        if (! is_numeric($brkRaw) || (int) $brkRaw < 0 || (int) $brkRaw > self::MAX_MINUTES) {
+            return ['ok' => false, 'error' => 'Breakdown minutes must be between 0 and ' . self::MAX_MINUTES . '.'];
+        }
+        if (! is_numeric($extraRaw) || (float) $extraRaw < 0 || (float) $extraRaw > self::MAX_EXTRA_PAY) {
+            return ['ok' => false, 'error' => 'Extra pay must be between 0 and ' . self::MAX_EXTRA_PAY . '.'];
+        }
+
+        if ($dateRaw === '') {
+            $dateRaw = date('Y-m-d');
+        }
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) !== 1) {
+            return ['ok' => false, 'error' => 'Load date must be in YYYY-MM-DD format.'];
+        }
+        $parsedDate = \DateTimeImmutable::createFromFormat('Y-m-d', $dateRaw);
+        if ($parsedDate === false || $parsedDate->format('Y-m-d') !== $dateRaw) {
+            return ['ok' => false, 'error' => 'Load date is not a valid calendar date.'];
+        }
+        if ($parsedDate > new \DateTimeImmutable('tomorrow')) {
+            return ['ok' => false, 'error' => 'Load date cannot be in the future.'];
+        }
+        $loadDate = $dateRaw . ' 00:00:00';
+
+        if (! is_numeric($beginEmptyRaw) || (int) $beginEmptyRaw < 0 || (int) $beginEmptyRaw > self::MAX_MILES) {
+            return ['ok' => false, 'error' => 'Begin empty miles must be between 0 and ' . self::MAX_MILES . '.'];
+        }
+        if (! is_numeric($outOfRouteRaw) || (int) $outOfRouteRaw < 0 || (int) $outOfRouteRaw > self::MAX_MILES) {
+            return ['ok' => false, 'error' => 'Out-of-route miles must be between 0 and ' . self::MAX_MILES . '.'];
+        }
+        $beginEmptyMiles = (int) $beginEmptyRaw;
+        $outOfRouteMiles = (int) $outOfRouteRaw;
+        if ($loadType !== 0) {
+            // Round-trip has no separate empty pre-leg — drop a stray value.
+            $beginEmptyMiles = 0;
+        }
+        $outOfRouteInd = $outOfRouteMiles > 0 ? 1 : 0;
+
+        if (! $this->terminals->isKnown($pickup)) {
+            return ['ok' => false, 'error' => sprintf('Pick-up "%s" is not a known terminal. Pick from the list.', $pickup)];
+        }
+        if ($this->cities->findByName($delivery) === null) {
+            return ['ok' => false, 'error' => sprintf('Delivery city "%s" is not in the city list. Add it first.', $delivery)];
+        }
+
+        $milesBefore = $this->distances->between($pickup, $delivery);
+        $emptyMiles  = $this->distances->lookupOrFetch($pickup, $delivery);
+        if ($emptyMiles === null) {
+            return ['ok' => false, 'error' => sprintf('Could not find a mileage for %s → %s, and Google Maps could not resolve it either.', $pickup, $delivery)];
+        }
+        $usedGoogleMaps = count($milesBefore) === 0 ? 1 : 0;
+
+        $endEmptyMiles = 0;
+        $endEmptyResolved = null;
+        if ($loadType === 0 && $endEmpty !== '') {
+            if ($endEmpty === $delivery) {
+                return ['ok' => false, 'error' => 'End Empty must differ from the delivery city.'];
+            }
+            $resolved = $this->distances->lookupOrFetch($delivery, $endEmpty);
+            if ($resolved === null) {
+                return ['ok' => false, 'error' => sprintf('Could not find an empty-leg mileage for %s → %s.', $delivery, $endEmpty)];
+            }
+            $endEmptyMiles    = $resolved;
+            $endEmptyResolved = $endEmpty;
+        }
+
+        $variablesBlob = $this->blobBuilder->build($account);
+        $payInput = new LoadInputs(
+            load_type:          $loadType,
+            load_miles:         $emptyMiles,
+            empty_miles:        $endEmptyMiles,
+            begin_empty_miles:  $beginEmptyMiles,
+            is_split:           $isSplit,
+            is_weekend:         $isWeekend,
+            extra_pay:          (float) $extraRaw,
+            dem_minutes:        (int) $demRaw,
+            break_minutes:      (int) $brkRaw,
+            variables_blob:     $variablesBlob,
+            out_of_route_ind:   $outOfRouteInd,
+            out_of_route_miles: $outOfRouteMiles,
+        );
+        $pay = $this->calculator->computeFor($payInput);
+
+        return [
+            'ok'   => true,
+            'data' => [
+                'date'                 => $loadDate,
+                'load_type'            => $loadType,
+                'pickup_city'          => $pickup,
+                'delivery_city'        => $delivery,
+                'end_empty_city'       => $endEmptyResolved,
+                'end_empty_city_raw'   => $endEmpty,
+                'end_empty_miles'      => $endEmptyMiles,
+                'empty_miles'          => $emptyMiles,
+                'begin_empty_miles'    => $beginEmptyMiles,
+                'is_split'             => $isSplit,
+                'is_weekend'           => $isWeekend,
+                'extra_pay'            => (float) $extraRaw,
+                'dem_minutes'          => (int) $demRaw,
+                'break_minutes'        => (int) $brkRaw,
+                'out_of_route_ind'     => $outOfRouteInd,
+                'out_of_route_miles'   => $outOfRouteMiles,
+                'used_google_maps'     => $usedGoogleMaps,
+                'notes'                => $notes !== '' ? $notes : null,
+                'variables'            => $variablesBlob,
+                'pay_breakdown'        => $pay,
+            ],
+        ];
     }
 }
