@@ -187,6 +187,27 @@ try {
                 );
             }
             if ($apply) {
+                // pay_reconciliations rows have no FK back to driver_loads
+                // (driver_loads is MyISAM-flavoured by tradition), so
+                // we delete them by the same (driver_id, frtl) pairs
+                // BEFORE the load rows go away. Failing to do this
+                // leaves orphan reconcile rows that a future driver
+                // with the same FRTL would inherit.
+                $reconDel = $pdo->prepare(
+                    'DELETE r FROM `pay_reconciliations` r
+                     JOIN `driver_loads` d
+                       ON d.driver_id = r.driver_id AND d.frtl = r.frtl
+                     WHERE d.notes LIKE ?'
+                );
+                try {
+                    $reconDel->execute([$loadPattern]);
+                } catch (\PDOException $e) {
+                    // pay_reconciliations might not exist yet on
+                    // ancient preview branches; ignore.
+                    if (! str_contains($e->getMessage(), 'pay_reconciliations')) {
+                        throw $e;
+                    }
+                }
                 $del = $pdo->prepare('DELETE FROM `driver_loads` WHERE notes LIKE ?');
                 $del->execute([$loadPattern]);
                 echo "    → deleted.\n";

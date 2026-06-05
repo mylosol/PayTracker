@@ -97,6 +97,10 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
            style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem .8rem;border-radius:6px;text-decoration:none;">
             + Add load
         </a>
+        <a href="<?= e($base) ?>/reconcile"
+           style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem .8rem;border-radius:6px;text-decoration:none;">
+            Reconcile
+        </a>
         <a href="<?= e($base) ?>/profile"
            style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem .8rem;border-radius:6px;text-decoration:none;">
             Profile

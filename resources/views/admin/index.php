@@ -76,6 +76,11 @@ $fmt = static function ($value): string {
                style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
                 Announcements &rarr;
             </a>
+            &nbsp;
+            <a href="<?= e($base) ?>/admin/reconcile"
+               style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+                Reconcile queue &rarr;
+            </a>
         <?php endif; ?>
     </p>
 </div>

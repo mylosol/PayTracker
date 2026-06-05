@@ -17,8 +17,10 @@ use PayTracker\Http\Controllers\AdminUsersController;
 use PayTracker\Http\Controllers\AnnouncementController;
 use PayTracker\Http\Controllers\PasswordResetController;
 use PayTracker\Http\Controllers\RegistrationController;
+use PayTracker\Http\Controllers\AdminReconcileController;
 use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Controllers\ProfileController;
+use PayTracker\Http\Controllers\ReconcileController;
 use PayTracker\Http\Controllers\StaticPagesController;
 use PayTracker\Http\Router;
 
@@ -83,6 +85,22 @@ return static function (Router $router): void {
     $router->get('/loads/{frtl}/edit',     [LoadEntryController::class, 'edit']);
     $router->post('/loads/{frtl}',         [LoadEntryController::class, 'update']);
     $router->post('/loads/{frtl}/delete',  [LoadEntryController::class, 'destroy']);
+
+    // --- Reconcile (driver-facing) -------------------------------------
+    // Per-load paid / short / disputed flow. Drivers click through
+    // their last 5 pay weeks and mark each load. Disputes can be
+    // queued for a batch email to their configured payroll contact.
+    $router->get('/reconcile',                       [ReconcileController::class, 'index']);
+    $router->post('/reconcile/send-batch',           [ReconcileController::class, 'sendBatch']);
+    $router->post('/reconcile/{frtl}/paid',          [ReconcileController::class, 'markPaid']);
+    $router->post('/reconcile/{frtl}/short',         [ReconcileController::class, 'markShort']);
+    $router->post('/reconcile/{frtl}/dispute',       [ReconcileController::class, 'markDisputed']);
+    $router->post('/reconcile/{frtl}/undo',          [ReconcileController::class, 'undo']);
+    $router->post('/reconcile/{frtl}/notify',        [ReconcileController::class, 'toggleNotify']);
+
+    // --- Reconcile admin queue (super_admin only) ---------------------
+    // Read-only list of every open disputed claim across all drivers.
+    $router->get('/admin/reconcile',                 [AdminReconcileController::class, 'index']);
 
     // --- Admin Panel (admin+) ------------------------------------------
     // The user-management surface: list, ban / unban, delete, mint a

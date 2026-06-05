@@ -2096,6 +2096,101 @@ and the dashboard row vanishes.
 
 ---
 
+## 25. Reconcile — per-load paid / short / disputed
+
+The driver-facing `/reconcile` page lists every load from the current
+pay week + the previous 4 weeks, lets the driver mark each one
+**paid**, **short** (got less than expected), or **disputed**
+(formally flagged with a note), and optionally queues disputes for
+a batched email to a configured payroll contact.
+
+### 25a. Anonymous access redirects to login
+
+1. Sign out. Visit `/preview/reconcile` directly.
+
+**Expected:** redirect to `/preview/login`.
+
+### 25b. Signed-in render
+
+1. Sign in. Visit `/preview/reconcile`.
+
+**Expected:**
+
+- Header "Reconcile your pay" card.
+- "Pending payroll batch" card with a pill showing `0` (no
+  disputes opted in yet).
+- "This week" card listing your current pay-week loads, each with
+  FRTL / Date / Pickup→Delivery / Expected pay / state pill =
+  `pending` / action buttons.
+- Four collapsible "Week of …" cards below for the previous 4 weeks.
+
+### 25c. Mark Paid + Undo
+
+1. Click **Paid** on a pending row.
+
+**Expected:** flash `Marked load N paid.`, row tints green with a
+`paid` pill.
+
+2. Click **Undo** on the same row and confirm.
+
+**Expected:** flash `Reset load N back to pending.`, row returns
+to the default tint and `pending` pill.
+
+### 25d. Mark Short
+
+1. Click **Short…** on a pending row to reveal the inline form.
+2. Enter an actual amount less than expected (e.g. `expected − 1`).
+3. Optionally note "Mile rate looked low" and submit.
+
+**Expected:** flash `Marked load N short by $1.00.`, row tints amber
+with a `short` pill and the shortfall amount displayed below it.
+
+### 25e. Dispute + payroll batch queue
+
+1. Click **Dispute…** on a pending row.
+2. Enter a note (required) and tick **Include in next payroll batch**.
+3. Submit.
+
+**Expected:**
+
+- Flash `Flagged load N as disputed (added to the pending payroll batch).`
+- Row tints red with a `disputed` pill and an `in next batch` sub-pill.
+- "Pending payroll batch" pill count goes up by 1.
+
+### 25f. Payroll contact email + Send batch button states
+
+1. Visit `/preview/profile`. Confirm the **Payroll contact email**
+   field is present, optional, type=email, validated client-side.
+2. Leave it blank → Pending batch card shows a
+   *"Set a payroll contact email →"* link to `/profile`; no send button.
+3. Fill in a valid address (e.g. your own), save profile.
+4. Return to `/reconcile`. If the server's `RESEND_API` is not set
+   (mail not configured), the button reads
+   *"Send batch (delivery pending)"* and is disabled with an amber
+   "delivery pending" note.
+5. Once `RESEND_API` is configured AND DNS verification has cleared,
+   the button activates as **Send batch to &lt;your address&gt;**.
+6. Click it. A confirm dialog appears with the address + count.
+
+**Expected:** flash `Sent N disputed load(s) to <address>.`,
+batched rows' sub-pill flips from `in next batch` to `batched`,
+"Pending payroll batch" count returns to 0.
+
+### 25g. Admin queue (Super Admin)
+
+1. As a Super Admin, visit `/preview/admin/reconcile`.
+
+**Expected:** table of every open disputed claim across every
+driver, with driver `user` + login email + payroll email, FRTL,
+expected / actual / shortfall, note, batch state, and updated
+timestamp. Read-only — no action buttons.
+
+2. As a base **Admin** (not Super Admin), visit the same URL.
+
+**Expected:** 403 "Access denied — Super Admin or higher".
+
+---
+
 ## Reporting template
 
 Copy this into the issue / chat thread when filing a bug:

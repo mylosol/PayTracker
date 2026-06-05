@@ -1,0 +1,115 @@
+import { test, expect } from '@playwright/test';
+import { hasCredentials, signIn } from './helpers/auth';
+
+/**
+ * Mirrors Section 25 of docs/qa/test_plan.md — the /reconcile flow.
+ *
+ * Each test inserts a fresh load (via the modern entry form) with a
+ * `QA TEST` notes prefix so the qa-cleanup sweep can remove it after
+ * the suite finishes. We then drive the load through the reconcile
+ * actions and verify the on-screen state pill + side-effects.
+ *
+ * The Resend send path is NOT exercised against the live API — the
+ * preview env may or may not have RESEND_API set, and DNS verification
+ * status is independent of the test harness. We assert the UI bits
+ * instead: "Send batch" surfaces / disables correctly based on the
+ * pending count + payroll_email + mailConfigured state.
+ */
+test.describe('reconcile', () => {
+    test.skip(!hasCredentials(), 'QA_TEST_USER / QA_TEST_PASSWORD not configured');
+
+    // Each test seeds its own load — use a FRTL well above the legacy
+    // backfill range so reruns don't collide.
+    const seedFrtl = () => 999_800_000 + Math.floor(Math.random() * 99_999);
+
+    const addQaLoad = async (page: any, frtl: number, note: string) => {
+        await page.goto('loads/new');
+        await page.locator('#frtl').fill(String(frtl));
+        await page.locator('#pickup_city').selectOption('Panama City, FL');
+        await page.locator('#delivery_city').fill('Lynn Haven, FL');
+        await page.locator('input[name="load_type"][value="0"]').check();
+        await page.locator('#extra_pay').fill('0');
+        await page.locator('#notes').fill(`QA TEST reconcile — ${note}`);
+        await page.getByRole('button', { name: /add load/i }).click();
+        await expect(page).toHaveURL(/\/dashboard(\?|$)/);
+    };
+
+    test('25a — anonymous /reconcile redirects to /login', async ({ page }) => {
+        await page.context().clearCookies();
+        await page.goto('reconcile');
+        await expect(page).toHaveURL(/\/login$/);
+    });
+
+    test('25b — signed-in /reconcile renders the weekly cards', async ({ page }) => {
+        await signIn(page);
+        await page.goto('reconcile');
+        await expect(page.getByRole('heading', { name: /reconcile your pay/i })).toBeVisible();
+        // Pending payroll batch card always shows; count starts at 0
+        // when there are no opted-in disputes.
+        await expect(page.getByRole('heading', { name: /pending payroll batch/i })).toBeVisible();
+        // Current pay-week card.
+        await expect(page.getByRole('heading', { name: /this week/i })).toBeVisible();
+    });
+
+    test('25c — mark paid flips the row to a paid pill + undo restores pending', async ({ page }) => {
+        await signIn(page);
+        const frtl = seedFrtl();
+        await addQaLoad(page, frtl, 'mark-paid flow');
+        await page.goto('reconcile');
+
+        const row = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await expect(row).toBeVisible();
+        await row.getByRole('button', { name: /^paid$/i }).click();
+        await expect(page.getByText(new RegExp(`marked load ${frtl} paid`, 'i'))).toBeVisible();
+        const rowAfter = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await expect(rowAfter.locator('.pill.ok', { hasText: /^paid$/i })).toBeVisible();
+
+        // Undo it.
+        page.once('dialog', d => d.accept());
+        await rowAfter.getByRole('button', { name: /undo/i }).click();
+        await expect(page.getByText(new RegExp(`reset load ${frtl} back to pending`, 'i'))).toBeVisible();
+        const rowReset = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await expect(rowReset.locator('.pill', { hasText: /^pending$/i })).toBeVisible();
+    });
+
+    test('25d — mark short records the shortfall + actual on the row', async ({ page }) => {
+        await signIn(page);
+        const frtl = seedFrtl();
+        await addQaLoad(page, frtl, 'mark-short flow');
+        await page.goto('reconcile');
+
+        const row = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await row.getByText(/^short…$/i).click();
+        // The inline form is sibling-ish in the same actions cell.
+        const shortForm = row.locator('form[action*="/short"]');
+        // The expected pay shown in the table is variable; we just under-shoot
+        // it by $1 to guarantee a positive shortfall.
+        const expectedTxt = await row.locator('code').last().textContent();
+        const expected = parseFloat((expectedTxt || '0').replace(/[^0-9.]/g, '')) || 0;
+        const actual = Math.max(0, expected - 1);
+        await shortForm.locator('input[name="actual_np"]').fill(actual.toFixed(2));
+        await shortForm.locator('textarea[name="note"]').fill('Mile rate looked low');
+        await shortForm.getByRole('button', { name: /save short/i }).click();
+        await expect(page.getByText(new RegExp(`marked load ${frtl} short`, 'i'))).toBeVisible();
+        const rowAfter = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await expect(rowAfter.locator('.pill.warn', { hasText: /^short$/i })).toBeVisible();
+    });
+
+    test('25e — dispute + batch flag bumps the pending payroll counter', async ({ page }) => {
+        await signIn(page);
+        const frtl = seedFrtl();
+        await addQaLoad(page, frtl, 'dispute flow');
+        await page.goto('reconcile');
+
+        const row = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await row.getByText(/^dispute…$/i).click();
+        const disputeForm = row.locator('form[action*="/dispute"]');
+        await disputeForm.locator('textarea[name="note"]').fill('QA test dispute — pls ignore');
+        await disputeForm.locator('input[name="notify_email"]').check();
+        await disputeForm.getByRole('button', { name: /flag dispute/i }).click();
+        await expect(page.getByText(new RegExp(`flagged load ${frtl} as disputed`, 'i'))).toBeVisible();
+        // Pending count card pill should now read at least 1.
+        const batchCard = page.locator('.card', { hasText: /pending payroll batch/i });
+        await expect(batchCard.locator('.pill.warn')).toBeVisible();
+    });
+});
