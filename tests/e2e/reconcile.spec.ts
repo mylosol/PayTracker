@@ -102,7 +102,43 @@ test.describe('reconcile', () => {
         await expect(batchCard.locator('.pill.warn')).toBeVisible();
     });
 
-    test('25e — cc-self toggle persists across reload via localStorage', async ({ page }) => {
+    test('25e — resolving a disputed load flips state to paid + keeps history', async ({ page }) => {
+        await signIn(page);
+        const frtl = seedFrtl();
+        await addQaLoad(page, frtl, 'resolve flow');
+        await page.goto('reconcile');
+
+        // First, dispute it.
+        const row = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await row.getByText(/^dispute…$/i).click();
+        const disputeForm = row.locator('form[data-dispute-form]');
+        const expectedTxt = await row.locator('td code').nth(1).textContent();
+        const expected = parseFloat((expectedTxt || '0').replace(/[^0-9.]/g, '')) || 0;
+        const actual = Math.max(0, expected - 2);
+        await disputeForm.locator('input[name="actual_np"]').fill(actual.toFixed(2));
+        await disputeForm.locator('textarea[name="note"]').fill('QA test — to be resolved');
+        await disputeForm.getByRole('button', { name: /flag dispute/i }).click();
+        await expect(page.getByText(new RegExp(`flagged load ${frtl} as disputed`, 'i'))).toBeVisible();
+
+        // Now close it out via Resolved.
+        const disputedRow = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await expect(disputedRow.locator('.pill.err', { hasText: /^disputed$/i })).toBeVisible();
+        page.once('dialog', d => d.accept());
+        await disputedRow.getByRole('button', { name: /^resolved$/i }).click();
+        await expect(page.getByText(new RegExp(`marked load ${frtl} resolved`, 'i'))).toBeVisible();
+
+        // Row should now show the paid pill + "resolved dispute" sub-label
+        // and still surface the original note in the detail strip.
+        const resolvedRow = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
+        await expect(resolvedRow.locator('.pill.ok', { hasText: /^paid$/i })).toBeVisible();
+        await expect(resolvedRow).toContainText(/resolved dispute/i);
+        // The detail strip is the NEXT sibling row in the tbody.
+        const detailRow = resolvedRow.locator('xpath=following-sibling::tr[1]');
+        await expect(detailRow).toContainText(/originally disputed, now resolved/i);
+        await expect(detailRow).toContainText('QA test — to be resolved');
+    });
+
+    test('25f — cc-self toggle persists across reload via localStorage', async ({ page }) => {
         await signIn(page);
         await page.goto('reconcile');
         // Clear any prior state, confirm default is OFF.

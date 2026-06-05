@@ -94,6 +94,7 @@ return static function (Router $router): void {
     $router->post('/reconcile/send-batch',           [ReconcileController::class, 'sendBatch']);
     $router->post('/reconcile/{frtl}/paid',          [ReconcileController::class, 'markPaid']);
     $router->post('/reconcile/{frtl}/dispute',       [ReconcileController::class, 'markDisputed']);
+    $router->post('/reconcile/{frtl}/resolve',       [ReconcileController::class, 'resolve']);
     $router->post('/reconcile/{frtl}/undo',          [ReconcileController::class, 'undo']);
     $router->post('/reconcile/{frtl}/notify',        [ReconcileController::class, 'toggleNotify']);
 

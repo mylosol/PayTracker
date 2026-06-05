@@ -179,6 +179,44 @@ final class PayReconciliation extends Model
     }
 
     /**
+     * Close out a disputed load: payroll has now paid the missing gap
+     * so the row transitions disputed → paid. We KEEP the note,
+     * disputed components, and Other amount as historical context (the
+     * driver wants to know "this was disputed and then resolved"), but
+     * we set actual_np = expected_np, clear shortfall, and clear
+     * notify_email so the row leaves any pending batch queue. The
+     * emailed_at timestamp stays as-is — if a batch was sent during
+     * the dispute we want that history preserved.
+     *
+     * Only effective when the row is currently in the `disputed` state;
+     * the WHERE clause is the guard against a controller bug that would
+     * otherwise flip a `paid` row through the resolve path (a no-op
+     * but still a misleading audit entry).
+     *
+     * @return bool True if the row transitioned; false if it wasn't
+     *              in `disputed` state (or didn't exist).
+     */
+    public function resolve(int $driverId, int $frtl): bool
+    {
+        $sql = 'UPDATE ' . self::ident(self::$table) . '
+                SET state        = ?,
+                    actual_np    = expected_np,
+                    shortfall    = NULL,
+                    notify_email = 0,
+                    updated_at   = NOW()
+                WHERE driver_id = ?
+                  AND frtl      = ?
+                  AND state     = ?';
+        $stmt = $this->prepared($sql, [
+            self::STATE_PAID,
+            $driverId,
+            $frtl,
+            self::STATE_DISPUTED,
+        ]);
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
      * Pull every reconcile row a driver has touched, keyed by frtl,
      * for the reconcile view's per-load state lookup.
      *

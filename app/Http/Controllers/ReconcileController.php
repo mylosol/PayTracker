@@ -242,6 +242,35 @@ final class ReconcileController extends Controller
         });
     }
 
+    /**
+     * POST /reconcile/{frtl}/resolve — close out a dispute. Payroll
+     * has paid the missing gap, so the row transitions disputed →
+     * paid while keeping the dispute note + itemised list as history.
+     */
+    public function resolve(Request $request, string $frtl): Response
+    {
+        return $this->mutate($request, $frtl, function (array $account, int $frtlInt, array $load) {
+            $existing = $this->recon->findForLoad((int) $account['id'], $frtlInt);
+            if ($existing === null) {
+                throw new \InvalidArgumentException('That load has not been reconciled yet — nothing to resolve.');
+            }
+            if ((string) $existing['state'] !== PayReconciliation::STATE_DISPUTED) {
+                throw new \InvalidArgumentException('Only disputed loads can be marked resolved.');
+            }
+            $changed = $this->recon->resolve((int) $account['id'], $frtlInt);
+            if (! $changed) {
+                throw new \InvalidArgumentException('Could not resolve the dispute (state changed in the meantime).');
+            }
+            $this->audit->record('reconcile.resolved', userId: (int) $account['id'], metadata: [
+                'frtl'        => $frtlInt,
+                'expected_np' => (float) ($existing['expected_np'] ?? 0),
+                'was_actual'  => $existing['actual_np'] !== null ? (float) $existing['actual_np'] : null,
+                'shortfall'   => $existing['shortfall'] !== null ? (float) $existing['shortfall'] : null,
+            ]);
+            return sprintf('Marked load %d resolved — dispute closed.', $frtlInt);
+        });
+    }
+
     public function toggleNotify(Request $request, string $frtl): Response
     {
         return $this->mutate($request, $frtl, function (array $account, int $frtlInt, array $load) use ($request) {

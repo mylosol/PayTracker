@@ -2198,7 +2198,32 @@ Batched rows' sub-pill flips from `in next batch` to `batched`,
 ticked, a second email arrives at the driver's login address with
 the prefix `[copy]` in the subject.
 
-### 25f. Admin queue (Super Admin)
+### 25f. Resolve a disputed load
+
+Use this when payroll has paid the missing gap on a load you
+disputed — close it out without losing the dispute trail.
+
+1. Find a load you've previously disputed (state pill reads
+   `disputed`, gap visible).
+2. Click **Resolved**.
+3. Confirm the prompt.
+
+**Expected:**
+
+- Flash `Marked load N resolved — dispute closed.`
+- Row's state pill flips to `paid` with a small `resolved dispute`
+  sub-label so it reads differently from a row paid in one click.
+- Detail strip below the row still shows the original note, the
+  items the driver had checked, and the original "actual paid"
+  amount — prefixed with *"Originally disputed, now resolved."*
+- If the row had `notify_email=1` (was queued for the next batch
+  but never sent), `notify_email` is cleared so it leaves the
+  pending pool. If a batch had already been sent (`emailed_at`
+  non-null), that timestamp is preserved.
+- The pending batch counter on the top card drops by 1 (if the
+  row was in the pending pool).
+
+### 25g. Admin queue (Super Admin)
 
 1. As a Super Admin, visit `/preview/admin/reconcile`.
 

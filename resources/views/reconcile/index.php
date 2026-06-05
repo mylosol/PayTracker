@@ -190,9 +190,20 @@ $renderRow = static function (array $row, ?array $reconRow) use (
             <?= e((string) ($row['delivery_city'] ?? '?')) ?>
         </td>
         <td style="padding:.4rem .5rem;text-align:right;"><code><?= e($money($np)) ?></code></td>
+        <?php
+        // "Was this a resolved dispute?" — when state=paid AND any
+        // dispute artefact is present (note, items, or other amount),
+        // the row was originally disputed and has since been closed
+        // out. Surface a sub-label so it reads differently from a
+        // row paid in a single click.
+        $resolvedFromDispute = ($state === 'paid')
+            && ($note !== '' || $disputedItems !== [] || $disputedOther !== null);
+        ?>
         <td style="padding:.4rem .5rem;">
             <?= $statePill($state) ?>
-            <?php if ($state === 'short' && $shortfall !== null): ?>
+            <?php if ($resolvedFromDispute): ?>
+                <br><small class="muted">resolved dispute</small>
+            <?php elseif ($state === 'short' && $shortfall !== null): ?>
                 <br><small class="muted">&minus;<?= e($money($shortfall)) ?></small>
             <?php elseif ($state === 'disputed' && $shortfall !== null): ?>
                 <br><small class="muted">gap <?= e($money($shortfall)) ?></small>
@@ -280,6 +291,17 @@ $renderRow = static function (array $row, ?array $reconRow) use (
                     </form>
                 </details>
             <?php else: ?>
+                <?php if ($state === 'disputed'): ?>
+                    <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/resolve" style="display:inline;">
+                        <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+                        <button type="submit"
+                                onclick="return confirm('Mark load <?= $frtl ?> as resolved? This closes out the dispute and flips it to paid (the note + items stay as history).');"
+                                title="Payroll paid the gap — close out this dispute"
+                                style="background:#16a34a;color:#fff;border:0;padding:.25rem .7rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
+                            Resolved
+                        </button>
+                    </form>
+                <?php endif; ?>
                 <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/undo" style="display:inline;">
                     <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
                     <button type="submit"
@@ -359,11 +381,19 @@ $renderRow = static function (array $row, ?array $reconRow) use (
 
     <?php
     // Acted-row detail strip: actual / shortfall / disputed items / note.
-    if ($reconRow !== null && $state !== 'paid'
-        && ($note !== '' || $actual !== null || $disputedItems !== [] || $disputedOther !== null)):
+    // Shown whenever any historical artefact is present — disputed
+    // rows AND paid rows that were originally disputed (resolved).
+    // Direct-paid rows have no artefacts so the strip stays hidden
+    // for them (note=null, items=[], other=null on a clean Paid click).
+    $showStrip = $reconRow !== null
+        && ($note !== '' || $disputedItems !== [] || $disputedOther !== null);
+    if ($showStrip):
         ?>
         <tr style="<?= $rowStyle ?>border-bottom:1px solid #e4e8ee;">
             <td colspan="8" style="padding:.5rem 1.4rem;font-size:13px;color:#475569;">
+                <?php if ($resolvedFromDispute): ?>
+                    <em class="muted">Originally disputed, now resolved.</em><br>
+                <?php endif; ?>
                 <?php if ($actual !== null): ?>
                     <strong>Actual paid:</strong> <?= e($money($actual)) ?>
                 <?php endif; ?>
