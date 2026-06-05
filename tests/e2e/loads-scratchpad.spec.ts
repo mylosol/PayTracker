@@ -68,10 +68,16 @@ test.describe('load scratchpad (Store Load Info OFF)', () => {
         expect(entries[0].computed.pickup_city).toBe('Panama City, FL');
         expect(entries[0].computed.delivery_city).toBe('Lynn Haven, FL');
         expect(Number(entries[0].computed.np)).toBeGreaterThan(0);
-        // Row renders in today's table, FRTL column shows em-dash.
-        const row = page.locator('#dashboard-loads-table tbody tr', { hasText: 'Panama City, FL' });
+        // Row renders in today's table. Other rows from prior runs may
+        // also reference Panama City; scratchpad rows are uniquely
+        // identifiable by their "unsaved — in this browser only"
+        // footer, which no DB-backed row carries.
+        const row = page.locator('#dashboard-loads-table tbody tr', {
+            hasText: 'unsaved — in this browser only',
+        });
         await expect(row).toBeVisible();
         await expect(row).toContainText('—');
+        await expect(row).toContainText('Panama City, FL');
         await expect(row).toContainText('Lynn Haven, FL');
     });
 
@@ -94,11 +100,14 @@ test.describe('load scratchpad (Store Load Info OFF)', () => {
                 },
             }]));
         });
-        // Visit yesterday — row should NOT appear.
+        // Visit yesterday — the scratchpad row should NOT appear.
+        // (Other DB-backed rows for that date may legitimately contain
+        // "Panama City, FL"; the scratchpad-only "unsaved" footer is
+        // what we're really asserting absence of.)
         const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
         await page.goto(`dashboard?date=${yesterday}`);
         await expect(page.locator('#dashboard-loads-table tbody tr', {
-            hasText: 'Panama City, FL'
+            hasText: 'unsaved — in this browser only',
         })).toHaveCount(0);
     });
 
