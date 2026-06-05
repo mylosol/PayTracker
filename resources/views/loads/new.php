@@ -49,13 +49,15 @@ if ($dateValue === '') {
         </label>
         <p class="muted" id="store-toggle-help" style="margin:.5rem 0 0 0;font-size:13px;">
             ON: saves to your account using your FRTL #.
-            OFF: keeps the load in this browser only as a scratchpad,
-            useful for testing or when you don't have the FRTL # yet.
+            OFF: keeps the load in this browser only as an
+            <em>unconfirmed</em> entry, useful for testing or when
+            you don't have the FRTL # yet.
         </p>
         <div id="scratchpad-pitfall" hidden
              style="margin-top:.8rem;background:#fef3c7;color:#854d0e;border:1px solid #fde68a;border-radius:6px;padding:.6rem .8rem;font-size:13px;">
             <strong>Heads up:</strong> with <em>Store Load Info</em> off,
-            this load lives only in your browser:
+            this load stays <em>unconfirmed</em> &mdash; it lives only
+            in your browser:
             <ul style="margin:.4rem 0 .2rem 1.2rem;padding:0;">
                 <li>It only shows on <em>today's</em> dashboard — viewing past or future days hides it.</li>
                 <li>Clearing this device's browser data, switching browsers, or switching phones will lose it.</li>
@@ -409,7 +411,7 @@ if ($dateValue === '') {
                     if (wk) wk.checked = c.is_weekend === 1;
                     // Update the page heading so the driver knows they're editing.
                     const h1 = document.querySelector('h1');
-                    if (h1) h1.textContent = 'Edit unsaved load';
+                    if (h1) h1.textContent = 'Edit unconfirmed load';
                 }
             }
 

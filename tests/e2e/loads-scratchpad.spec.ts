@@ -73,7 +73,7 @@ test.describe('load scratchpad (Store Load Info OFF)', () => {
         // identifiable by their "unsaved — in this browser only"
         // footer, which no DB-backed row carries.
         const row = page.locator('#dashboard-loads-table tbody tr', {
-            hasText: 'unsaved — in this browser only',
+            hasText: 'unconfirmed — in this browser only',
         });
         await expect(row).toBeVisible();
         await expect(row).toContainText('—');
@@ -107,7 +107,7 @@ test.describe('load scratchpad (Store Load Info OFF)', () => {
         const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
         await page.goto(`dashboard?date=${yesterday}`);
         await expect(page.locator('#dashboard-loads-table tbody tr', {
-            hasText: 'unsaved — in this browser only',
+            hasText: 'unconfirmed — in this browser only',
         })).toHaveCount(0);
     });
 

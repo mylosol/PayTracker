@@ -118,6 +118,13 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             <tr><td style="padding:.3rem .8rem;"><strong>Miles</strong></td><td style="padding:.3rem .8rem;"><code><?= e($weekMilesF) ?></code></td></tr>
         </tbody>
     </table>
+    <p id="week-unconfirmed-note" hidden
+       style="margin-top:.8rem;background:#fef3c7;color:#92400e;border-left:3px solid #f59e0b;border-radius:6px;padding:.6rem .8rem;font-size:13px;">
+        <strong>Heads up:</strong> these weekly totals include
+        <span data-unconfirmed-count>0</span> unconfirmed load(s) from
+        today's browser scratchpad. They'll settle to the official
+        figures once you edit each one and add the FRTL #.
+    </p>
     <p class="muted" style="margin-top:.6rem;font-size:12px;">
         Pay week is configured in your <a href="<?= e($base) ?>/profile">profile</a>.
         The weekly total stays anchored to the week containing the
@@ -467,23 +474,23 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             tr.style.verticalAlign = 'top';
             tr.style.background = '#fffbeb'; // pale amber: scratchpad row
             tr.innerHTML = `
-                <td style="padding:.25rem .5rem;text-align:center;" title="Unsaved scratchpad load">
+                <td style="padding:.25rem .5rem;text-align:center;" title="Unconfirmed load — lives in this browser only until you add a FRTL #">
                     ${bd ? '<span style="color:var(--accent);font-weight:600;">&#x25B8;</span>' : ''}
                 </td>
                 <td style="padding:.25rem .5rem;color:#92400e;" title="No FRTL # yet — edit to add one and save"><code>—</code></td>
                 <td style="padding:.25rem .5rem;">${typeLabel(c.load_type)}</td>
                 <td style="padding:.25rem .5rem;">
                     ${escapeHtml(c.pickup_city || '?')} &nbsp;&rarr;&nbsp; ${escapeHtml(c.delivery_city || '?')}
-                    <br><small class="muted" style="color:#92400e;">unsaved &mdash; in this browser only</small>
+                    <br><small class="muted" style="color:#92400e;">unconfirmed &mdash; in this browser only</small>
                 </td>
                 <td style="padding:.25rem .5rem;text-align:right;"><code>${money(c.np)}</code></td>
                 <td style="padding:.25rem .5rem;text-align:right;white-space:nowrap;">
                     <a href="${basePath}/loads/new?unsaved=${encodeURIComponent(id)}"
                        style="color:var(--accent);text-decoration:none;font-size:12px;margin-right:.3rem;"
-                       title="Edit this scratchpad load">Edit</a>
+                       title="Edit this unconfirmed load">Edit</a>
                     <button type="button" data-discard-local-id="${id}"
                             style="background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;padding:0;font:inherit;text-decoration:underline;"
-                            title="Discard this scratchpad load">Discard</button>
+                            title="Discard this unconfirmed load">Discard</button>
                 </td>`;
             tbody.appendChild(tr);
 
@@ -536,7 +543,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
         tbody.querySelectorAll('button[data-discard-local-id]').forEach(btn => {
             btn.addEventListener('click', () => {
                 const id = btn.getAttribute('data-discard-local-id');
-                if (!confirm('Discard this unsaved load? It cannot be recovered.')) return;
+                if (!confirm('Discard this unconfirmed load? It cannot be recovered.')) return;
                 writeEntries(readEntries().filter(e => e.local_id !== id));
                 window.location.reload();
             });
@@ -565,7 +572,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                         .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
                     cell.style.background = '#fef3c7';
                     cell.style.color      = '#92400e';
-                    cell.title            = 'Includes ' + todays.length + ' unsaved load(s)';
+                    cell.title            = 'Includes ' + todays.length + ' unconfirmed load(s)';
                 } else if (t === 'Miles') {
                     const cur = parseInt(cell.textContent.replace(/[^0-9]/g, ''), 10) || 0;
                     cell.textContent = (cur + injectedMiles).toLocaleString('en-US');
@@ -575,6 +582,15 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                 cell.dataset.scratchpadBumped = '1';
             });
         });
+
+        // Reveal the This Week disclaimer (in addition to the amber
+        // Net Pay cell shading the bumpTotals loop applied).
+        const weekNote = document.getElementById('week-unconfirmed-note');
+        if (weekNote) {
+            const span = weekNote.querySelector('[data-unconfirmed-count]');
+            if (span) span.textContent = String(todays.length);
+            weekNote.hidden = false;
+        }
 
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g,

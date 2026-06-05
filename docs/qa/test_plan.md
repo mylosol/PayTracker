@@ -2002,13 +2002,14 @@ or `X-Content-Type-Options` are missing):
 
 ---
 
-## 24. Scratchpad — "Store Load Info" OFF (localStorage path)
+## 24. Unconfirmed loads — "Store Load Info" OFF (localStorage path)
 
 Drivers who don't have the dispatch FRTL # in hand can turn the
 **Store Load Info** checkbox OFF at the top of `/loads/new`. The
 load is computed by the server (so the pay math is identical),
 returned as JSON, and stashed in the browser's `localStorage` under
-the key `paytracker.unsavedLoads`. Entries auto-expire after 24
+the key `paytracker.unsavedLoads` (legacy storage key — the user-
+facing term is "unconfirmed load"). Entries auto-expire after 24
 hours from creation.
 
 ### 24a. Toggle hides FRTL + reveals pitfall box
@@ -2033,30 +2034,34 @@ the page persists the OFF state.
 
 - Lands on `/preview/dashboard`.
 - Today's **Loads** table shows the new row at the top with FRTL `—`,
-  the pay value the server computed, and the muted "unsaved — in
-  this browser only" footer.
+  the pay value the server computed, and the muted "unconfirmed —
+  in this browser only" footer.
 - The **Today** + **This Week** totals cards are bumped: Loads
   count +1, Net Pay shaded amber with a tooltip "Includes 1
-  unsaved load(s)", Miles +(pickup→delivery distance).
+  unconfirmed load(s)", Miles +(pickup→delivery distance).
+- The **This Week** card shows an amber disclaimer paragraph:
+  *"Heads up: these weekly totals include 1 unconfirmed load(s)..."*.
 - The PHP database has NO new row.
 - Browser DevTools → Application → Local Storage shows a
   `paytracker.unsavedLoads` key with the entry inside.
 
-### 24c. Past-date dashboard hides scratchpad rows
+### 24c. Past-date dashboard hides unconfirmed rows
 
 1. From the dashboard, click the `← <yesterday>` arrow.
 
-**Expected:** the scratchpad row from 24b does NOT appear (past
-dates show only DB-backed loads — by spec).
+**Expected:** the unconfirmed row from 24b does NOT appear (past
+dates show only DB-backed loads — by spec). The This Week
+disclaimer is also gone since hydration doesn't run on past dates.
 
-### 24d. Edit unsaved row, type FRTL → auto-flip + save
+### 24d. Edit unconfirmed row, type FRTL → auto-flip + save
 
 1. Return to today's dashboard.
-2. Click **Edit** on the scratchpad row.
+2. Click **Edit** on the unconfirmed row.
 
-**Expected:** lands at `/preview/loads/new?unsaved=<localId>`.
-Form prefills with the stored values, **Store Load Info** is OFF,
-FRTL block is hidden. Heading says "Edit unsaved load".
+**Expected:** lands at `/preview/loads/new?unsaved=<localId>` (the
+`unsaved` query param is the legacy on-wire name; the user-facing
+heading reads "Edit unconfirmed load"). Form prefills with the
+stored values, **Store Load Info** is OFF, FRTL block is hidden.
 
 3. Toggle the checkbox ON (FRTL block reveals). Type a fresh
    FRTL like `999900050`. Submit.
@@ -2064,16 +2069,16 @@ FRTL block is hidden. Heading says "Edit unsaved load".
 **Expected:**
 
 - Lands on `/preview/dashboard` with flash "Added load frtl=999900050".
-- Back on the dashboard, the scratchpad row is GONE (the localId
+- Back on the dashboard, the unconfirmed row is GONE (the localId
   was consumed). The new DB-backed row appears instead with the
   real FRTL in the column.
-- The Today totals are unchanged from before — the scratchpad
+- The Today totals are unchanged from before — the unconfirmed
   amount was already counted; now the DB row contributes the same
   amount via the server-rendered totals.
 
 ### 24e. Discard button
 
-1. Add another scratchpad load (24b steps).
+1. Add another unconfirmed load (24b steps).
 2. On the dashboard, click **Discard** on that row. Confirm the
    prompt.
 
@@ -2082,7 +2087,7 @@ and `localStorage`.
 
 ### 24f. Rolling 24-hour expiry (engineer-assisted)
 
-1. With one scratchpad entry on the dashboard, open DevTools and
+1. With one unconfirmed entry on the dashboard, open DevTools and
    manually edit the `created_at` field on the entry to
    `Date.now() - 25*60*60*1000` (25 hours ago). Reload.
 
