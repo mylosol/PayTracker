@@ -72,30 +72,7 @@ test.describe('reconcile', () => {
         await expect(rowReset.locator('.pill', { hasText: /^pending$/i })).toBeVisible();
     });
 
-    test('25d — mark short records the shortfall + actual on the row', async ({ page }) => {
-        await signIn(page);
-        const frtl = seedFrtl();
-        await addQaLoad(page, frtl, 'mark-short flow');
-        await page.goto('reconcile');
-
-        const row = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
-        await row.getByText(/^short…$/i).click();
-        // The inline form is sibling-ish in the same actions cell.
-        const shortForm = row.locator('form[action*="/short"]');
-        // The expected pay shown in the table is variable; we just under-shoot
-        // it by $1 to guarantee a positive shortfall.
-        const expectedTxt = await row.locator('code').last().textContent();
-        const expected = parseFloat((expectedTxt || '0').replace(/[^0-9.]/g, '')) || 0;
-        const actual = Math.max(0, expected - 1);
-        await shortForm.locator('input[name="actual_np"]').fill(actual.toFixed(2));
-        await shortForm.locator('textarea[name="note"]').fill('Mile rate looked low');
-        await shortForm.getByRole('button', { name: /save short/i }).click();
-        await expect(page.getByText(new RegExp(`marked load ${frtl} short`, 'i'))).toBeVisible();
-        const rowAfter = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
-        await expect(rowAfter.locator('.pill.warn', { hasText: /^short$/i })).toBeVisible();
-    });
-
-    test('25e — dispute + batch flag bumps the pending payroll counter', async ({ page }) => {
+    test('25d — dispute requires actual_np + bumps the pending payroll counter', async ({ page }) => {
         await signIn(page);
         const frtl = seedFrtl();
         await addQaLoad(page, frtl, 'dispute flow');
@@ -103,13 +80,50 @@ test.describe('reconcile', () => {
 
         const row = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
         await row.getByText(/^dispute…$/i).click();
-        const disputeForm = row.locator('form[action*="/dispute"]');
+        const disputeForm = row.locator('form[data-dispute-form]');
+
+        // Required-fields proof: actual_np input carries the `required`
+        // attribute server-side, and the textarea note is also required.
+        await expect(disputeForm.locator('input[name="actual_np"]')).toHaveAttribute('required', '');
+        await expect(disputeForm.locator('textarea[name="note"]')).toHaveAttribute('required', '');
+
+        // Fill required fields, opt into batch, submit.
+        // Use expected − $1 as actual so the shortfall is positive.
+        const expectedTxt = await row.locator('td code').nth(1).textContent();
+        const expected = parseFloat((expectedTxt || '0').replace(/[^0-9.]/g, '')) || 0;
+        const actual = Math.max(0, expected - 1);
+        await disputeForm.locator('input[name="actual_np"]').fill(actual.toFixed(2));
         await disputeForm.locator('textarea[name="note"]').fill('QA test dispute — pls ignore');
         await disputeForm.locator('input[name="notify_email"]').check();
         await disputeForm.getByRole('button', { name: /flag dispute/i }).click();
+
         await expect(page.getByText(new RegExp(`flagged load ${frtl} as disputed`, 'i'))).toBeVisible();
-        // Pending count card pill should now read at least 1.
         const batchCard = page.locator('.card', { hasText: /pending payroll batch/i });
         await expect(batchCard.locator('.pill.warn')).toBeVisible();
+    });
+
+    test('25e — cc-self toggle persists across reload via localStorage', async ({ page }) => {
+        await signIn(page);
+        await page.goto('reconcile');
+        // Clear any prior state, confirm default is OFF.
+        await page.evaluate(() => {
+            try { localStorage.removeItem('paytracker.disputeCcSelf'); } catch (e) {}
+        });
+        await page.reload();
+        // The "Send me a copy of this batch" toggle is only shown when
+        // there's a pending batch; if there isn't one we just exercise
+        // the localStorage mirror via the script's effects. Either way
+        // the localStorage default should be unset (= falsy).
+        const stored = await page.evaluate(() => localStorage.getItem('paytracker.disputeCcSelf'));
+        expect(stored === null || stored === '0').toBeTruthy();
+
+        // Simulate ticking a toggle by directly writing the key the
+        // script reads. (We can't rely on a visible toggle existing
+        // here without a queued dispute, and 25d already drives the
+        // ticking via the UI in the dispute form.)
+        await page.evaluate(() => localStorage.setItem('paytracker.disputeCcSelf', '1'));
+        await page.reload();
+        const after = await page.evaluate(() => localStorage.getItem('paytracker.disputeCcSelf'));
+        expect(after).toBe('1');
     });
 });

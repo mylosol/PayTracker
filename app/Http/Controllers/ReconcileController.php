@@ -127,14 +127,16 @@ final class ReconcileController extends Controller
         return $this->mutate($request, $frtl, function (array $account, int $frtlInt, array $load) {
             $expected = (float) ($load['np'] ?? 0);
             $this->recon->upsert(
-                driverId:    (int) $account['id'],
-                frtl:        $frtlInt,
-                state:       PayReconciliation::STATE_PAID,
-                expectedNp:  $expected,
-                actualNp:    $expected, // by definition for "paid"
-                shortfall:   null,
-                note:        null,
-                notifyEmail: false,
+                driverId:            (int) $account['id'],
+                frtl:                $frtlInt,
+                state:               PayReconciliation::STATE_PAID,
+                expectedNp:          $expected,
+                actualNp:            $expected, // by definition for "paid"
+                shortfall:           null,
+                note:                null,
+                disputedComponents:  null,
+                disputedOtherAmount: null,
+                notifyEmail:         false,
             );
             $this->audit->record('reconcile.paid', userId: (int) $account['id'], metadata: [
                 'frtl'        => $frtlInt,
@@ -144,10 +146,14 @@ final class ReconcileController extends Controller
         });
     }
 
-    public function markShort(Request $request, string $frtl): Response
+    public function markDisputed(Request $request, string $frtl): Response
     {
         return $this->mutate($request, $frtl, function (array $account, int $frtlInt, array $load) use ($request) {
             $expected = (float) ($load['np'] ?? 0);
+
+            // Actual paid is now REQUIRED — there's no point flagging a
+            // dispute to payroll without telling them what you actually
+            // received vs. what was owed.
             $actualRaw = trim((string) $request->input('actual_np', ''));
             if ($actualRaw === '' || ! is_numeric($actualRaw)) {
                 throw new \InvalidArgumentException('Enter the actual amount you were paid (a number).');
@@ -156,68 +162,65 @@ final class ReconcileController extends Controller
             if ($actual < 0) {
                 throw new \InvalidArgumentException('Actual pay cannot be negative.');
             }
-            if ($actual > $expected + 0.005) {
-                throw new \InvalidArgumentException('Actual pay is greater than expected — use "Mark paid" instead, or flag a dispute if there is a problem.');
-            }
-            $note = trim((string) $request->input('note', ''));
             $shortfall = round($expected - $actual, 2);
-            $this->recon->upsert(
-                driverId:    (int) $account['id'],
-                frtl:        $frtlInt,
-                state:       PayReconciliation::STATE_SHORT,
-                expectedNp:  $expected,
-                actualNp:    $actual,
-                shortfall:   $shortfall,
-                note:        $note !== '' ? $note : null,
-                notifyEmail: false,
-            );
-            $this->audit->record('reconcile.short', userId: (int) $account['id'], metadata: [
-                'frtl'        => $frtlInt,
-                'expected_np' => $expected,
-                'actual_np'   => $actual,
-                'shortfall'   => $shortfall,
-            ]);
-            return sprintf('Marked load %d short by $%s.', $frtlInt, number_format($shortfall, 2));
-        });
-    }
 
-    public function markDisputed(Request $request, string $frtl): Response
-    {
-        return $this->mutate($request, $frtl, function (array $account, int $frtlInt, array $load) use ($request) {
-            $expected = (float) ($load['np'] ?? 0);
-            $actualRaw = trim((string) $request->input('actual_np', ''));
-            $actual    = null;
-            $shortfall = null;
-            if ($actualRaw !== '') {
-                if (! is_numeric($actualRaw)) {
-                    throw new \InvalidArgumentException('Actual pay must be a number (or blank).');
-                }
-                $actual = (float) $actualRaw;
-                if ($actual < 0) {
-                    throw new \InvalidArgumentException('Actual pay cannot be negative.');
-                }
-                $shortfall = round($expected - $actual, 2);
-            }
             $note = trim((string) $request->input('note', ''));
             if ($note === '') {
-                throw new \InvalidArgumentException('A short note is required for a dispute — what should payroll know?');
+                throw new \InvalidArgumentException('A note is required for a dispute — what should payroll know?');
             }
+
+            // Disputed components: an array of pay-component keys the
+            // driver checked (base_pay, empty_pay, shift_pay, …). The
+            // model sanitises further; we just normalise to a list.
+            $componentsInput = $request->input('disputed_components', []);
+            if ($componentsInput instanceof \ArrayAccess || is_iterable($componentsInput)) {
+                $components = [];
+                foreach ($componentsInput as $v) {
+                    if (is_string($v) && $v !== '') {
+                        $components[] = $v;
+                    }
+                }
+            } elseif (is_string($componentsInput) && $componentsInput !== '') {
+                $components = [$componentsInput];
+            } else {
+                $components = [];
+            }
+
+            // Other amount: optional catch-all for shortfalls that
+            // don't map to a single component.
+            $otherRaw = trim((string) $request->input('disputed_other_amount', ''));
+            $otherAmount = null;
+            if ($otherRaw !== '') {
+                if (! is_numeric($otherRaw)) {
+                    throw new \InvalidArgumentException('"Other shortfall" must be a number (or blank).');
+                }
+                $otherAmount = (float) $otherRaw;
+                if ($otherAmount < 0) {
+                    throw new \InvalidArgumentException('"Other shortfall" cannot be negative.');
+                }
+            }
+
             $notify = (string) $request->input('notify_email', '0') === '1';
+
             $this->recon->upsert(
-                driverId:    (int) $account['id'],
-                frtl:        $frtlInt,
-                state:       PayReconciliation::STATE_DISPUTED,
-                expectedNp:  $expected,
-                actualNp:    $actual,
-                shortfall:   $shortfall,
-                note:        $note,
-                notifyEmail: $notify,
+                driverId:            (int) $account['id'],
+                frtl:                $frtlInt,
+                state:               PayReconciliation::STATE_DISPUTED,
+                expectedNp:          $expected,
+                actualNp:            $actual,
+                shortfall:           $shortfall,
+                note:                $note,
+                disputedComponents:  $components !== [] ? $components : null,
+                disputedOtherAmount: $otherAmount,
+                notifyEmail:         $notify,
             );
             $this->audit->record('reconcile.disputed', userId: (int) $account['id'], metadata: [
                 'frtl'        => $frtlInt,
                 'expected_np' => $expected,
                 'actual_np'   => $actual,
                 'shortfall'   => $shortfall,
+                'components'  => $components,
+                'other'       => $otherAmount,
                 'notify'      => $notify,
             ]);
             $tail = $notify ? ' (added to the pending payroll batch)' : '';
@@ -300,17 +303,39 @@ final class ReconcileController extends Controller
             return $this->failBack($request, 'Could not send the batch email. Often this is DNS verification still pending on the sender domain — try again shortly. Your disputes remain queued.');
         }
 
+        // Optional self-CC: when the driver ticked "send me a copy"
+        // we fire a second send to their login email. Failure here
+        // doesn't block the primary send result — the payroll copy
+        // already left.
+        $ccSelf = (string) $request->input('cc_self', '0') === '1';
+        $driverEmail = is_string($account['email'] ?? null) ? trim((string) $account['email']) : '';
+        $selfId = null;
+        if ($ccSelf && $driverEmail !== '' && filter_var($driverEmail, FILTER_VALIDATE_EMAIL)) {
+            $selfId = $this->mail->send(
+                $driverEmail,
+                '[copy] ' . $subject,
+                '<p style="color:#5a6470;font-size:13px;margin:0 0 .8rem 0;">'
+                    . '<em>This is your copy of the dispute batch sent to '
+                    . htmlspecialchars($payrollEmail, ENT_QUOTES) . '.</em></p>'
+                    . $html
+            );
+        }
+
         $ids = array_map(static fn ($r) => (int) $r['id'], $pending);
         $stamped = $this->recon->markBatchSent($driverId, $ids);
         $this->audit->record('reconcile.batch_sent', userId: $driverId, metadata: [
-            'to'         => $payrollEmail,
-            'message_id' => $messageId,
-            'count'      => $stamped,
+            'to'           => $payrollEmail,
+            'cc_self'      => $ccSelf,
+            'cc_self_sent' => $selfId !== null,
+            'message_id'   => $messageId,
+            'count'        => $stamped,
         ]);
+        $copyTail = ($ccSelf && $selfId !== null) ? sprintf(' (copy to %s)', $driverEmail) : '';
         $this->session->put('_flash', sprintf(
-            'Sent %d disputed load(s) to %s.',
+            'Sent %d disputed load(s) to %s%s.',
             $stamped,
-            $payrollEmail
+            $payrollEmail,
+            $copyTail
         ));
         return $this->redirect($request->basePath() . '/reconcile');
     }
@@ -393,44 +418,82 @@ final class ReconcileController extends Controller
         $count = count($pending);
         $subject = sprintf('PayTracker dispute batch — %d load(s) from %s', $count, $user);
 
-        $rows = '';
+        $componentLabels = [
+            'base_pay'      => 'Base pay',
+            'empty_pay'     => 'Empty pay',
+            'shift_pay'     => 'Shift pay',
+            'seniority_pay' => 'Seniority pay',
+            'weekend_pay'   => 'Weekend pay',
+            'split_pay'     => 'Split pay',
+            'dem_pay'       => 'Demurrage',
+            'break_pay'     => 'Breakdown',
+            'extra_pay'     => 'Extra pay',
+        ];
+        $esc = static fn (string $s): string =>
+            htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+        $sections = '';
         foreach ($pending as $r) {
             $frtl      = (int) ($r['frtl'] ?? 0);
             $expected  = (float) ($r['expected_np'] ?? 0);
-            $actual    = isset($r['actual_np'])  && $r['actual_np']  !== null ? (float) $r['actual_np']  : null;
-            $shortfall = isset($r['shortfall'])  && $r['shortfall']  !== null ? (float) $r['shortfall']  : null;
+            $actual    = $r['actual_np'] !== null ? (float) $r['actual_np'] : null;
+            $shortfall = $r['shortfall'] !== null ? (float) $r['shortfall'] : null;
             $note      = (string) ($r['note'] ?? '');
-            $rows .= sprintf(
-                '<tr>'
-                . '<td style="padding:6px 10px;border:1px solid #cbd2da;"><code>%d</code></td>'
-                . '<td style="padding:6px 10px;border:1px solid #cbd2da;text-align:right;">$%s</td>'
-                . '<td style="padding:6px 10px;border:1px solid #cbd2da;text-align:right;">%s</td>'
-                . '<td style="padding:6px 10px;border:1px solid #cbd2da;text-align:right;">%s</td>'
-                . '<td style="padding:6px 10px;border:1px solid #cbd2da;">%s</td>'
-                . '</tr>',
+            $other     = $r['disputed_other_amount'] !== null ? (float) $r['disputed_other_amount'] : null;
+            $comps = [];
+            if (is_string($r['disputed_components'] ?? null) && $r['disputed_components'] !== '') {
+                $decoded = json_decode((string) $r['disputed_components'], true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $k) {
+                        if (is_string($k) && isset($componentLabels[$k])) {
+                            $comps[] = $componentLabels[$k];
+                        }
+                    }
+                }
+            }
+
+            $itemsList = '';
+            if ($comps !== []) {
+                $itemsList = '<p style="margin:.4rem 0 .2rem 0;"><strong>Disputed items:</strong></p>'
+                           . '<ul style="margin:.2rem 0 .4rem 1.2rem;padding:0;">';
+                foreach ($comps as $label) {
+                    $itemsList .= '<li>' . $esc($label) . '</li>';
+                }
+                $itemsList .= '</ul>';
+            }
+            if ($other !== null && $other > 0) {
+                $itemsList .= sprintf(
+                    '<p style="margin:.2rem 0;"><strong>Other shortfall:</strong> $%s</p>',
+                    number_format($other, 2)
+                );
+            }
+            $sections .= sprintf(
+                '<div style="border:1px solid #cbd2da;border-radius:6px;padding:.8rem 1rem;margin:0 0 .8rem 0;background:#fafbfc;">'
+                . '<p style="margin:0 0 .4rem 0;font-size:15px;"><strong>Load #%d</strong></p>'
+                . '<table style="border-collapse:collapse;font-size:13px;margin:.2rem 0;">'
+                . '<tr><td style="padding:2px 8px;color:#475569;">Expected pay:</td><td style="padding:2px 8px;"><strong>$%s</strong></td></tr>'
+                . '<tr><td style="padding:2px 8px;color:#475569;">Actual paid:</td><td style="padding:2px 8px;"><strong>%s</strong></td></tr>'
+                . '<tr><td style="padding:2px 8px;color:#475569;">Shortfall:</td><td style="padding:2px 8px;color:%s;"><strong>%s</strong></td></tr>'
+                . '</table>'
+                . '%s'
+                . ($note !== '' ? '<p style="margin:.5rem 0 0 0;"><strong>Driver note:</strong> ' . $esc($note) . '</p>' : '')
+                . '</div>',
                 $frtl,
                 number_format($expected, 2),
-                $actual    !== null ? '$' . number_format($actual, 2)    : '&mdash;',
+                $actual    !== null ? '$' . number_format($actual,    2) : '&mdash;',
+                $shortfall !== null && $shortfall > 0 ? '#b91c1c' : '#475569',
                 $shortfall !== null ? '$' . number_format($shortfall, 2) : '&mdash;',
-                htmlspecialchars($note, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+                $itemsList
             );
         }
 
         $html = '<div style="font:14px -apple-system,Segoe UI,Roboto,sans-serif;color:#101418;">'
               . '<h2 style="margin:0 0 .6rem 0;">PayTracker dispute batch</h2>'
-              . '<p style="margin:0 0 .8rem 0;">Driver <strong>' . htmlspecialchars($user, ENT_QUOTES) . '</strong> '
+              . '<p style="margin:0 0 1rem 0;">Driver <strong>' . $esc($user) . '</strong> '
               . 'has flagged ' . $count . ' load(s) for review:</p>'
-              . '<table style="border-collapse:collapse;font-size:13px;">'
-              . '<thead><tr>'
-              . '<th style="padding:6px 10px;border:1px solid #cbd2da;background:#f1f5f9;">FRTL</th>'
-              . '<th style="padding:6px 10px;border:1px solid #cbd2da;background:#f1f5f9;">Expected</th>'
-              . '<th style="padding:6px 10px;border:1px solid #cbd2da;background:#f1f5f9;">Actual</th>'
-              . '<th style="padding:6px 10px;border:1px solid #cbd2da;background:#f1f5f9;">Shortfall</th>'
-              . '<th style="padding:6px 10px;border:1px solid #cbd2da;background:#f1f5f9;">Note</th>'
-              . '</tr></thead>'
-              . '<tbody>' . $rows . '</tbody></table>'
+              . $sections
               . '<p style="color:#5a6470;margin:1rem 0 0 0;font-size:12px;">'
-              . 'Sent from PayTracker on behalf of ' . htmlspecialchars($user, ENT_QUOTES) . '. '
+              . 'Sent from PayTracker on behalf of ' . $esc($user) . '. '
               . 'Reply directly to this driver if you need more detail.'
               . '</p></div>';
         return [$subject, $html];

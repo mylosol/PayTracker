@@ -2096,13 +2096,17 @@ and the dashboard row vanishes.
 
 ---
 
-## 25. Reconcile — per-load paid / short / disputed
+## 25. Reconcile — per-load paid / disputed
 
 The driver-facing `/reconcile` page lists every load from the current
 pay week + the previous 4 weeks, lets the driver mark each one
-**paid**, **short** (got less than expected), or **disputed**
-(formally flagged with a note), and optionally queues disputes for
-a batched email to a configured payroll contact.
+**paid** or **disputed** (being short on any line item counts as a
+dispute — there's no separate "short" state), and optionally queues
+disputes for a batched email to a configured payroll contact.
+
+Each load row gets a Pay-breakdown expander showing the same
+per-component table that appears on the dashboard, so the driver can
+compare line-by-line against their paystub.
 
 ### 25a. Anonymous access redirects to login
 
@@ -2136,28 +2140,41 @@ a batched email to a configured payroll contact.
 **Expected:** flash `Reset load N back to pending.`, row returns
 to the default tint and `pending` pill.
 
-### 25d. Mark Short
+### 25d. Dispute — itemised + payroll batch queue
 
-1. Click **Short…** on a pending row to reveal the inline form.
-2. Enter an actual amount less than expected (e.g. `expected − 1`).
-3. Optionally note "Mile rate looked low" and submit.
+1. Click **Dispute…** on a pending row to reveal the inline form.
 
-**Expected:** flash `Marked load N short by $1.00.`, row tints amber
-with a `short` pill and the shortfall amount displayed below it.
+**Expected fields:**
 
-### 25e. Dispute + payroll batch queue
+- **Actual paid ($)** — required, numeric.
+- **Which items are wrong?** — checkbox list, one item per pay
+  component the load has non-zero pay for (e.g. Base pay, Empty pay,
+  Shift pay, Seniority pay, etc., each labelled with the expected
+  dollar value).
+- **Other shortfall ($)** — optional, numeric. Catch-all for gaps
+  that don't map to a single component.
+- **Note** — required textarea.
+- **Include in next payroll batch email** — checkbox.
+- **Send me a copy when this batch goes out** — checkbox. State is
+  persisted in `localStorage` under `paytracker.disputeCcSelf`; ticking
+  it here also ticks the matching toggle on the Pending payroll
+  batch card.
 
-1. Click **Dispute…** on a pending row.
-2. Enter a note (required) and tick **Include in next payroll batch**.
-3. Submit.
+2. Fill actual = `expected − 1`, tick one or two components, optional
+   Other shortfall, note "QA test dispute — pls ignore", tick
+   **Include in next payroll batch** and **Send me a copy**. Submit.
 
 **Expected:**
 
 - Flash `Flagged load N as disputed (added to the pending payroll batch).`
 - Row tints red with a `disputed` pill and an `in next batch` sub-pill.
+- Below the row, a detail strip shows
+  `Actual paid: $X · Items: <Comma list> · Other: $Y · Note: ...`.
 - "Pending payroll batch" pill count goes up by 1.
+- The "Send me a copy" toggle on the batch card is ticked
+  automatically (mirrored from the form's submission).
 
-### 25f. Payroll contact email + Send batch button states
+### 25e. Payroll contact email + Send batch button states
 
 1. Visit `/preview/profile`. Confirm the **Payroll contact email**
    field is present, optional, type=email, validated client-side.
@@ -2172,11 +2189,14 @@ with a `short` pill and the shortfall amount displayed below it.
    the button activates as **Send batch to &lt;your address&gt;**.
 6. Click it. A confirm dialog appears with the address + count.
 
-**Expected:** flash `Sent N disputed load(s) to <address>.`,
-batched rows' sub-pill flips from `in next batch` to `batched`,
-"Pending payroll batch" count returns to 0.
+**Expected:** flash `Sent N disputed load(s) to <address>.` (with a
+` (copy to <login email>)` tail if "Send me a copy" was ticked).
+Batched rows' sub-pill flips from `in next batch` to `batched`,
+"Pending payroll batch" count returns to 0. If "Send me a copy" was
+ticked, a second email arrives at the driver's login address with
+the prefix `[copy]` in the subject.
 
-### 25g. Admin queue (Super Admin)
+### 25f. Admin queue (Super Admin)
 
 1. As a Super Admin, visit `/preview/admin/reconcile`.
 

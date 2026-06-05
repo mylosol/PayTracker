@@ -52,7 +52,8 @@ final class PayReconciliation extends Model
     public function findForLoad(int $driverId, int $frtl): ?array
     {
         $sql = 'SELECT id, driver_id, frtl, state, expected_np, actual_np, shortfall,
-                       note, notify_email, emailed_at, reconciled_at, updated_at
+                       note, disputed_components, disputed_other_amount,
+                       notify_email, emailed_at, reconciled_at, updated_at
                 FROM ' . self::ident(self::$table) . '
                 WHERE driver_id = ? AND frtl = ? LIMIT 1';
         $row = $this->prepared($sql, [$driverId, $frtl])->fetch();
@@ -76,13 +77,13 @@ final class PayReconciliation extends Model
         ?float $actualNp,
         ?float $shortfall,
         ?string $note,
+        ?array $disputedComponents,
+        ?float $disputedOtherAmount,
         bool $notifyEmail,
     ): void {
         if (! in_array($state, self::STATES, true)) {
             throw new InvalidArgumentException("Unknown reconcile state: {$state}");
         }
-        // Sanitise the note: trim, collapse to NULL if empty, cap at
-        // 4k so a runaway paste can't bloat the row.
         if ($note !== null) {
             $note = trim($note);
             if ($note === '') {
@@ -92,20 +93,39 @@ final class PayReconciliation extends Model
             }
         }
 
+        // disputed_components: store as a JSON list of component keys.
+        // Empty array → NULL so the "no items checked" case is
+        // distinguishable from "items were checked but stored empty".
+        $disputedJson = null;
+        if ($disputedComponents !== null && $disputedComponents !== []) {
+            // Sanitise: keep only string keys, drop empties, dedupe.
+            $clean = array_values(array_unique(array_filter(
+                array_map('strval', $disputedComponents),
+                static fn ($v) => $v !== '' && mb_strlen($v) <= 64
+            )));
+            if ($clean !== []) {
+                $disputedJson = json_encode($clean, JSON_UNESCAPED_SLASHES);
+            }
+        }
+
         // INSERT ... ON DUPLICATE KEY UPDATE keeps notify_email + emailed_at
         // when the row already exists; the driver flips state on those
         // columns separately via setNotifyFlag() so a state edit doesn't
         // silently re-queue a previously-sent dispute.
         $sql = 'INSERT INTO ' . self::ident(self::$table) . '
-                    (driver_id, frtl, state, expected_np, actual_np, shortfall, note, notify_email, reconciled_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    (driver_id, frtl, state, expected_np, actual_np, shortfall,
+                     note, disputed_components, disputed_other_amount,
+                     notify_email, reconciled_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 ON DUPLICATE KEY UPDATE
-                    state         = VALUES(state),
-                    expected_np   = VALUES(expected_np),
-                    actual_np     = VALUES(actual_np),
-                    shortfall     = VALUES(shortfall),
-                    note          = VALUES(note),
-                    updated_at    = NOW()';
+                    state                 = VALUES(state),
+                    expected_np           = VALUES(expected_np),
+                    actual_np             = VALUES(actual_np),
+                    shortfall             = VALUES(shortfall),
+                    note                  = VALUES(note),
+                    disputed_components   = VALUES(disputed_components),
+                    disputed_other_amount = VALUES(disputed_other_amount),
+                    updated_at            = NOW()';
         $this->prepared($sql, [
             $driverId,
             $frtl,
@@ -114,6 +134,8 @@ final class PayReconciliation extends Model
             $actualNp  !== null ? number_format($actualNp,  2, '.', '') : null,
             $shortfall !== null ? number_format($shortfall, 2, '.', '') : null,
             $note,
+            $disputedJson,
+            $disputedOtherAmount !== null ? number_format($disputedOtherAmount, 2, '.', '') : null,
             $notifyEmail ? 1 : 0,
         ]);
     }
@@ -168,7 +190,8 @@ final class PayReconciliation extends Model
         if ($frtls === []) return [];
         $placeholders = implode(',', array_fill(0, count($frtls), '?'));
         $sql = 'SELECT id, frtl, state, expected_np, actual_np, shortfall,
-                       note, notify_email, emailed_at, reconciled_at, updated_at
+                       note, disputed_components, disputed_other_amount,
+                       notify_email, emailed_at, reconciled_at, updated_at
                 FROM ' . self::ident(self::$table) . '
                 WHERE driver_id = ?
                   AND frtl IN (' . $placeholders . ')';
@@ -189,7 +212,7 @@ final class PayReconciliation extends Model
     public function pendingBatchForDriver(int $driverId): array
     {
         $sql = 'SELECT id, frtl, state, expected_np, actual_np, shortfall,
-                       note, reconciled_at
+                       note, disputed_components, disputed_other_amount, reconciled_at
                 FROM ' . self::ident(self::$table) . '
                 WHERE driver_id = ?
                   AND notify_email = 1
@@ -230,7 +253,8 @@ final class PayReconciliation extends Model
     public function openDisputesForAdmin(int $limit = 200): array
     {
         $sql = 'SELECT r.id, r.driver_id, r.frtl, r.expected_np, r.actual_np, r.shortfall,
-                       r.note, r.notify_email, r.emailed_at, r.reconciled_at, r.updated_at,
+                       r.note, r.disputed_components, r.disputed_other_amount,
+                       r.notify_email, r.emailed_at, r.reconciled_at, r.updated_at,
                        a.user           AS driver_user,
                        a.email          AS driver_email,
                        a.payroll_email  AS payroll_email

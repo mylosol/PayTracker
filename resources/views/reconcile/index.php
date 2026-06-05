@@ -14,6 +14,7 @@
 layout('layouts/app');
 
 $money = static fn ($v): string => '$' . number_format((float) $v, 2);
+$pct   = static fn ($v): string => number_format(((float) $v) * 100, 2) . '%';
 
 $loadTypeLabel = static function ($t): string {
     $t = $t === null ? null : (int) $t;
@@ -24,11 +25,6 @@ $loadTypeLabel = static function ($t): string {
     return (string) $t;
 };
 
-/**
- * Coloured pill for a reconcile state.
- *
- * @param string|null $state  null = pending
- */
 $statePill = static function (?string $state): string {
     return match ($state) {
         'paid'     => '<span class="pill ok">paid</span>',
@@ -37,6 +33,34 @@ $statePill = static function (?string $state): string {
         default    => '<span class="pill">pending</span>',
     };
 };
+
+/** Decode the pay_breakdown JSON column into an array (or null). */
+$decodeBreakdown = static function (?string $json): ?array {
+    if ($json === null || $json === '') return null;
+    try {
+        $arr = json_decode($json, true, 32, JSON_THROW_ON_ERROR);
+    } catch (\Throwable) {
+        return null;
+    }
+    return is_array($arr) ? $arr : null;
+};
+
+/**
+ * Map of pay_breakdown keys → human labels. Rendered both in the
+ * per-load breakdown sub-row AND as the checkbox list in the dispute
+ * form (only the components the load actually has pay for are shown).
+ */
+$componentLabels = [
+    'base_pay'      => 'Base pay',
+    'empty_pay'     => 'Empty pay',
+    'shift_pay'     => 'Shift pay',
+    'seniority_pay' => 'Seniority pay',
+    'weekend_pay'   => 'Weekend pay',
+    'split_pay'     => 'Split pay',
+    'dem_pay'       => 'Demurrage',
+    'break_pay'     => 'Breakdown',
+    'extra_pay'     => 'Extra pay',
+];
 ?>
 <?php if ($flash !== null): ?>
     <div class="card" style="background:#dcfce7;color:#166534;word-break:break-word;">
@@ -50,9 +74,9 @@ $statePill = static function (?string $state): string {
         Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong>
         (driver id <?= (int) ($driver['id'] ?? 0) ?>).
         Walk through each load as your paystubs arrive and mark whether you got the
-        expected amount. Click <strong>Mark paid</strong> for fully paid loads,
-        <strong>Mark short</strong> if you got less than expected, or
-        <strong>Dispute</strong> if there's a problem worth flagging.
+        expected amount. Click <strong>Paid</strong> for fully paid loads, or
+        <strong>Dispute</strong> if there's a problem worth flagging &mdash;
+        being short on any line item counts as a dispute.
     </p>
     <p>
         <a href="<?= e($base) ?>/dashboard">&larr; Dashboard</a>
@@ -77,7 +101,7 @@ $statePill = static function (?string $state): string {
             <?php if ($payrollEmail !== null): ?>
                 to <code><?= e($payrollEmail) ?></code>.
             <?php else: ?>
-                — but no payroll contact email is set yet.
+                &mdash; but no payroll contact email is set yet.
             <?php endif; ?>
         </p>
         <?php if ($payrollEmail === null): ?>
@@ -87,34 +111,41 @@ $statePill = static function (?string $state): string {
                     Set a payroll contact email &rarr;
                 </a>
             </p>
-        <?php elseif (! $mailConfigured): ?>
-            <p class="muted" style="background:#fef3c7;color:#854d0e;border-radius:6px;padding:.5rem .7rem;font-size:13px;">
-                <strong>Heads up:</strong> email delivery is not configured on the
-                server yet (waiting on Resend / DNS verification). The batch is
-                queued and will go out on your next click once delivery is live.
-            </p>
-            <form method="post" action="<?= e($base) ?>/reconcile/send-batch">
-                <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                <button type="submit" disabled
-                        style="background:#e5e7eb;color:#6b7280;border:0;padding:.5rem 1.2rem;border-radius:6px;font:inherit;cursor:not-allowed;">
-                    Send batch (delivery pending)
-                </button>
-            </form>
         <?php else: ?>
-            <form method="post" action="<?= e($base) ?>/reconcile/send-batch">
+            <form id="send-batch-form" method="post" action="<?= e($base) ?>/reconcile/send-batch">
                 <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                <button type="submit"
-                        onclick="return confirm('Send <?= (int) $pendingCount ?> disputed load(s) to <?= e($payrollEmail) ?>?');"
-                        style="background:#16a34a;color:#fff;border:0;padding:.5rem 1.2rem;border-radius:6px;font:inherit;cursor:pointer;">
-                    Send batch to <?= e($payrollEmail) ?>
-                </button>
+                <input type="hidden" name="cc_self" id="send-batch-cc-self" value="0">
+                <label style="display:block;font-size:13px;margin-bottom:.5rem;">
+                    <input type="checkbox" id="cc-self-batch" data-cc-self-toggle>
+                    Send me a copy of this batch
+                </label>
+                <?php if (! $mailConfigured): ?>
+                    <p class="muted" style="background:#fef3c7;color:#854d0e;border-radius:6px;padding:.5rem .7rem;font-size:13px;">
+                        <strong>Heads up:</strong> email delivery is not configured on the
+                        server yet (waiting on Resend / DNS verification). The batch is
+                        queued and will go out on your next click once delivery is live.
+                    </p>
+                    <button type="submit" disabled
+                            style="background:#e5e7eb;color:#6b7280;border:0;padding:.5rem 1.2rem;border-radius:6px;font:inherit;cursor:not-allowed;">
+                        Send batch (delivery pending)
+                    </button>
+                <?php else: ?>
+                    <button type="submit"
+                            onclick="return confirm('Send <?= (int) $pendingCount ?> disputed load(s) to <?= e($payrollEmail) ?>?');"
+                            style="background:#16a34a;color:#fff;border:0;padding:.5rem 1.2rem;border-radius:6px;font:inherit;cursor:pointer;">
+                        Send batch to <?= e($payrollEmail) ?>
+                    </button>
+                <?php endif; ?>
             </form>
         <?php endif; ?>
     <?php endif; ?>
 </div>
 
 <?php
-$renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfToken, $money, $loadTypeLabel, $statePill) {
+$renderRow = static function (array $row, ?array $reconRow) use (
+    $base, $csrfToken, $money, $pct, $loadTypeLabel, $statePill,
+    $decodeBreakdown, $componentLabels
+) {
     $frtl = (int) ($row['frtl'] ?? 0);
     $np   = (float) ($row['np']  ?? 0);
     $state = $reconRow !== null ? (string) $reconRow['state'] : null;
@@ -123,14 +154,33 @@ $renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfTok
     $note      = $reconRow !== null ? (string) ($reconRow['note'] ?? '') : '';
     $notify    = $reconRow !== null && (int) ($reconRow['notify_email'] ?? 0) === 1;
     $emailedAt = $reconRow !== null && is_string($reconRow['emailed_at'] ?? null) ? (string) $reconRow['emailed_at'] : '';
+    $disputedComponentsJson = $reconRow !== null && is_string($reconRow['disputed_components'] ?? null) ? (string) $reconRow['disputed_components'] : '';
+    $disputedOther = $reconRow !== null && $reconRow['disputed_other_amount'] !== null ? (float) $reconRow['disputed_other_amount'] : null;
+    $disputedItems = [];
+    if ($disputedComponentsJson !== '') {
+        $decoded = json_decode($disputedComponentsJson, true);
+        if (is_array($decoded)) {
+            foreach ($decoded as $k) {
+                if (is_string($k) && isset($componentLabels[$k])) {
+                    $disputedItems[] = $componentLabels[$k];
+                }
+            }
+        }
+    }
     $rowStyle = match ($state) {
         'paid'     => 'background:#f0fdf4;',
         'short'    => 'background:#fffbeb;',
         'disputed' => 'background:#fef2f2;',
         default    => '',
     };
+    $bd = $decodeBreakdown(isset($row['pay_breakdown']) ? (string) $row['pay_breakdown'] : null);
     ?>
-    <tr style="border-bottom:1px solid #e4e8ee;vertical-align:top;<?= $rowStyle ?>">
+    <tr style="border-bottom:1px solid #f0f2f6;vertical-align:top;<?= $rowStyle ?>">
+        <td style="padding:.4rem .25rem;text-align:center;width:1.5rem;">
+            <?php if ($bd !== null): ?>
+                <span style="color:var(--accent);font-weight:600;" title="See pay breakdown below">&#x25B8;</span>
+            <?php endif; ?>
+        </td>
         <td style="padding:.4rem .5rem;"><code><?= $frtl ?></code></td>
         <td style="padding:.4rem .5rem;"><?= e(substr((string) ($row['date'] ?? ''), 0, 10)) ?></td>
         <td style="padding:.4rem .5rem;"><?= e($loadTypeLabel($row['load_type'] ?? null)) ?></td>
@@ -142,8 +192,8 @@ $renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfTok
         <td style="padding:.4rem .5rem;text-align:right;"><code><?= e($money($np)) ?></code></td>
         <td style="padding:.4rem .5rem;">
             <?= $statePill($state) ?>
-            <?php if ($state === 'short'    && $shortfall !== null): ?>
-                <br><small class="muted">−<?= e($money($shortfall)) ?></small>
+            <?php if ($state === 'short' && $shortfall !== null): ?>
+                <br><small class="muted">&minus;<?= e($money($shortfall)) ?></small>
             <?php elseif ($state === 'disputed' && $shortfall !== null): ?>
                 <br><small class="muted">gap <?= e($money($shortfall)) ?></small>
             <?php endif; ?>
@@ -159,7 +209,6 @@ $renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfTok
         </td>
         <td style="padding:.4rem .5rem;text-align:right;white-space:nowrap;">
             <?php if ($state === null): ?>
-                <!-- Mark paid -->
                 <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/paid" style="display:inline;">
                     <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
                     <button type="submit"
@@ -167,50 +216,65 @@ $renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfTok
                         Paid
                     </button>
                 </form>
-                <!-- Mark short -->
                 <details style="display:inline-block;">
-                    <summary style="display:inline-block;background:#fef9c3;color:#854d0e;border:1px solid #fde68a;padding:.25rem .7rem;border-radius:4px;cursor:pointer;font-size:12px;list-style:none;">Short&hellip;</summary>
-                    <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/short"
-                          style="position:absolute;z-index:10;background:#fff;border:1px solid #cbd2da;border-radius:6px;padding:.6rem;margin-top:.3rem;box-shadow:0 4px 12px rgba(0,0,0,.1);min-width:18rem;">
+                    <summary class="dispute-summary"
+                             style="display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:.25rem .7rem;border-radius:4px;cursor:pointer;font-size:12px;list-style:none;">Dispute&hellip;</summary>
+                    <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/dispute" data-dispute-form
+                          style="position:absolute;z-index:10;background:#fff;border:1px solid #cbd2da;border-radius:6px;padding:.7rem;margin-top:.3rem;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:22rem;max-width:26rem;text-align:left;">
                         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                        <label style="display:block;font-size:12px;margin-bottom:.3rem;">
-                            Actual paid ($)<br>
-                            <input type="number" name="actual_np" step="0.01" min="0" max="<?= e(number_format($np, 2, '.', '')) ?>" required
+                        <p style="margin:0 0 .4rem 0;font-size:12px;color:#475569;">
+                            Expected pay: <strong><?= e($money($np)) ?></strong>
+                        </p>
+                        <label style="display:block;font-size:12px;margin-bottom:.4rem;">
+                            <strong>Actual paid ($)</strong> &mdash; required<br>
+                            <input type="number" name="actual_np" step="0.01" min="0" required
                                    style="width:8rem;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;">
                         </label>
+                        <?php if ($bd !== null): ?>
+                            <fieldset style="border:1px solid #e4e8ee;border-radius:6px;padding:.4rem .6rem;margin:0 0 .5rem 0;">
+                                <legend style="font-size:12px;color:#475569;padding:0 .3rem;">Which items are wrong?</legend>
+                                <?php
+                                $anyComp = false;
+                                foreach ($componentLabels as $key => $label):
+                                    $val = (float) ($bd[$key] ?? 0);
+                                    if ($val === 0.0) continue;
+                                    $anyComp = true;
+                                    ?>
+                                    <label style="display:block;font-size:12px;margin:.15rem 0;">
+                                        <input type="checkbox" name="disputed_components[]" value="<?= e($key) ?>">
+                                        <?= e($label) ?>
+                                        <span class="muted">(<?= e($money($val)) ?> expected)</span>
+                                    </label>
+                                <?php endforeach; ?>
+                                <?php if (! $anyComp): ?>
+                                    <p class="muted" style="margin:.2rem 0;font-size:11px;">
+                                        No itemised components for this load.
+                                    </p>
+                                <?php endif; ?>
+                            </fieldset>
+                        <?php endif; ?>
                         <label style="display:block;font-size:12px;margin-bottom:.4rem;">
-                            Note (optional)<br>
-                            <textarea name="note" rows="2" maxlength="4000"
-                                      style="width:100%;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;"></textarea>
-                        </label>
-                        <button type="submit"
-                                style="background:#854d0e;color:#fff;border:0;padding:.3rem .8rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
-                            Save short
-                        </button>
-                    </form>
-                </details>
-                <!-- Dispute -->
-                <details style="display:inline-block;">
-                    <summary style="display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:.25rem .7rem;border-radius:4px;cursor:pointer;font-size:12px;list-style:none;">Dispute&hellip;</summary>
-                    <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/dispute"
-                          style="position:absolute;z-index:10;background:#fff;border:1px solid #cbd2da;border-radius:6px;padding:.6rem;margin-top:.3rem;box-shadow:0 4px 12px rgba(0,0,0,.1);min-width:20rem;">
-                        <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                        <label style="display:block;font-size:12px;margin-bottom:.3rem;">
-                            Actual paid ($) <span class="muted">(optional)</span><br>
-                            <input type="number" name="actual_np" step="0.01" min="0"
-                                   style="width:8rem;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;">
+                            Other shortfall ($) <span class="muted">(optional)</span><br>
+                            <input type="number" name="disputed_other_amount" step="0.01" min="0"
+                                   style="width:8rem;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;"
+                                   placeholder="0.00">
                         </label>
                         <label style="display:block;font-size:12px;margin-bottom:.4rem;">
-                            Note (required) — what should payroll know?<br>
+                            <strong>Note</strong> &mdash; required<br>
                             <textarea name="note" rows="3" maxlength="4000" required
-                                      style="width:100%;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;"></textarea>
+                                      style="width:100%;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;"
+                                      placeholder="What should payroll know?"></textarea>
                         </label>
-                        <label style="display:block;font-size:12px;margin-bottom:.4rem;">
+                        <label style="display:block;font-size:12px;margin:.4rem 0;">
                             <input type="checkbox" name="notify_email" value="1">
                             Include in next payroll batch email
                         </label>
+                        <label style="display:block;font-size:12px;margin:.4rem 0;">
+                            <input type="checkbox" data-cc-self-toggle>
+                            Send me a copy when this batch goes out
+                        </label>
                         <button type="submit"
-                                style="background:#991b1b;color:#fff;border:0;padding:.3rem .8rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
+                                style="background:#991b1b;color:#fff;border:0;padding:.35rem .9rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
                             Flag dispute
                         </button>
                     </form>
@@ -227,18 +291,90 @@ $renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfTok
             <?php endif; ?>
         </td>
     </tr>
+
     <?php
-    // Detail row for short / disputed with note / actual.
-    if ($reconRow !== null && ($state !== 'paid') && ($note !== '' || $actual !== null)):
+    // Per-load breakdown sub-row (always rendered if a breakdown exists,
+    // collapsed inside a <details> — driver clicks the chevron in the
+    // main row's first cell, or directly the "Pay breakdown" summary).
+    if ($bd !== null):
+        ?>
+        <tr style="background:#f8fafc;border-bottom:1px solid #f0f2f6;">
+            <td colspan="8" style="padding:.6rem 1.4rem;">
+                <details>
+                    <summary style="cursor:pointer;color:var(--accent);font-weight:600;font-size:13px;">
+                        Pay breakdown &mdash; <?= e((string) ($bd['trip_label']  ?? '?')) ?>
+                        (<?= e((string) ($bd['tenure_band'] ?? '?')) ?>&nbsp;M&nbsp;|&nbsp;<?= e(ucfirst((string) ($bd['shift'] ?? '?'))) ?>)
+                    </summary>
+                    <?php if (! empty($row['notes'])): ?>
+                        <div style="margin-top:.5rem;padding:.5rem .7rem;background:#fffbeb;border-left:3px solid #f59e0b;color:#475569;font-size:13px;white-space:pre-wrap;word-break:break-word;">
+                            <strong style="color:#92400e;">Notes:</strong>
+                            <?= e((string) $row['notes']) ?>
+                        </div>
+                    <?php endif; ?>
+                    <table style="border-collapse:collapse;font-size:13px;margin-top:.4rem;">
+                        <tbody>
+                            <?php foreach ($componentLabels as $key => $label):
+                                $val = (float) ($bd[$key] ?? 0);
+                                if ($val === 0.0) continue;
+                                $rate = null;
+                                $countLabel = null;
+                                if ($key === 'base_pay' && isset($bd['base_miles'])) {
+                                    $countLabel = (int) $bd['base_miles'] . ' Miles Base';
+                                } elseif ($key === 'empty_pay' && isset($bd['empty_miles']) && (int) $bd['empty_miles'] > 0) {
+                                    $countLabel = sprintf('Empty Pay: %d Miles', (int) $bd['empty_miles']);
+                                    $rate = isset($bd['empty_rate']) ? (float) $bd['empty_rate'] : null;
+                                } elseif ($key === 'shift_pay'     && isset($bd['shift_pct'])) {
+                                    $countLabel = 'Shift Pay <span style="color:#ec4899;">(' . $pct($bd['shift_pct']) . ')</span>';
+                                } elseif ($key === 'seniority_pay' && isset($bd['seniority_pct'])) {
+                                    $countLabel = 'Seniority Pay <span style="color:#a855f7;">(' . $pct($bd['seniority_pct']) . ')</span>';
+                                } elseif ($key === 'weekend_pay'   && isset($bd['weekend_pct'])) {
+                                    $countLabel = 'Weekend <span style="color:#f59e0b;">(' . $pct($bd['weekend_pct']) . ')</span>';
+                                }
+                                if ($countLabel === null) $countLabel = $label;
+                                ?>
+                                <tr>
+                                    <td style="padding:.2rem .8rem;color:#475569;">
+                                        <?= $countLabel ?>
+                                        <?php if ($rate !== null): ?>
+                                            <span class="muted">@ $<?= number_format($rate, 4) ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                        <?= e($money($val)) ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <tr style="border-top:1px solid #cbd5e1;">
+                                <td style="padding:.3rem .8rem;font-weight:700;">Total Load Pay</td>
+                                <td style="padding:.3rem .8rem;text-align:right;font-weight:700;color:#f59e0b;">
+                                    <?= e($money((float) ($bd['np'] ?? 0))) ?>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </details>
+            </td>
+        </tr>
+    <?php endif; ?>
+
+    <?php
+    // Acted-row detail strip: actual / shortfall / disputed items / note.
+    if ($reconRow !== null && $state !== 'paid'
+        && ($note !== '' || $actual !== null || $disputedItems !== [] || $disputedOther !== null)):
         ?>
         <tr style="<?= $rowStyle ?>border-bottom:1px solid #e4e8ee;">
-            <td colspan="7" style="padding:.5rem 1.4rem;font-size:13px;color:#475569;">
+            <td colspan="8" style="padding:.5rem 1.4rem;font-size:13px;color:#475569;">
                 <?php if ($actual !== null): ?>
                     <strong>Actual paid:</strong> <?= e($money($actual)) ?>
                 <?php endif; ?>
+                <?php if ($disputedItems !== []): ?>
+                    &middot; <strong>Items:</strong> <?= e(implode(', ', $disputedItems)) ?>
+                <?php endif; ?>
+                <?php if ($disputedOther !== null && $disputedOther > 0): ?>
+                    &middot; <strong>Other:</strong> <?= e($money($disputedOther)) ?>
+                <?php endif; ?>
                 <?php if ($note !== ''): ?>
-                    <?php if ($actual !== null): ?> &middot; <?php endif; ?>
-                    <strong>Note:</strong> <?= e($note) ?>
+                    <br><strong>Note:</strong> <?= e($note) ?>
                 <?php endif; ?>
             </td>
         </tr>
@@ -272,6 +408,7 @@ $renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfTok
             <table style="border-collapse:collapse;width:100%;font-size:14px;margin-top:.4rem;">
                 <thead>
                     <tr style="text-align:left;border-bottom:1px solid #e4e8ee;background:#f1f5f9;">
+                        <th style="padding:.4rem .25rem;width:1.5rem;"></th>
                         <th style="padding:.4rem .5rem;">FRTL</th>
                         <th style="padding:.4rem .5rem;">Date</th>
                         <th style="padding:.4rem .5rem;">Type</th>
@@ -295,3 +432,48 @@ $renderRow = static function (array $row, ?array $reconRow) use ($base, $csrfTok
 <?php endif; ?>
     </div>
 <?php endforeach; ?>
+
+<script>
+    // -------------------------------------------------------------------
+    // "Send me a copy" persistent toggle.
+    //
+    // Every checkbox marked [data-cc-self-toggle] mirrors the same
+    // localStorage key (`paytracker.disputeCcSelf`). Ticking ANY of
+    // them flips the global preference; on page render every one
+    // reads the same value. The Send Batch form has a hidden field
+    // (`#send-batch-cc-self`) the submit handler populates so the
+    // controller sees the right value.
+    // -------------------------------------------------------------------
+    (function () {
+        const KEY = 'paytracker.disputeCcSelf';
+        const read = () => {
+            try { return localStorage.getItem(KEY) === '1'; }
+            catch (e) { return false; }
+        };
+        const write = (on) => {
+            try { localStorage.setItem(KEY, on ? '1' : '0'); }
+            catch (e) {}
+        };
+
+        const initial = read();
+        const toggles = document.querySelectorAll('[data-cc-self-toggle]');
+        toggles.forEach(box => {
+            box.checked = initial;
+            box.addEventListener('change', () => {
+                write(box.checked);
+                // Mirror into every other toggle on the page so the
+                // dispute form's box and the batch card's box stay
+                // in sync without a reload.
+                toggles.forEach(b => { if (b !== box) b.checked = box.checked; });
+                // Update the hidden field on the batch form too.
+                const hidden = document.getElementById('send-batch-cc-self');
+                if (hidden) hidden.value = box.checked ? '1' : '0';
+            });
+        });
+
+        // Ensure the hidden field on the batch form reflects the
+        // current preference on page load.
+        const hidden = document.getElementById('send-batch-cc-self');
+        if (hidden) hidden.value = initial ? '1' : '0';
+    })();
+</script>
