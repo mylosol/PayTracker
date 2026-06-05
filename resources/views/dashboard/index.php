@@ -12,7 +12,8 @@
  *   load_type:?int, pickup_city:?string, delivery_city:?string,
  *   empty_miles:?int, is_split:?int, is_weekend:?int,
  *   extra_pay:?string, dem_minutes:?int, break_minutes:?int,
- *   out_of_route_miles:?int, np:string, op:string, pay_breakdown:?string,
+ *   out_of_route_miles:?int, notes:?string,
+ *   np:string, op:string, pay_breakdown:?string,
  * }> $rows
  * @var array{count:int, np_total:string, op_total:string, miles_total:int} $totals
  * @var array{count:int, np_total:string, op_total:string, miles_total:int} $weekTotals
@@ -214,6 +215,12 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                                         Pay breakdown &mdash; <?= e((string) ($bd['trip_label'] ?? '?')) ?>
                                         (<?= e((string) ($bd['tenure_band'] ?? '?')) ?>&nbsp;M&nbsp;|&nbsp;<?= e(ucfirst((string) ($bd['shift'] ?? '?'))) ?>)
                                     </summary>
+                                    <?php if (!empty($row['notes'])): ?>
+                                        <div style="margin-top:.5rem;padding:.5rem .7rem;background:#fffbeb;border-left:3px solid #f59e0b;color:#475569;font-size:13px;white-space:pre-wrap;word-break:break-word;">
+                                            <strong style="color:#92400e;">Notes:</strong>
+                                            <?= e((string) $row['notes']) ?>
+                                        </div>
+                                    <?php endif; ?>
                                     <table style="border-collapse:collapse;font-size:13px;margin-top:.4rem;">
                                         <tbody>
                                             <?php if ((float) ($bd['base_pay'] ?? 0) !== 0.0): ?>
@@ -313,6 +320,13 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                                 </details>
                             </td>
                         </tr>
+                    <?php elseif (!empty($row['notes'])): ?>
+                        <tr style="background:#f8fafc;border-bottom:1px solid #f0f2f6;">
+                            <td colspan="6" style="padding:.5rem 1.2rem;background:#fffbeb;border-left:3px solid #f59e0b;color:#475569;font-size:13px;white-space:pre-wrap;word-break:break-word;">
+                                <strong style="color:#92400e;">Notes:</strong>
+                                <?= e((string) $row['notes']) ?>
+                            </td>
+                        </tr>
                     <?php endif; ?>
                 <?php endforeach; ?>
             </tbody>
@@ -394,6 +408,43 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                               : t === 4 ? 'Trainer'
                               : String(t);
         const money = (v) => '$' + Number(v).toFixed(2);
+        const pct   = (v) => (Number(v) * 100).toFixed(2) + '%';
+
+        // Mirror of the PHP breakdown table in dashboard/index.php — same
+        // conditional rows, same money/pct formatting. Kept in lockstep
+        // with the saved-row markup so the two paths look identical.
+        function renderBreakdownRows(bd) {
+            const rows = [];
+            const row  = (label, val) => `
+                <tr>
+                    <td style="padding:.2rem .8rem;color:#475569;">${label}</td>
+                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">${money(val)}</td>
+                </tr>`;
+            if (Number(bd.base_pay)      || 0) rows.push(row(`${Number(bd.base_miles) || 0} Miles Base`, bd.base_pay));
+            if (Number(bd.empty_pay)     || 0) {
+                const em = Number(bd.empty_miles) || 0;
+                const rate = Number(bd.empty_rate) || 0;
+                const lbl = em > 0
+                    ? `Empty Pay: ${em} Miles <span class="muted">@ $${rate.toFixed(4)}</span>`
+                    : 'Empty Pay:';
+                rows.push(row(lbl, bd.empty_pay));
+            }
+            if (Number(bd.shift_pay)     || 0) rows.push(row(`Shift Pay <span style="color:#ec4899;">(${pct(bd.shift_pct || 0)})</span>`, bd.shift_pay));
+            if (Number(bd.seniority_pay) || 0) rows.push(row(`Seniority Pay <span style="color:#a855f7;">(${pct(bd.seniority_pct || 0)})</span>`, bd.seniority_pay));
+            if (Number(bd.weekend_pay)   || 0) rows.push(row(`Weekend <span style="color:#f59e0b;">(${pct(bd.weekend_pct || 0)})</span>`, bd.weekend_pay));
+            if (Number(bd.split_pay)     || 0) rows.push(row('Split Pay',  bd.split_pay));
+            if (Number(bd.dem_pay)       || 0) rows.push(row('Demurrage',  bd.dem_pay));
+            if (Number(bd.break_pay)     || 0) rows.push(row('Breakdown',  bd.break_pay));
+            if (Number(bd.extra_pay)     || 0) rows.push(row('Extra Pay',  bd.extra_pay));
+            rows.push(`
+                <tr style="border-top:1px solid #cbd5e1;">
+                    <td style="padding:.3rem .8rem;font-weight:700;">Total Load Pay</td>
+                    <td style="padding:.3rem .8rem;text-align:right;font-weight:700;color:#f59e0b;">
+                        ${money(bd.np || 0)}
+                    </td>
+                </tr>`);
+            return rows.join('');
+        }
 
         const tbody = document.querySelector('#dashboard-loads-table tbody');
         const table = document.getElementById('dashboard-loads-table');
@@ -405,14 +456,20 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
         todays.forEach((entry) => {
             const c  = entry.computed;
             const id = entry.local_id;
+            const bd = (c.pay_breakdown && typeof c.pay_breakdown === 'object') ? c.pay_breakdown : null;
             injectedNp    += Number(c.np)          || 0;
             injectedMiles += Number(c.empty_miles) || 0;
+
+            // Main row — mirror of the saved-row structure (incl. the
+            // decorative chevron in column 1 when a breakdown exists).
             const tr = document.createElement('tr');
             tr.style.borderBottom = '1px solid #f0f2f6';
             tr.style.verticalAlign = 'top';
-            tr.style.background = '#fffbeb'; // pale amber: this is a scratchpad row
+            tr.style.background = '#fffbeb'; // pale amber: scratchpad row
             tr.innerHTML = `
-                <td style="padding:.25rem .5rem;text-align:center;" title="Unsaved scratchpad load">&#x270D;</td>
+                <td style="padding:.25rem .5rem;text-align:center;" title="Unsaved scratchpad load">
+                    ${bd ? '<span style="color:var(--accent);font-weight:600;">&#x25B8;</span>' : ''}
+                </td>
                 <td style="padding:.25rem .5rem;color:#92400e;" title="No FRTL # yet — edit to add one and save"><code>—</code></td>
                 <td style="padding:.25rem .5rem;">${typeLabel(c.load_type)}</td>
                 <td style="padding:.25rem .5rem;">
@@ -429,6 +486,48 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                             title="Discard this scratchpad load">Discard</button>
                 </td>`;
             tbody.appendChild(tr);
+
+            // Breakdown row — collapsed by default. Includes notes (if
+            // any) above the per-component pay table. Same markup
+            // shape as the PHP-rendered breakdown for saved loads.
+            if (bd) {
+                const noteHtml = c.notes
+                    ? `<div style="margin-top:.5rem;padding:.5rem .7rem;background:#fffbeb;border-left:3px solid #f59e0b;color:#475569;font-size:13px;white-space:pre-wrap;word-break:break-word;">
+                           <strong style="color:#92400e;">Notes:</strong> ${escapeHtml(c.notes)}
+                       </div>` : '';
+                const tripLabel = (bd.trip_label  != null) ? String(bd.trip_label)  : '?';
+                const band      = (bd.tenure_band != null) ? String(bd.tenure_band) : '?';
+                const shift     = (bd.shift       != null) ? String(bd.shift)       : '?';
+                const shiftCap  = shift.charAt(0).toUpperCase() + shift.slice(1);
+                const tr2 = document.createElement('tr');
+                tr2.style.background    = '#f8fafc';
+                tr2.style.borderBottom  = '1px solid #f0f2f6';
+                tr2.innerHTML = `
+                    <td colspan="6" style="padding:.6rem 1.2rem;">
+                        <details>
+                            <summary style="cursor:pointer;color:var(--accent);font-weight:600;">
+                                Pay breakdown &mdash; ${escapeHtml(tripLabel)}
+                                (${escapeHtml(band)}&nbsp;M&nbsp;|&nbsp;${escapeHtml(shiftCap)})
+                            </summary>
+                            ${noteHtml}
+                            <table style="border-collapse:collapse;font-size:13px;margin-top:.4rem;">
+                                <tbody>${renderBreakdownRows(bd)}</tbody>
+                            </table>
+                        </details>
+                    </td>`;
+                tbody.appendChild(tr2);
+            } else if (c.notes) {
+                // No breakdown but still has notes — surface them in a
+                // standalone row so they're not buried behind Edit.
+                const tr2 = document.createElement('tr');
+                tr2.style.background    = '#f8fafc';
+                tr2.style.borderBottom  = '1px solid #f0f2f6';
+                tr2.innerHTML = `
+                    <td colspan="6" style="padding:.5rem 1.2rem;background:#fffbeb;border-left:3px solid #f59e0b;color:#475569;font-size:13px;white-space:pre-wrap;word-break:break-word;">
+                        <strong style="color:#92400e;">Notes:</strong> ${escapeHtml(c.notes)}
+                    </td>`;
+                tbody.appendChild(tr2);
+            }
         });
         table.style.display = '';
         if (noMsg) noMsg.hidden = true;

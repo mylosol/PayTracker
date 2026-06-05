@@ -147,6 +147,7 @@ final class DriverLoad extends Model
                 empty_miles, is_split, is_weekend,
                 extra_pay, dem_minutes, break_minutes,
                 out_of_route_miles,
+                notes,
                 np, op, pay_breakdown
             FROM ' . self::ident(self::$table) . '
             WHERE driver_id = ?
