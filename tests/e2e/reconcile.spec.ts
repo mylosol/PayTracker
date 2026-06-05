@@ -132,10 +132,12 @@ test.describe('reconcile', () => {
         const resolvedRow = page.locator('tbody tr', { has: page.locator(`code:has-text("${frtl}")`) }).first();
         await expect(resolvedRow.locator('.pill.ok', { hasText: /^paid$/i })).toBeVisible();
         await expect(resolvedRow).toContainText(/resolved dispute/i);
-        // The detail strip is the NEXT sibling row in the tbody.
-        const detailRow = resolvedRow.locator('xpath=following-sibling::tr[1]');
+        // The acted-row detail strip is rendered AFTER the per-load
+        // Pay-breakdown row, so it's not necessarily the next sibling.
+        // Scope by the unique note text we filled in — that's only in
+        // the strip, never in the breakdown row.
+        const detailRow = page.locator('tbody tr', { hasText: 'QA test — to be resolved' });
         await expect(detailRow).toContainText(/originally disputed, now resolved/i);
-        await expect(detailRow).toContainText('QA test — to be resolved');
     });
 
     test('25f — cc-self toggle persists across reload via localStorage', async ({ page }) => {
