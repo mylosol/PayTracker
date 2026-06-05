@@ -223,6 +223,34 @@ final class Account extends Model
         $this->prepared($sql, [$hireDate, $shift, $payWeekStartDay, $accountId]);
     }
 
+    /**
+     * Update the driver's payroll-contact email — the optional address
+     * dispute batch notifications go to when the driver clicks
+     * "Send batch" on /reconcile.
+     *
+     * Independent of account.email (login + password-reset). Passing
+     * null or '' clears the value; the reconcile UI then disables the
+     * batch-send button.
+     */
+    public function updatePayrollEmail(int $accountId, ?string $payrollEmail): void
+    {
+        $value = $payrollEmail;
+        if ($value !== null) {
+            $value = trim($value);
+            if ($value === '') {
+                $value = null;
+            } elseif (! filter_var($value, FILTER_VALIDATE_EMAIL)) {
+                throw new \InvalidArgumentException('Payroll email is not a valid address.');
+            } elseif (mb_strlen($value) > 255) {
+                throw new \InvalidArgumentException('Payroll email is too long (max 255 chars).');
+            }
+        }
+        $sql = 'UPDATE ' . self::ident(self::$table) . '
+                SET payroll_email = ?
+                WHERE id = ?';
+        $this->prepared($sql, [$value, $accountId]);
+    }
+
     // ====================================================================
     // Admin-panel surface
     // ====================================================================

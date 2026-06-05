@@ -5,6 +5,7 @@
  * @var array<string,mixed>     $driver
  * @var string                  $username         3-32 chars [A-Za-z0-9._-]
  * @var string                  $email            full address or empty
+ * @var string                  $payrollEmail     full address or empty (optional)
  * @var string                  $hireDate         YYYY-MM-DD or empty
  * @var string                  $shift            'day' | 'night'
  * @var string                  $payWeekStartDay  'sun' | 'mon' | ... | 'sat'
@@ -77,6 +78,19 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
             <small class="muted">
                 Required. Where admin-issued password-reset links and
                 other operational mail land.
+            </small>
+        </p>
+
+        <p>
+            <label for="payroll_email"><strong>Payroll contact email</strong> <span class="muted">(optional)</span></label><br>
+            <input id="payroll_email" name="payroll_email" type="email"
+                   value="<?= e($payrollEmail) ?>" maxlength="255" autocomplete="off"
+                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
+            <small class="muted">
+                Optional. The address dispute notifications go to when you
+                click <strong>Send batch</strong> on the Reconcile page.
+                Leave blank to disable batch notifications &mdash; you can
+                still mark loads paid / short / disputed without it.
             </small>
         </p>
 

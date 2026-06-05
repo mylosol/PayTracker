@@ -56,6 +56,7 @@ final class ProfileController extends Controller
             'driver'           => $account,
             'username'         => is_string($account['user']  ?? null) ? (string) $account['user']  : '',
             'email'            => is_string($account['email'] ?? null) ? (string) $account['email'] : '',
+            'payrollEmail'     => is_string($account['payroll_email'] ?? null) ? (string) $account['payroll_email'] : '',
             'hireDate'         => is_string($account['hire_date'] ?? null) ? (string) $account['hire_date'] : '',
             'shift'            => is_string($account['shift'] ?? null) ? (string) $account['shift'] : 'day',
             'payWeekStartDay'  => is_string($account['pay_week_start_day'] ?? null) ? (string) $account['pay_week_start_day'] : 'sun',
@@ -74,11 +75,12 @@ final class ProfileController extends Controller
             return $this->failBack($request, 'Your session expired. Please try again.');
         }
 
-        $userRaw      = trim((string) $request->input('username', ''));
-        $emailRaw     = trim((string) $request->input('email', ''));
-        $hireRaw      = trim((string) $request->input('hire_date', ''));
-        $shiftRaw     = (string) $request->input('shift', 'day');
-        $payWeekRaw   = (string) $request->input('pay_week_start_day', 'sun');
+        $userRaw         = trim((string) $request->input('username', ''));
+        $emailRaw        = trim((string) $request->input('email', ''));
+        $payrollEmailRaw = trim((string) $request->input('payroll_email', ''));
+        $hireRaw         = trim((string) $request->input('hire_date', ''));
+        $shiftRaw        = (string) $request->input('shift', 'day');
+        $payWeekRaw      = (string) $request->input('pay_week_start_day', 'sun');
 
         // Username + email: validated and persisted via Account::updateBasics
         // which enforces the charset rule (USER_PATTERN, no '@' allowed),
@@ -124,14 +126,22 @@ final class ProfileController extends Controller
 
         try {
             $this->accounts->updateProfile((int) $account['id'], $hireDate, $shiftRaw, $payWeekRaw);
+            // Payroll email is optional; empty means "clear it". The
+            // model validates RFC-format if non-empty and rejects
+            // values over 255 chars.
+            $this->accounts->updatePayrollEmail(
+                (int) $account['id'],
+                $payrollEmailRaw === '' ? null : $payrollEmailRaw
+            );
         } catch (\Throwable $e) {
             return $this->failBack($request, 'Could not save profile: ' . $e->getMessage());
         }
 
         $this->session->put('_flash', sprintf(
-            'Profile saved. Username: %s. Email: %s. Tenure date: %s. Shift: %s. Pay week starts %s.',
+            'Profile saved. Username: %s. Email: %s. Payroll contact: %s. Tenure date: %s. Shift: %s. Pay week starts %s.',
             $userRaw,
             $emailRaw,
+            $payrollEmailRaw === '' ? 'unset' : $payrollEmailRaw,
             $hireDate ?? 'unset (junior-band default)',
             ucfirst($shiftRaw),
             ucfirst($payWeekRaw)
