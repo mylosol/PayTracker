@@ -7,7 +7,6 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
-use PayTracker\Models\Account;
 use PayTracker\Models\AuditLog;
 use PayTracker\Models\DriverLoad;
 use PayTracker\Models\PayReconciliation;
@@ -60,7 +59,6 @@ final class ReconcileController extends Controller
         private readonly Session $session,
         private readonly DriverLoad $loads,
         private readonly PayReconciliation $recon,
-        private readonly Account $accounts,
         private readonly AuditLog $audit,
         private readonly MailService $mail,
     ) {
