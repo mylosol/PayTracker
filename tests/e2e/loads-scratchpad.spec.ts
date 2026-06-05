@@ -150,8 +150,14 @@ test.describe('load scratchpad (Store Load Info OFF)', () => {
 
     test('21e — discard removes entry and reloads', async ({ page }) => {
         await page.goto('dashboard');
-        await page.evaluate(() => {
-            const today = new Date().toISOString().slice(0, 10);
+        // Pull the server's notion of "today" off the card so the
+        // hydration date-filter accepts our seeded entry. Using
+        // `new Date()` in JS would give UTC, which can be off by
+        // one day from APP_TIMEZONE (America/Chicago) when the
+        // runner clock is in the wrong window.
+        const serverToday = await page.locator('[data-loads-card]').getAttribute('data-date');
+        expect(serverToday).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        await page.evaluate((today) => {
             localStorage.setItem('paytracker.unsavedLoads', JSON.stringify([{
                 local_id: 'u_test_discard',
                 created_at: Date.now(),
@@ -165,7 +171,7 @@ test.describe('load scratchpad (Store Load Info OFF)', () => {
                     used_google_maps: 0,
                 },
             }]));
-        });
+        }, serverToday);
         await page.goto('dashboard');
         page.once('dialog', d => d.accept());
         await page.locator('button[data-discard-local-id="u_test_discard"]').click();
