@@ -2459,13 +2459,19 @@ terminal.` No audit row was written.
 
 ### 27g. Cleanup
 
-The QA cleanup sweep doesn't currently know about the
-`terminals` table — these rows are tiny, harmless, and named
-with the `QA TEST` prefix so they're obvious in the list.
-Delete the row manually after the test (Deactivate twice is
-not the same as removal; for a permanent test row, run
-`DELETE FROM terminals WHERE name LIKE 'QA TEST%'` on the
-preview DB after the suite finishes).
+The `qa-cleanup.php` sweep handles `terminals` rows named with
+the `QA TEST ` prefix automatically — the post-Playwright step
+in the deploy workflow already invokes it, so a fresh deploy
+will drop any rows left behind by the spec.
+
+To run a manual pass:
+
+```
+php scripts/qa-cleanup.php --apply --terminals
+```
+
+Or `--apply` with no category flag to sweep every category in
+one pass.
 
 ---
 

@@ -36,6 +36,7 @@ declare(strict_types=1);
  *   php scripts/qa-cleanup.php --apply --cities             # only cities
  *   php scripts/qa-cleanup.php --apply --unlock             # only lockouts
  *   php scripts/qa-cleanup.php --apply --pattern='Test City%'  # custom prefix
+ *   php scripts/qa-cleanup.php --apply --terminals          # only Begin Empty Locations
  *   php scripts/qa-cleanup.php --apply --confirm-production
  */
 
@@ -56,6 +57,7 @@ $onlyUnlock        = in_array('--unlock', $flags, true);
 $onlyLoads         = in_array('--loads', $flags, true);
 $onlyAnnounce      = in_array('--announcements', $flags, true);
 $onlyInvites       = in_array('--invites', $flags, true);
+$onlyTerminals     = in_array('--terminals', $flags, true);
 $confirmProduction = in_array('--confirm-production', $flags, true);
 
 $customPattern = null;
@@ -82,12 +84,13 @@ $pattern = $customPattern ?? 'Qa Test %';
 
 // If no specific category flag is passed, do all three. Mirrors the common
 // "I just finished a QA pass, please tidy up" intent.
-$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce || $onlyInvites;
-$doCities   = $onlyCities   || ! $anySpecific;
-$doUnlock   = $onlyUnlock   || ! $anySpecific;
-$doLoads    = $onlyLoads    || ! $anySpecific;
-$doAnnounce = $onlyAnnounce || ! $anySpecific;
-$doInvites  = $onlyInvites  || ! $anySpecific;
+$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce || $onlyInvites || $onlyTerminals;
+$doCities    = $onlyCities    || ! $anySpecific;
+$doUnlock    = $onlyUnlock    || ! $anySpecific;
+$doLoads     = $onlyLoads     || ! $anySpecific;
+$doAnnounce  = $onlyAnnounce  || ! $anySpecific;
+$doInvites   = $onlyInvites   || ! $anySpecific;
+$doTerminals = $onlyTerminals || ! $anySpecific;
 
 if (config('app.env') === 'production' && $apply && ! $confirmProduction) {
     fwrite(STDERR, "Refusing to run against APP_ENV=production without --confirm-production.\n");
@@ -306,6 +309,49 @@ try {
                 if ($apply) {
                     $del = $pdo->prepare('DELETE FROM `invite_codes` WHERE used_at IS NULL');
                     $del->execute();
+                    echo "    → deleted.\n";
+                }
+            }
+        }
+    }
+
+    // --- 6. QA-test Begin Empty Locations (terminals) ----------------
+    // Section 27 of the QA plan + tests/e2e/admin-terminals.spec.ts
+    // create rows like "QA TEST hub 1234567, FL" (possibly later
+    // renamed to "QA TEST hub 1234567 renamed, FL"). The spec doesn't
+    // hard-delete them — the admin surface is soft-delete only —
+    // so without this sweep every preview deploy leaves a fresh
+    // row behind. The pattern is fixed (the prefix lives in the
+    // spec, not in user input) so we don't accept --pattern here.
+    if ($doTerminals) {
+        $exists = (bool) $pdo->query("SHOW TABLES LIKE 'terminals'")->fetchColumn();
+        if (! $exists) {
+            echo "  terminals: table not present, skipping.\n";
+        } else {
+            $termPattern = 'QA TEST %';
+            $find = $pdo->prepare(
+                'SELECT id, name, active
+                   FROM `terminals`
+                  WHERE name LIKE ?'
+            );
+            $find->execute([$termPattern]);
+            $rows = $find->fetchAll();
+
+            if ($rows === []) {
+                echo "  terminals: no rows match name LIKE '{$termPattern}'.\n";
+            } else {
+                echo "  terminals: " . count($rows) . " row(s) match name LIKE '{$termPattern}':\n";
+                foreach ($rows as $r) {
+                    printf(
+                        "    - id=%d active=%d name=%s\n",
+                        (int) $r['id'],
+                        (int) ($r['active'] ?? 0),
+                        (string) $r['name'],
+                    );
+                }
+                if ($apply) {
+                    $del = $pdo->prepare('DELETE FROM `terminals` WHERE name LIKE ?');
+                    $del->execute([$termPattern]);
                     echo "    → deleted.\n";
                 }
             }
