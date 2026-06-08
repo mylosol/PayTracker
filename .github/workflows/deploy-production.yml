@@ -141,6 +141,9 @@ jobs:
           MAPS_KEY: ${{ secrets.MAPS_API_PAT }}
           RESEND_KEY: ${{ secrets.RESEND_API }}
           MAIL_FROM_ADDR: ${{ secrets.MAIL_FROM }}
+          BRANCH:   ${{ github.ref_name }}
+          COMMIT:   ${{ github.sha }}
+          RUN_NUM:  ${{ github.run_number }}
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "cat > /home/robshe48/paytracker/.env" <<EOF
@@ -168,6 +171,13 @@ jobs:
           # Resend transactional email (admin-initiated password reset).
           RESEND_API=${RESEND_KEY}
           MAIL_FROM="${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}"
+
+          # Build provenance — surfaced on /health and in the footer.
+          # BUILD_NUMBER is GH Actions' per-workflow run counter; this
+          # production counter is independent from the preview channel's.
+          BUILD_BRANCH=${BRANCH}
+          BUILD_COMMIT=${COMMIT}
+          BUILD_NUMBER=${RUN_NUM}
           EOF
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/.env"
 

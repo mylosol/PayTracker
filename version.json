@@ -1,6 +1,5 @@
 {
-  "_comment": "Manually-bumped MAJOR.MINOR.PATCH. The build id is appended automatically from BUILD_COMMIT (set by the deploy workflow) — see app/Support/Version.php.",
+  "_comment": "Manually-bumped MAJOR.MINOR. The PATCH slot is auto-populated from the deploy workflow's github.run_number (independent counter per environment — preview vs production), and the +BUILDID suffix comes from BUILD_COMMIT. See app/Support/Version.php.",
   "major": 2,
-  "minor": 2,
-  "patch": 5
+  "minor": 2
 }

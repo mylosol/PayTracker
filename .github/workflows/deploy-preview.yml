@@ -173,6 +173,7 @@ jobs:
           MAIL_FROM_ADDR: ${{ secrets.MAIL_FROM }}
           BRANCH:    ${{ github.ref_name }}
           COMMIT:    ${{ github.sha }}
+          RUN_NUM:   ${{ github.run_number }}
         run: |
           set -euo pipefail
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "cat > /home/robshe48/paytracker/preview/.env" <<EOF
@@ -209,9 +210,12 @@ jobs:
           RESEND_API=${RESEND_KEY}
           MAIL_FROM="${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}"
 
-          # Build provenance — surfaced on /health for traceability.
+          # Build provenance — surfaced on /health and in the footer.
+          # BUILD_NUMBER is GH Actions' per-workflow run counter; the
+          # preview channel's counter is independent of production's.
           BUILD_BRANCH=${BRANCH}
           BUILD_COMMIT=${COMMIT}
+          BUILD_NUMBER=${RUN_NUM}
           EOF
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/preview/.env"
 

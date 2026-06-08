@@ -8,12 +8,17 @@ namespace PayTracker\Support;
  * Version — user-facing semantic version + build id, surfaced in the
  * footer on every layout.
  *
- * Composition rules (matching what we display, e.g. `v2.2.5+abc1234`):
+ * Composition rules (matching what we display, e.g. `v2.2.120+abc1234`):
  *
- *   - `major.minor.patch` come from `version.json` at the repo root.
- *     All three are manually edited; bumping minor or major is a
- *     judgement call (breaking change, big feature, etc.) and patch
- *     is bumped as we ship fixes.
+ *   - `major.minor` come from `version.json` at the repo root and
+ *     are manually edited — bumping minor or major is a judgement
+ *     call (breaking change, big feature, etc.).
+ *   - `patch` is the deploy serial — `env('BUILD_NUMBER')`, which the
+ *     workflow populates with `github.run_number`. GH Actions
+ *     auto-increments that per workflow file, so the preview channel
+ *     and the production channel each carry an independent monotonic
+ *     counter. Falls back to 0 when the env var is empty (local
+ *     development, unit-test runs).
  *   - `build` is the first 7 chars of the git commit deployed at
  *     build time, read from `env('BUILD_COMMIT')`. The deploy
  *     workflow already writes the full SHA into the remote `.env`
@@ -78,11 +83,10 @@ final class Version
         $json = self::readVersionJson();
         $major = isset($json['major']) && is_numeric($json['major']) ? (int) $json['major'] : 0;
         $minor = isset($json['minor']) && is_numeric($json['minor']) ? (int) $json['minor'] : 0;
-        $patch = isset($json['patch']) && is_numeric($json['patch']) ? (int) $json['patch'] : 0;
         self::$cachedParts = [
             'major' => $major,
             'minor' => $minor,
-            'patch' => $patch,
+            'patch' => self::resolvePatch(),
             'build' => self::resolveBuildId(),
         ];
         return self::$cachedParts;
@@ -121,6 +125,25 @@ final class Version
             return [];
         }
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Patch slot — the deploy serial sourced from BUILD_NUMBER (set
+     * in .env by the deploy workflow, populated with
+     * github.run_number). Falls back to 0 when missing or
+     * non-numeric so the version string stays well-formed in local
+     * development and test runs.
+     */
+    private static function resolvePatch(): int
+    {
+        $raw = function_exists('env') ? env('BUILD_NUMBER', '') : ((string) (getenv('BUILD_NUMBER') ?: ''));
+        if (is_int($raw)) {
+            return max(0, $raw);
+        }
+        if (is_string($raw) && $raw !== '' && ctype_digit($raw)) {
+            return (int) $raw;
+        }
+        return 0;
     }
 
     /**
