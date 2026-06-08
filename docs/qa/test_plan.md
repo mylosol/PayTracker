@@ -2469,6 +2469,102 @@ preview DB after the suite finishes).
 
 ---
 
+## 28. Begin Empty terminal picker
+
+Drivers no longer have to eyeball Begin Empty miles. The load
+form's `Begin empty from` dropdown lists every active terminal
+from §27; picking one POSTs to `/loads/preview-be-miles` and the
+server fills `Begin empty miles` automatically (cache-first,
+Google-Maps fill-fallback).
+
+### 28a. Picker only renders inside the one-way Begin Empty wrapper
+
+1. Open `/preview/loads/new`. Default is one-way (`load_type=0`).
+
+**Expected:** the `Begin empty from` `<select>` is visible,
+defaulted to *"— I started at the terminal (0 miles) —"*, listing
+every active row from `/admin/terminals` followed by a final
+*"Other / I'll type my own miles…"* entry.
+
+2. Pick `Round-trip`.
+
+**Expected:** the whole Begin Empty section hides, miles reset to 0.
+
+3. Pick back to `Loaded one-way`.
+
+**Expected:** the section reappears, picker visible again.
+
+### 28b. Picking a terminal fills miles + locks the input
+
+1. Set Pick-up to `Panama City, FL`, delivery to `Lynn Haven, FL`.
+2. Pick `Niceville, FL` from the Begin empty `from` dropdown.
+
+**Expected:**
+
+- Below the dropdown, a one-line status reads
+  *"X mi from Niceville, FL → Panama City, FL (from the distance
+  cache)."* in green (or *"…via Google Maps — saved to the
+  distance cache"* if it fell through to the live API).
+- `Begin empty miles` input is greyed out (read-only) with the
+  fetched integer in it.
+
+3. Type into the miles input directly.
+
+**Expected:** nothing happens — the input is read-only while the
+picker holds a terminal selection.
+
+### 28c. "Other" releases the input
+
+1. With a terminal selected from 28b, switch to *"Other / I'll
+   type my own miles…"*.
+
+**Expected:**
+
+- Status text flips to grey *"Type the miles yourself."*
+- The miles input unlocks (no grey background), focus moves into
+  it, and the previously-fetched value remains as a seed.
+
+2. Edit the miles value freely. Submit the form.
+
+**Expected:** the load saves with the manually-typed miles.
+
+### 28d. Empty placeholder = 0 miles
+
+1. With a terminal selected, switch back to *"— I started at the
+   terminal (0 miles) —"*.
+
+**Expected:** miles input snaps to `0` and locks. Status text
+clears.
+
+### 28e. Changing the pickup re-resolves miles
+
+1. Pick `Niceville, FL` in Begin empty.
+2. With a terminal selected, change the Pick-up terminal in the
+   main form to a different city.
+
+**Expected:** picker fires a fresh lookup automatically (you'll
+see the *"Looking up miles…"* status flash briefly) and the
+miles update to reflect the new route. Status updates to mention
+the new pickup name.
+
+### 28f. Lookup failure falls back gracefully
+
+Hard to trigger end-to-end without temporarily nuking the
+Resend / Maps key on preview. Documented as a known-good
+behaviour:
+
+- If `/loads/preview-be-miles` returns `ok:false` (cache miss
+  + Google Maps unconfigured / API outage / 4xx), the JS shows
+  the error string in red and re-unlocks the miles input — the
+  driver can always type the miles themselves and submit the
+  form.
+
+Equivalent SQL-only check: pick a known-bad pair (e.g. delete
+the cache row + revoke the Google key temporarily) — the form
+must NEVER block submission on a failed Begin Empty lookup.
+
+---
+
 ## Reporting template
 
 Copy this into the issue / chat thread when filing a bug:

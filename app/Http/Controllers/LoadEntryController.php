@@ -85,6 +85,7 @@ final class LoadEntryController extends Controller
             'base'      => $request->basePath(),
             'cities'    => $this->cities->allForPicker(),
             'terminals' => $this->terminals->all(),
+            'beTerminals' => $this->terminals->listActive(),
             'driver'    => $account,
             'flash'     => $this->popFlash(),
             'mode'      => 'create',
@@ -275,6 +276,7 @@ final class LoadEntryController extends Controller
             'base'      => $request->basePath(),
             'cities'    => $this->cities->allForPicker(),
             'terminals' => $this->terminals->all(),
+            'beTerminals' => $this->terminals->listActive(),
             'driver'    => $account,
             'flash'     => $this->popFlash(),
             'mode'      => 'edit',
@@ -608,6 +610,99 @@ final class LoadEntryController extends Controller
                 'pay_breakdown'        => $ctx['pay_breakdown'],
                 'used_google_maps'     => $ctx['used_google_maps'],
             ],
+        ]);
+    }
+
+    /**
+     * POST /loads/preview-be-miles — resolve Begin Empty miles from a
+     * selected terminal to the load's pick-up city. Tiny JSON endpoint
+     * the load form calls when the driver picks a terminal from the
+     * BE dropdown so they don't have to type miles by hand.
+     *
+     * Inputs (POST):
+     *   _csrf
+     *   begin_empty_terminal_id  — id from the `terminals` table
+     *   pickup_city              — the load's pickup terminal name
+     *                              (same value as the pickup_city select)
+     *
+     * Response shape:
+     *   { ok: true,  miles: int, source: "cache"|"maps", terminal: string }
+     *   { ok: false, error: "human-friendly message" }
+     *
+     * Failure modes (all return ok:false so the JS can re-enable the
+     * manual miles input):
+     *   - invalid / missing inputs
+     *   - terminal id not active in the picker
+     *   - distance lookup miss AND Google Maps unconfigured/failing
+     *
+     * Distance source priority matches the existing pay-compute path —
+     * city_distances cache first (legacy matrices win), Google Maps
+     * fill-fallback second. A successful Google lookup inserts the
+     * pair into the cache so subsequent requests hit instantly.
+     */
+    public function previewBeMiles(Request $request): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->json(['ok' => false, 'error' => 'Your session expired. Please reload and sign in again.'], 401);
+        }
+        $this->session->start();
+
+        if (! $this->csrf->verify($request->input('_csrf'))) {
+            return $this->json(['ok' => false, 'error' => 'Your session expired. Please reload the page.'], 419);
+        }
+
+        $idRaw  = trim((string) $request->input('begin_empty_terminal_id', ''));
+        $pickup = trim((string) $request->input('pickup_city', ''));
+
+        if ($idRaw === '' || ! ctype_digit($idRaw) || (int) $idRaw <= 0) {
+            return $this->json(['ok' => false, 'error' => 'Pick a Begin Empty terminal first.']);
+        }
+        if ($pickup === '') {
+            return $this->json(['ok' => false, 'error' => 'Pick a pick-up terminal first so we know where you\'re going.']);
+        }
+
+        $terminal = $this->terminals->findById((int) $idRaw);
+        if ($terminal === null || $terminal['active'] !== 1) {
+            return $this->json(['ok' => false, 'error' => 'That Begin Empty terminal is no longer active. Pick another, or enter miles manually.']);
+        }
+        if ($terminal['name'] === $pickup) {
+            // Same terminal start + pickup -> 0 miles. Skip the lookup
+            // entirely so the cache doesn't get a 0-mile self-pair.
+            return $this->json([
+                'ok'       => true,
+                'miles'    => 0,
+                'source'   => 'cache',
+                'terminal' => $terminal['name'],
+            ]);
+        }
+
+        // Track whether the lookup hit the cache or had to fall through
+        // to Google Maps. CityDistance::lookupOrFetch doesn't return
+        // that detail, so we peek at the cache directly first to
+        // classify the source. The peek is cheap (already an indexed
+        // read) and lets the UI tell the driver whether the number
+        // they just got was instant from cache or freshly resolved.
+        $rows   = $this->distances->between($terminal['name'], $pickup);
+        $source = count($rows) > 0 ? 'cache' : 'maps';
+
+        $miles = $this->distances->lookupOrFetch($terminal['name'], $pickup);
+        if ($miles === null) {
+            return $this->json([
+                'ok'    => false,
+                'error' => sprintf(
+                    'Could not resolve miles from %s to %s. Enter the miles manually.',
+                    $terminal['name'],
+                    $pickup
+                ),
+            ]);
+        }
+
+        return $this->json([
+            'ok'       => true,
+            'miles'    => $miles,
+            'source'   => $source,
+            'terminal' => $terminal['name'],
         ]);
     }
 

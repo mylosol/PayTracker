@@ -4,6 +4,7 @@
  * @var string                                                  $base
  * @var list<array<string,mixed>>                               $cities
  * @var list<string>                                            $terminals
+ * @var list<array{id:int,name:string,city_id:?int}>            $beTerminals
  * @var array<string,mixed>                                     $driver
  * @var string|null                                             $flash
  * @var array{
@@ -188,14 +189,35 @@ if ($dateValue === '') {
         </p>
 
         <p id="begin-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
-            <label for="begin_empty_miles"><strong>Begin empty miles</strong></label><br>
+            <label for="begin_empty_terminal"><strong>Begin empty from</strong></label><br>
+            <select id="begin_empty_terminal"
+                    data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
+                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:18rem;max-width:100%;">
+                <?php if ($isEdit): ?>
+                    <option value="keep" selected>— Keep current miles —</option>
+                <?php else: ?>
+                    <option value="" selected>— I started at the terminal (0 miles) —</option>
+                <?php endif; ?>
+                <?php foreach ($beTerminals as $t): ?>
+                    <option value="<?= (int) $t['id'] ?>"><?= e($t['name']) ?></option>
+                <?php endforeach; ?>
+                <option value="other">Other / I'll type my own miles…</option>
+            </select>
+            <small class="muted" style="display:block;margin-top:.25rem;">
+                Pick the terminal you started empty from. We'll fill in
+                the miles to your pickup automatically. Hidden on
+                Round-trip &mdash; round-trips don't begin empty.
+            </small>
+            <p id="begin-empty-status"
+               style="margin:.4rem 0 .2rem 0;font-size:13px;display:none;"></p>
+            <label for="begin_empty_miles"
+                   style="display:block;margin-top:.4rem;font-weight:600;">Begin empty miles</label>
             <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
                    value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
             <small class="muted">
-                Miles driven empty BEFORE pick-up (e.g. home &rarr; terminal).
-                Paid at the empty-miles rate. 0 if you started at the terminal.
-                Hidden on Round-trip &mdash; round-trips don't begin empty.
+                Auto-filled by the terminal pick above. Pick
+                <em>Other</em> to type the miles yourself.
             </small>
         </p>
 
@@ -255,6 +277,139 @@ if ($dateValue === '') {
             };
             radios.forEach(r => r.addEventListener('change', refresh));
             refresh();
+        })();
+    </script>
+
+    <script>
+        // -------------------------------------------------------------------
+        // Begin Empty terminal picker.
+        //
+        // Replaces the legacy "drivers eyeball the miles" UX. When the
+        // driver picks a terminal from the dropdown, we POST to
+        // /loads/preview-be-miles and the server resolves miles via the
+        // city_distances cache (with a Google Maps fill-fallback). The
+        // resulting integer flows into #begin_empty_miles and the input
+        // is disabled so it can't be accidentally edited.
+        //
+        // Selecting "Other" re-enables the input for manual entry (the
+        // legacy app couldn't handle non-terminal starts; ours can).
+        // Selecting the empty placeholder zeros the miles — "started at
+        // the terminal" is the most common case and one click should
+        // express it.
+        //
+        // Failure modes are friendly: if the lookup misses both the
+        // cache AND Google Maps (no API key on dev, transient outage),
+        // we show a short inline message and unlock the input so the
+        // driver can fill miles in by hand. The form is never blocked.
+        // -------------------------------------------------------------------
+        (function () {
+            const picker = document.getElementById('begin_empty_terminal');
+            const miles  = document.getElementById('begin_empty_miles');
+            const status = document.getElementById('begin-empty-status');
+            const pickup = document.getElementById('pickup_city');
+            const csrf   = document.querySelector('input[name="_csrf"]');
+            const form   = document.querySelector('form[data-base-path]');
+            if (!picker || !miles || !status || !pickup || !csrf || !form) return;
+            const basePath = form.dataset.basePath || '';
+
+            const setStatus = (msg, level) => {
+                if (!msg) {
+                    status.style.display = 'none';
+                    status.textContent = '';
+                    return;
+                }
+                status.textContent = msg;
+                status.style.display = '';
+                if (level === 'error') {
+                    status.style.color = '#991b1b';
+                } else if (level === 'info') {
+                    status.style.color = '#5a6470';
+                } else {
+                    status.style.color = '#166534';
+                }
+            };
+            const lockMiles = (locked) => {
+                miles.readOnly = locked;
+                miles.style.background = locked ? '#f1f5f9' : '';
+                miles.style.color      = locked ? '#475569' : '';
+            };
+
+            picker.addEventListener('change', async () => {
+                const val = picker.value;
+
+                if (val === 'keep') {
+                    // Edit mode placeholder. Treat as a no-op so an
+                    // existing saved miles value stays intact when
+                    // the picker is flipped back to the default.
+                    lockMiles(false);
+                    setStatus(null);
+                    return;
+                }
+                if (val === '') {
+                    // "I started at the terminal" — clean zero.
+                    miles.value = '0';
+                    lockMiles(true);
+                    setStatus(null);
+                    return;
+                }
+                if (val === 'other') {
+                    // Hand the input back to the driver. Keep the
+                    // existing value as the seed so flipping back and
+                    // forth doesn't drop a hand-typed number.
+                    lockMiles(false);
+                    setStatus('Type the miles yourself.', 'info');
+                    miles.focus();
+                    return;
+                }
+
+                if (!pickup.value) {
+                    setStatus('Pick your delivery pick-up terminal first, then choose a Begin Empty terminal.', 'error');
+                    return;
+                }
+                setStatus('Looking up miles…', 'info');
+                const body = new URLSearchParams();
+                body.set('_csrf', csrf.value);
+                body.set('begin_empty_terminal_id', val);
+                body.set('pickup_city', pickup.value);
+                try {
+                    const res = await fetch(basePath + '/loads/preview-be-miles', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        credentials: 'same-origin',
+                        body,
+                    });
+                    const data = await res.json();
+                    if (!data || !data.ok) {
+                        setStatus((data && data.error) || 'Lookup failed. Type the miles yourself.', 'error');
+                        lockMiles(false);
+                        return;
+                    }
+                    miles.value = String(data.miles);
+                    lockMiles(true);
+                    const tag = data.source === 'maps'
+                        ? '(via Google Maps — saved to the distance cache)'
+                        : '(from the distance cache)';
+                    setStatus(`${data.miles} mi from ${data.terminal} → ${pickup.value} ${tag}.`, 'ok');
+                } catch (err) {
+                    setStatus('Lookup failed — network issue. Type the miles yourself.', 'error');
+                    lockMiles(false);
+                }
+            });
+
+            // Re-resolve when the pickup-city changes IF a terminal is
+            // currently selected — otherwise the displayed miles drift
+            // out of sync with the route shown above.
+            pickup.addEventListener('change', () => {
+                if (picker.value !== '' && picker.value !== 'other') {
+                    picker.dispatchEvent(new Event('change'));
+                }
+            });
+
+            // Initial state: input is unlocked on first paint (the
+            // picker defaults to "I started at the terminal" only AFTER
+            // the user opens it). Don't fire a lookup automatically —
+            // the legacy default is 0 miles.
+            lockMiles(false);
         })();
     </script>
 

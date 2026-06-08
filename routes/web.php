@@ -83,6 +83,7 @@ return static function (Router $router): void {
     $router->get('/loads/new',             [LoadEntryController::class, 'create']);
     $router->post('/loads',                [LoadEntryController::class, 'store']);
     $router->post('/loads/preview',        [LoadEntryController::class, 'preview']);
+    $router->post('/loads/preview-be-miles', [LoadEntryController::class, 'previewBeMiles']);
     $router->get('/loads/{frtl}/edit',     [LoadEntryController::class, 'edit']);
     $router->post('/loads/{frtl}',         [LoadEntryController::class, 'update']);
     $router->post('/loads/{frtl}/delete',  [LoadEntryController::class, 'destroy']);
