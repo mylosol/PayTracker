@@ -75,12 +75,25 @@ $fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $v
                 if ($expired && ! $used) { $pills[] = '<span class="pill err">expired</span>'; }
                 if ($active)   { $pills[] = '<span class="pill ok">active</span>'; }
                 ?>
+                <?php $inviteUrl = $baseUrl . $basePath . '/register?invite=' . $code; ?>
                 <tr style="border-bottom:1px solid #e4e8ee;">
                     <td style="padding:.5rem .25rem;">
                         <code><?= e($code) ?></code>
+                        <button type="button" class="copy-btn"
+                                data-copy="<?= e($code) ?>"
+                                title="Copy code to clipboard"
+                                style="margin-left:.35rem;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.1rem .45rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
+                            Copy
+                        </button>
                         <?php if ($active): ?>
                             <br><small class="muted" style="word-break:break-all;">
-                                <?= e($baseUrl . $basePath) ?>/register?invite=<?= e($code) ?>
+                                <?= e($inviteUrl) ?>
+                                <button type="button" class="copy-btn"
+                                        data-copy="<?= e($inviteUrl) ?>"
+                                        title="Copy invite URL to clipboard"
+                                        style="margin-left:.25rem;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.1rem .45rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
+                                    Copy URL
+                                </button>
                             </small>
                         <?php endif; ?>
                     </td>
@@ -134,3 +147,65 @@ $fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $v
         </tbody>
     </table>
 </div>
+
+<script>
+/*
+ * Copy-to-clipboard for the per-row "Copy" / "Copy URL" buttons.
+ *
+ * One delegated handler attached to <body> so newly-rendered rows
+ * (after re-issuing an invite, etc.) keep working without a re-bind.
+ * The visual feedback (button text flips to "Copied!" for ~1.2s)
+ * is the entire success contract -- no flash card, no aria-live
+ * because the user just clicked and is looking right at the
+ * button.
+ *
+ * navigator.clipboard.writeText is the modern path; we fall back
+ * to a hidden <textarea> + document.execCommand('copy') for the
+ * couple of legacy browsers (e.g. Safari < 13.1) where the async
+ * Clipboard API isn't available. The fallback runs in the same
+ * user-gesture frame so the browser doesn't refuse the copy.
+ */
+(function () {
+    var FALLBACK = function (text) {
+        try {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '-1000px';
+            document.body.appendChild(ta);
+            ta.select();
+            var ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return ok;
+        } catch (e) { return false; }
+    };
+    document.body.addEventListener('click', function (ev) {
+        var btn = ev.target;
+        if (!(btn instanceof HTMLElement) || !btn.classList.contains('copy-btn')) {
+            return;
+        }
+        var text = btn.getAttribute('data-copy') || '';
+        if (text === '') { return; }
+        ev.preventDefault();
+        var done = function (ok) {
+            var label = btn.textContent;
+            btn.textContent = ok ? 'Copied!' : 'Copy failed';
+            btn.disabled = true;
+            setTimeout(function () {
+                btn.textContent = label;
+                btn.disabled = false;
+            }, 1200);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(function () {
+                done(true);
+            }, function () {
+                done(FALLBACK(text));
+            });
+        } else {
+            done(FALLBACK(text));
+        }
+    });
+})();
+</script>
