@@ -109,7 +109,7 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
             </small>
         </p>
 
-        <p id="begin-empty-wrapper" style="<?= $beVisible ? '' : 'display:none;' ?>">
+        <div id="begin-empty-wrapper" style="margin:0 0 1rem 0;<?= $beVisible ? '' : 'display:none;' ?>">
             <label for="begin_empty_terminal"><strong>Begin empty from</strong></label><br>
             <select id="begin_empty_terminal"
                     data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
@@ -139,7 +139,7 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                 Auto-filled by the terminal pick above. Pick
                 <em>Other</em> to type the miles yourself.
             </small>
-        </p>
+        </div>
 
         <p>
             <label for="pickup_city"><strong>Pick-up terminal</strong></label><br>
