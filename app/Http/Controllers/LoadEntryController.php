@@ -578,7 +578,11 @@ final class LoadEntryController extends Controller
 
         $assembled = $this->assembleLoadContext($request, $account);
         if (! $assembled['ok']) {
-            return $this->json(['ok' => false, 'error' => $assembled['error']]);
+            return $this->json([
+                'ok'        => false,
+                'next_csrf' => $this->csrf->token(),
+                'error'     => $assembled['error'],
+            ]);
         }
         $ctx = $assembled['data'];
 
@@ -588,7 +592,8 @@ final class LoadEntryController extends Controller
         // back to a future save (the convert-to-saved flow re-submits
         // through /loads which rebuilds the blob from current profile).
         return $this->json([
-            'ok'       => true,
+            'ok'        => true,
+            'next_csrf' => $this->csrf->token(),
             'computed' => [
                 'date'                 => substr((string) $ctx['date'], 0, 10),
                 'load_type'            => $ctx['load_type'],
@@ -655,25 +660,33 @@ final class LoadEntryController extends Controller
         $idRaw  = trim((string) $request->input('begin_empty_terminal_id', ''));
         $pickup = trim((string) $request->input('pickup_city', ''));
 
+        // Pre-build the "next" token. We use the same value on every
+        // exit path below: verify() already rotated the live token,
+        // so even error responses need to hand a fresh one back so
+        // the client can keep firing follow-up requests (the picker
+        // re-fires on every terminal AND pickup change).
+        $nextCsrf = $this->csrf->token();
+
         if ($idRaw === '' || ! ctype_digit($idRaw) || (int) $idRaw <= 0) {
-            return $this->json(['ok' => false, 'error' => 'Pick a Begin Empty terminal first.']);
+            return $this->json(['ok' => false, 'next_csrf' => $nextCsrf, 'error' => 'Pick a Begin Empty terminal first.']);
         }
         if ($pickup === '') {
-            return $this->json(['ok' => false, 'error' => 'Pick a pick-up terminal first so we know where you\'re going.']);
+            return $this->json(['ok' => false, 'next_csrf' => $nextCsrf, 'error' => 'Pick a pick-up terminal first so we know where you\'re going.']);
         }
 
         $terminal = $this->terminals->findById((int) $idRaw);
         if ($terminal === null || $terminal['active'] !== 1) {
-            return $this->json(['ok' => false, 'error' => 'That Begin Empty terminal is no longer active. Pick another, or enter miles manually.']);
+            return $this->json(['ok' => false, 'next_csrf' => $nextCsrf, 'error' => 'That Begin Empty terminal is no longer active. Pick another, or enter miles manually.']);
         }
         if ($terminal['name'] === $pickup) {
             // Same terminal start + pickup -> 0 miles. Skip the lookup
             // entirely so the cache doesn't get a 0-mile self-pair.
             return $this->json([
-                'ok'       => true,
-                'miles'    => 0,
-                'source'   => 'cache',
-                'terminal' => $terminal['name'],
+                'ok'        => true,
+                'next_csrf' => $this->csrf->token(),
+                'miles'     => 0,
+                'source'    => 'cache',
+                'terminal'  => $terminal['name'],
             ]);
         }
 
@@ -689,8 +702,9 @@ final class LoadEntryController extends Controller
         $miles = $this->distances->lookupOrFetch($terminal['name'], $pickup);
         if ($miles === null) {
             return $this->json([
-                'ok'    => false,
-                'error' => sprintf(
+                'ok'        => false,
+                'next_csrf' => $nextCsrf,
+                'error'     => sprintf(
                     'Could not resolve miles from %s to %s. Enter the miles manually.',
                     $terminal['name'],
                     $pickup
@@ -699,10 +713,11 @@ final class LoadEntryController extends Controller
         }
 
         return $this->json([
-            'ok'       => true,
-            'miles'    => $miles,
-            'source'   => $source,
-            'terminal' => $terminal['name'],
+            'ok'        => true,
+            'next_csrf' => $nextCsrf,
+            'miles'     => $miles,
+            'source'    => $source,
+            'terminal'  => $terminal['name'],
         ]);
     }
 

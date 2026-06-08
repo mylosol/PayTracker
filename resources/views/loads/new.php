@@ -410,6 +410,15 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                         body,
                     });
                     const data = await res.json();
+                    // The Csrf class rotates the token on every
+                    // successful verify(), so a second picker change
+                    // would otherwise POST with a stale value. Every
+                    // response (ok or not) carries the next live token
+                    // — swap it into the form's hidden field so the
+                    // next call goes through.
+                    if (data && typeof data.next_csrf === 'string' && data.next_csrf !== '') {
+                        csrf.value = data.next_csrf;
+                    }
                     if (!data || !data.ok) {
                         setStatus((data && data.error) || 'Lookup failed. Type the miles yourself.', 'error');
                         lockMiles(false);
@@ -653,6 +662,14 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                     if (submitBtn) submitBtn.disabled = false;
                     alert('Could not reach the server to preview the load. Check your connection and try again.');
                     return;
+                }
+                // Token-rotate: keep the form's hidden _csrf in sync
+                // with the server's freshly-issued one so a second
+                // submission (or follow-up BE picker change) doesn't
+                // hit "session expired".
+                if (json && typeof json.next_csrf === 'string' && json.next_csrf !== '') {
+                    const csrfEl = form.querySelector('input[name="_csrf"]');
+                    if (csrfEl) csrfEl.value = json.next_csrf;
                 }
                 if (!json || json.ok !== true) {
                     if (submitBtn) submitBtn.disabled = false;
