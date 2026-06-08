@@ -2477,22 +2477,41 @@ from §27; picking one POSTs to `/loads/preview-be-miles` and the
 server fills `Begin empty miles` automatically (cache-first,
 Google-Maps fill-fallback).
 
-### 28a. Picker only renders inside the one-way Begin Empty wrapper
+### 28a. Begin Empty checkbox + Round-trip combine to gate the section
 
-1. Open `/preview/loads/new`. Default is one-way (`load_type=0`).
+The Begin Empty section sits between Load date and Pick-up
+terminal. It's hidden by default — driver has to tick the
+**Begin Empty** checkbox (next to Split load + Weekend) to reveal
+the dropdown + miles input. Round-trip overrides: ticking it
+hides the section AND auto-unticks the checkbox, so flipping
+back to one-way doesn't surprise the driver with the section
+reappearing.
 
-**Expected:** the `Begin empty from` `<select>` is visible,
-defaulted to *"— I started at the terminal (0 miles) —"*, listing
-every active row from `/admin/terminals` followed by a final
-*"Other / I'll type my own miles…"* entry.
+1. Open `/preview/loads/new`. Default is one-way.
 
-2. Pick `Round-trip`.
+**Expected:**
+- `Begin Empty` checkbox is unticked.
+- The `Begin empty from` dropdown + miles input are NOT visible.
 
-**Expected:** the whole Begin Empty section hides, miles reset to 0.
+2. Tick the `Begin Empty` checkbox.
 
-3. Pick back to `Loaded one-way`.
+**Expected:** the section reveals above Pick-up terminal. The
+`Begin empty from` `<select>` is defaulted to *"— I started at
+the terminal (0 miles) —"* (or *"Keep current miles"* on edit),
+lists every active row from `/admin/terminals`, ending with
+*"Other / I'll type my own miles…"*.
 
-**Expected:** the section reappears, picker visible again.
+3. Pick `Round-trip`.
+
+**Expected:**
+- The Begin Empty section hides.
+- Miles reset to 0.
+- The Begin Empty checkbox auto-unticks.
+
+4. Pick back to `Loaded one-way`.
+
+**Expected:** the section stays hidden until you re-tick the
+checkbox.
 
 ### 28b. Picking a terminal fills miles + locks the input
 

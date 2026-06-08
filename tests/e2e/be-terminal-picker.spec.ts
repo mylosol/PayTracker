@@ -19,21 +19,32 @@ import { hasCredentials, signIn } from './helpers/auth';
 test.describe('loads/new — Begin Empty terminal picker', () => {
     test.skip(!hasCredentials(), 'QA_TEST_USER / QA_TEST_PASSWORD not configured');
 
-    test('28a — Round-trip hides the section, one-way reveals it', async ({ page }) => {
+    test('28a — Begin Empty checkbox + Round-trip combine to gate the section', async ({ page }) => {
         await signIn(page);
         await page.goto('loads/new');
 
-        // Default = one-way, picker visible.
         const wrapper = page.locator('#begin-empty-wrapper');
-        await expect(wrapper).toBeVisible();
-        await expect(page.locator('#begin_empty_terminal')).toBeVisible();
+        const beBox   = page.locator('#begin_empty_checkbox');
 
-        // Switch to round-trip — section hides.
-        await page.locator('input[name="load_type"][value="1"]').check();
+        // Default state: checkbox off → wrapper hidden even on one-way.
+        await expect(beBox).not.toBeChecked();
         await expect(wrapper).toBeHidden();
 
-        // Back to one-way — section reappears.
+        // Tick Begin Empty → wrapper reveals.
+        await beBox.check();
+        await expect(wrapper).toBeVisible();
+
+        // Switch to round-trip → wrapper hides AND the checkbox
+        // auto-unticks so flipping back to one-way doesn't surprise
+        // the driver with the section reappearing.
+        await page.locator('input[name="load_type"][value="1"]').check();
+        await expect(wrapper).toBeHidden();
+        await expect(beBox).not.toBeChecked();
+
+        // Back to one-way: still hidden until the box is ticked again.
         await page.locator('input[name="load_type"][value="0"]').check();
+        await expect(wrapper).toBeHidden();
+        await beBox.check();
         await expect(wrapper).toBeVisible();
     });
 
@@ -46,6 +57,8 @@ test.describe('loads/new — Begin Empty terminal picker', () => {
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Lynn Haven, FL');
         await page.locator('input[name="load_type"][value="0"]').check();
+        // Reveal the Begin Empty section.
+        await page.locator('#begin_empty_checkbox').check();
 
         // Pick a terminal that's guaranteed to exist post-backfill.
         const picker = page.locator('#begin_empty_terminal');
@@ -71,6 +84,7 @@ test.describe('loads/new — Begin Empty terminal picker', () => {
 
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Lynn Haven, FL');
+        await page.locator('#begin_empty_checkbox').check();
 
         const picker = page.locator('#begin_empty_terminal');
         await picker.selectOption({ label: 'Niceville, FL' });
@@ -92,6 +106,7 @@ test.describe('loads/new — Begin Empty terminal picker', () => {
 
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Lynn Haven, FL');
+        await page.locator('#begin_empty_checkbox').check();
 
         const picker = page.locator('#begin_empty_terminal');
         const miles  = page.locator('#begin_empty_miles');

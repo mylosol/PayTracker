@@ -28,6 +28,12 @@ $dateValue = (string) ($old['date'] ?? '');
 if ($dateValue === '') {
     $dateValue = $today;
 }
+// "Begin Empty" is a UI-only checkbox — there's no dedicated column
+// on driver_loads, the truth is `begin_empty_miles > 0`. We derive
+// the initial checked state from the stored miles so editing a load
+// that began empty re-reveals the wrapper with the value still in it.
+$beChecked = (int) ($old['begin_empty_miles'] ?? 0) > 0;
+$beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
 ?>
 <div class="card">
     <h1><?= $isEdit ? 'Edit load #' . (int) $editFrtl : 'Add a load' ?></h1>
@@ -103,6 +109,38 @@ if ($dateValue === '') {
             </small>
         </p>
 
+        <p id="begin-empty-wrapper" style="<?= $beVisible ? '' : 'display:none;' ?>">
+            <label for="begin_empty_terminal"><strong>Begin empty from</strong></label><br>
+            <select id="begin_empty_terminal"
+                    data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
+                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:18rem;max-width:100%;">
+                <?php if ($isEdit): ?>
+                    <option value="keep" selected>— Keep current miles —</option>
+                <?php else: ?>
+                    <option value="" selected>— I started at the terminal (0 miles) —</option>
+                <?php endif; ?>
+                <?php foreach ($beTerminals as $t): ?>
+                    <option value="<?= (int) $t['id'] ?>"><?= e($t['name']) ?></option>
+                <?php endforeach; ?>
+                <option value="other">Other / I'll type my own miles…</option>
+            </select>
+            <small class="muted" style="display:block;margin-top:.25rem;">
+                Pick the terminal you started empty from. We'll fill in
+                the miles to your pickup automatically.
+            </small>
+            <p id="begin-empty-status"
+               style="margin:.4rem 0 .2rem 0;font-size:13px;display:none;"></p>
+            <label for="begin_empty_miles"
+                   style="display:block;margin-top:.4rem;font-weight:600;">Begin empty miles</label>
+            <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
+                   value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
+                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
+            <small class="muted">
+                Auto-filled by the terminal pick above. Pick
+                <em>Other</em> to type the miles yourself.
+            </small>
+        </p>
+
         <p>
             <label for="pickup_city"><strong>Pick-up terminal</strong></label><br>
             <select id="pickup_city" name="pickup_city" required
@@ -163,6 +201,11 @@ if ($dateValue === '') {
                 <input type="checkbox" name="is_weekend" value="1" <?= $old['weekend'] === '1' ? 'checked' : '' ?>>
                 Weekend
             </label>
+            &nbsp;&nbsp;
+            <label id="begin-empty-toggle-label">
+                <input type="checkbox" id="begin_empty_checkbox" <?= $beChecked ? 'checked' : '' ?>>
+                Begin Empty
+            </label>
         </p>
 
         <p>
@@ -186,39 +229,6 @@ if ($dateValue === '') {
             <input id="extra_pay" name="extra_pay" type="number" min="0" max="999.99" step="0.01"
                    value="<?= e((string) $old['extra']) ?>"
                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
-        </p>
-
-        <p id="begin-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
-            <label for="begin_empty_terminal"><strong>Begin empty from</strong></label><br>
-            <select id="begin_empty_terminal"
-                    data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
-                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:18rem;max-width:100%;">
-                <?php if ($isEdit): ?>
-                    <option value="keep" selected>— Keep current miles —</option>
-                <?php else: ?>
-                    <option value="" selected>— I started at the terminal (0 miles) —</option>
-                <?php endif; ?>
-                <?php foreach ($beTerminals as $t): ?>
-                    <option value="<?= (int) $t['id'] ?>"><?= e($t['name']) ?></option>
-                <?php endforeach; ?>
-                <option value="other">Other / I'll type my own miles…</option>
-            </select>
-            <small class="muted" style="display:block;margin-top:.25rem;">
-                Pick the terminal you started empty from. We'll fill in
-                the miles to your pickup automatically. Hidden on
-                Round-trip &mdash; round-trips don't begin empty.
-            </small>
-            <p id="begin-empty-status"
-               style="margin:.4rem 0 .2rem 0;font-size:13px;display:none;"></p>
-            <label for="begin_empty_miles"
-                   style="display:block;margin-top:.4rem;font-weight:600;">Begin empty miles</label>
-            <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
-                   value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
-            <small class="muted">
-                Auto-filled by the terminal pick above. Pick
-                <em>Other</em> to type the miles yourself.
-            </small>
         </p>
 
         <p>
@@ -249,33 +259,54 @@ if ($dateValue === '') {
     </form>
 
     <script>
-        // Hide End Empty AND Begin Empty when the user picks Round-trip
-        // — round-trip doesn't have separate empty legs in the legacy
-        // formula (the return leg is implicit in the round-trip rate
-        // table) and the controller silently drops both values for
-        // round-trip. Showing them just confuses the driver. We also
-        // clear the values on hide so a stale one-way value doesn't
-        // sneak back if they toggle a third time and forget.
+        // Visibility rules for the two empty-leg sections.
+        //
+        // End Empty:    shown only on one-way (round-trip has no
+        //               distinct end-empty leg). Cleared when hidden.
+        // Begin Empty:  shown only when (a) one-way AND (b) the
+        //               "Begin Empty" checkbox is ticked. Cleared
+        //               (miles → 0) when either condition flips off,
+        //               so a stale value can't sneak back if the
+        //               driver hides → re-shows the section.
+        //
+        // The Begin Empty checkbox is UI-only; nothing on the server
+        // cares whether it was checked, only what miles got submitted.
+        // We could leave begin_empty_miles intact when hiding, but the
+        // legacy behavior was "round-trip implies 0" and we want
+        // ticking off the checkbox to feel like the same intent
+        // ("I didn't begin empty on this load").
         (function () {
-            const pairs = [
-                { wrapper: 'end-empty-wrapper',   input: 'end_empty_city',    blank: '' },
-                { wrapper: 'begin-empty-wrapper', input: 'begin_empty_miles', blank: '0' },
-            ].map(p => ({
-                wrapper: document.getElementById(p.wrapper),
-                input:   document.getElementById(p.input),
-                blank:   p.blank,
-            })).filter(p => p.wrapper && p.input);
-            if (pairs.length === 0) return;
-            const radios = document.querySelectorAll('input[name="load_type"]');
+            const endWrap   = document.getElementById('end-empty-wrapper');
+            const endInput  = document.getElementById('end_empty_city');
+            const beWrap    = document.getElementById('begin-empty-wrapper');
+            const beMiles   = document.getElementById('begin_empty_miles');
+            const beToggle  = document.getElementById('begin_empty_checkbox');
+            const radios    = document.querySelectorAll('input[name="load_type"]');
+
             const refresh = () => {
-                const sel = document.querySelector('input[name="load_type"]:checked');
+                const sel      = document.querySelector('input[name="load_type"]:checked');
                 const isOneWay = sel && sel.value === '0';
-                pairs.forEach(p => {
-                    p.wrapper.style.display = isOneWay ? '' : 'none';
-                    if (!isOneWay) p.input.value = p.blank;
-                });
+
+                if (endWrap && endInput) {
+                    endWrap.style.display = isOneWay ? '' : 'none';
+                    if (!isOneWay) endInput.value = '';
+                }
+                if (beWrap) {
+                    const beOn = isOneWay && beToggle && beToggle.checked;
+                    beWrap.style.display = beOn ? '' : 'none';
+                    if (!beOn && beMiles) beMiles.value = '0';
+                    // When round-trip is picked, also force-untick the
+                    // checkbox — flipping back to one-way should NOT
+                    // surprise the driver with the section reappearing
+                    // unless they deliberately tick it again.
+                    if (!isOneWay && beToggle && beToggle.checked) {
+                        beToggle.checked = false;
+                    }
+                }
             };
+
             radios.forEach(r => r.addEventListener('change', refresh));
+            if (beToggle) beToggle.addEventListener('change', refresh);
             refresh();
         })();
     </script>
@@ -555,6 +586,15 @@ if ($dateValue === '') {
                     setVal('break_minutes', String(c.break_minutes ?? 0));
                     setVal('extra_pay', String(c.extra_pay ?? 0));
                     setVal('begin_empty_miles', String(c.begin_empty_miles ?? 0));
+                    // Re-tick the Begin Empty checkbox when the stored
+                    // miles are non-zero so the wrapper re-reveals with
+                    // the value still in it. Fire change so the unified
+                    // visibility refresher updates the wrapper too.
+                    const beCb = document.getElementById('begin_empty_checkbox');
+                    if (beCb) {
+                        beCb.checked = Number(c.begin_empty_miles ?? 0) > 0;
+                        beCb.dispatchEvent(new Event('change'));
+                    }
                     setVal('out_of_route_miles', String(c.out_of_route_miles ?? 0));
                     setVal('notes', c.notes || '');
                     const radio = document.querySelector(
