@@ -1,3 +1,6 @@
 {
+  "_comment": "Manually-bumped MAJOR.MINOR.PATCH. The build id is appended automatically from BUILD_COMMIT (set by the deploy workflow) — see app/Support/Version.php.",
+  "major": 2,
+  "minor": 2,
   "patch": 5
 }

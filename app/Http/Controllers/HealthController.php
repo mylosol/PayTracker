@@ -7,6 +7,7 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Database\Connection;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Support\Version;
 use Throwable;
 
 /**
@@ -49,7 +50,7 @@ final class HealthController extends Controller
      * a structured field — the endpoint itself must always answer, even when
      * the database is unreachable.
      *
-     * @return array{php: string, env: string, time: string, database: array{ok: bool, error?: string}}
+     * @return array{php: string, env: string, time: string, version: string, version_parts: array{major:int,minor:int,patch:int,build:string}, database: array{ok: bool, error?: string}}
      */
     private function collect(): array
     {
@@ -62,10 +63,12 @@ final class HealthController extends Controller
         }
 
         return [
-            'php'      => PHP_VERSION,
-            'env'      => (string) config('app.env', 'production'),
-            'time'     => gmdate('c'),
-            'database' => $database,
+            'php'           => PHP_VERSION,
+            'env'           => (string) config('app.env', 'production'),
+            'time'          => gmdate('c'),
+            'version'       => Version::string(),
+            'version_parts' => Version::parts(),
+            'database'      => $database,
         ];
     }
 }

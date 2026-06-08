@@ -8,6 +8,7 @@ use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
 use PayTracker\Security\Csrf;
+use PayTracker\Support\Version;
 
 /**
  * HomeController — the landing surface.
@@ -35,32 +36,10 @@ final class HomeController extends Controller
         return $this->view('home', [
             'appName'   => (string) config('app.name', 'PayTracker'),
             'env'       => (string) config('app.env', 'production'),
-            'version'   => $this->version(),
+            'version'   => Version::string(),
             'account'   => $account,
             'csrfToken' => $this->csrf->token(),
             'base'      => $request->basePath(),
         ]);
-    }
-
-    /**
-     * Read the marketing/version marker shipped at the repo root. Falls back
-     * to `unknown` rather than throwing — the home page must render even if
-     * the file is missing on a partial deploy.
-     */
-    private function version(): string
-    {
-        $path = base_path('version.json');
-        if (! is_file($path)) {
-            return 'unknown';
-        }
-        $raw = file_get_contents($path);
-        if ($raw === false) {
-            return 'unknown';
-        }
-        $decoded = json_decode($raw, true);
-        if (! is_array($decoded)) {
-            return 'unknown';
-        }
-        return isset($decoded['patch']) ? 'patch ' . (string) $decoded['patch'] : 'unknown';
     }
 }

@@ -85,7 +85,7 @@ $__currentPath = $_SERVER['REQUEST_URI'] ?? ($__appPath . '/');
 <main>
     <?= $slot ?>
     <footer>
-        <?= e((string) (config('app.name'))) ?> &middot;
+        PayTracker <code><?= e(\PayTracker\Support\Version::string()) ?></code> &middot;
         env <code><?= e((string) (config('app.env'))) ?></code> &middot;
         php <code><?= e(PHP_VERSION) ?></code>
     </footer>
