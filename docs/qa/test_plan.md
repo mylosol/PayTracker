@@ -1962,6 +1962,78 @@ succeed; the other gets the "invite no longer valid" flash.
 *"Have an invite code? Create an account →"* with a working link
 to `/preview/register`.
 
+### 21h. Active-duplicate email is signposted to /login
+
+When the typed email already belongs to an account that has signed
+in to 2.0 at least once, registration refuses with a flash AND a
+follow-up sign-in link — so the user isn't stranded re-typing the
+same email.
+
+1. Mint an invite (any email).
+2. Open `/preview/register?invite=…` while signed out.
+3. Fill: invite code, a fresh username, **the QA_TEST_USER's
+   email** (i.e. an active 2.0 account), a valid password, confirm.
+4. Submit.
+
+**Expected:**
+
+- Redirect back to `/preview/register?invite=…` (form preserved).
+- Red flash card reads
+  *"An account already exists for that email."*
+- Beneath the flash text, a clickable **"Sign in →"** link that
+  goes to `/preview/login`.
+- The invite is NOT consumed — re-checking `/preview/admin/invites`
+  shows the row still **live**.
+- No audit row of type `LEGACY_RESET_SENT` was written
+  (this branch only fires for never-signed-in legacy accounts).
+
+### 21i. Legacy email triggers a reset email + audit entry
+
+When the typed email belongs to a row that's never had a 2.0 login
+(`last_login_at IS NULL` — the canonical case for ported PayTracker
+1.x drivers), registration refuses AND auto-sends a password-reset
+email so the driver can claim their existing account.
+
+**Pre-req:** a legacy row exists in `account` with `last_login_at
+IS NULL` and a deliverable `email` you can read. Easiest: pick any
+backfilled row from `2026_06_04_001_backfill_email_from_user.sql`
+that you haven't signed in as.
+
+1. Open `/preview/register?invite=<live code>` while signed out.
+2. Fill: invite, fresh username, the legacy account's email,
+   valid password, confirm.
+3. Submit.
+
+**Expected:**
+
+- Redirect back to `/preview/register?invite=…`.
+- Red flash card reads
+  *"We already have an account on file from the legacy PayTracker.
+  Please check your email for instructions, or ask an admin to
+  reset your password."*
+- **No** follow-up link beneath the flash (the action you should
+  take is in your inbox, not on screen).
+- The invite is NOT consumed.
+- An email from PayTracker lands in the legacy account's inbox
+  with subject *"Welcome back to PayTracker — set your password"*
+  and a button that links to `/preview/password-reset/<token>`.
+- `/preview/admin/audit` shows a fresh row:
+  - Action = `LEGACY_RESET_SENT`
+  - User = the legacy account (id matches the row whose email
+    you typed)
+  - Metadata includes `target_user_id`, `target_user_name`,
+    `expires_at`, and an `email_status` line that ends in
+    `(msg <Resend id>)` on a successful send.
+- Following the link from the email lands at the standard
+  password-reset claim form; setting a new password lets you sign
+  in with the legacy account's `user` handle going forward.
+
+If Resend isn't configured (no `RESEND_API` secret on the preview
+deploy), the flash + audit row still appear; the audit metadata's
+`email_status` reads `Resend not configured` instead. The URL is
+intentionally NOT shown on-screen — surfacing it would let an
+attacker who guessed a legacy email take the account.
+
 ---
 
 ## 22. Production is untouched

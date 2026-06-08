@@ -11,8 +11,10 @@ use PayTracker\Http\Response;
 use PayTracker\Models\Account;
 use PayTracker\Models\AuditLog;
 use PayTracker\Models\InviteCode;
+use PayTracker\Models\PasswordReset;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
+use PayTracker\Services\MailService;
 
 /**
  * RegistrationController — the only path to a brand-new account.
@@ -42,6 +44,8 @@ final class RegistrationController extends Controller
         private readonly PasswordHasher $hasher,
         private readonly AuditLog $audit,
         private readonly Connection $connection,
+        private readonly PasswordReset $resets,
+        private readonly MailService $mail,
     ) {
     }
 
@@ -78,6 +82,7 @@ final class RegistrationController extends Controller
             'csrfToken' => $this->csrf->token(),
             'minLen'    => self::MIN_PASSWORD_LEN,
             'flash'     => $this->popFlash(),
+            'flashLink' => $this->popFlashLink(),
             'old'       => [
                 'invite'   => InviteCode::normalize($inviteRaw),
                 'username' => (string) ($this->session->get('_old_reg_username') ?? ''),
@@ -154,8 +159,33 @@ final class RegistrationController extends Controller
             $this->auditFailure('user_taken', $auditMeta);
             return $this->failBackUrl($request, $inviteRaw, 'That username is already taken.');
         }
-        if ($this->lookupExisting('email', $email)) {
+        $existing = $this->findExistingByEmail($email);
+        if ($existing !== null) {
+            // Two flavours here:
+            //   1. Legacy account — row exists but last_login_at IS NULL,
+            //      meaning the driver was ported in from PayTracker 1.x
+            //      and has never signed in to 2.0. They almost certainly
+            //      don't realise they already have an account. We mint
+            //      a single-use reset link, email it via Resend, and
+            //      tell them to check their inbox.
+            //   2. Active duplicate — the email belongs to someone who
+            //      has already used 2.0. Refuse cleanly and signpost
+            //      /login so they don't get stuck retyping their email.
+            $lastLogin = $existing['last_login_at'] ?? null;
+            $isLegacy  = ! is_string($lastLogin) || $lastLogin === '';
+
+            if ($isLegacy) {
+                $this->handleLegacyEmailMatch($request, (int) $existing['id'], (string) ($existing['user'] ?? ''), $email, $auditMeta);
+                return $this->failBackUrl(
+                    $request,
+                    $inviteRaw,
+                    'We already have an account on file from the legacy PayTracker. Please check your email for instructions, or ask an admin to reset your password.'
+                );
+            }
+
             $this->auditFailure('email_taken', $auditMeta);
+            $this->session->put('_flash_link_url',   $request->basePath() . '/login');
+            $this->session->put('_flash_link_label', 'Sign in →');
             return $this->failBackUrl($request, $inviteRaw, 'An account already exists for that email.');
         }
 
@@ -239,6 +269,132 @@ final class RegistrationController extends Controller
         return $stmt->fetchColumn() !== false;
     }
 
+    /**
+     * Look up the existing-account row for a typed email, including the
+     * id / user / last_login_at columns we need to decide between the
+     * "legacy never logged in" branch and the "active duplicate" branch.
+     * Returns null when no account exists.
+     *
+     * @return array{id:int, user:?string, last_login_at:?string}|null
+     */
+    private function findExistingByEmail(string $email): ?array
+    {
+        $sql = 'SELECT id, user, last_login_at
+                  FROM `account`
+                 WHERE email = ?
+                 LIMIT 1';
+        $stmt = $this->connection->pdo()->prepare($sql);
+        $stmt->execute([$email]);
+        $row = $stmt->fetch();
+        if (! is_array($row)) {
+            return null;
+        }
+        return [
+            'id'            => (int) $row['id'],
+            'user'          => is_string($row['user'] ?? null) ? (string) $row['user'] : null,
+            'last_login_at' => is_string($row['last_login_at'] ?? null) ? (string) $row['last_login_at'] : null,
+        ];
+    }
+
+    /**
+     * Legacy email-collision branch. The signed-up email belongs to a
+     * row that's never had a 2.0 login. Mint a single-use reset token,
+     * send it via Resend if configured, and audit either way. We
+     * deliberately do NOT include the URL in the flash banner -- this
+     * code path is anonymous, and surfacing the URL would let an
+     * attacker who guessed a legacy email take over the account.
+     *
+     * @param array<string,mixed> $auditMeta
+     */
+    private function handleLegacyEmailMatch(
+        Request $request,
+        int $userId,
+        string $userName,
+        string $email,
+        array $auditMeta,
+    ): void {
+        $mint = $this->resets->mint($userId, null);
+        $url  = rtrim($this->absoluteBase($request), '/')
+              . $request->basePath()
+              . '/password-reset/' . $mint['token'];
+
+        $emailStatus = 'Resend not configured';
+        if ($this->mail->isConfigured()) {
+            $messageId = $this->mail->send(
+                $email,
+                'Welcome back to PayTracker — set your password',
+                $this->buildLegacyResetEmailHtml($userName !== '' ? $userName : 'there', $url, $mint['expiresAt'])
+            );
+            $emailStatus = $messageId !== null
+                ? sprintf('emailed to %s (msg %s)', $email, substr($messageId, 0, 12))
+                : sprintf('email to %s FAILED — see Resend logs', $email);
+        }
+
+        $this->audit->record(
+            AuditLog::ACTION_LEGACY_RESET_SENT,
+            userId: $userId,
+            ipAddress: $this->clientIp(),
+            metadata: $auditMeta + [
+                'target_user_id'   => $userId,
+                'target_user_name' => $userName,
+                'expires_at'       => $mint['expiresAt'],
+                'email_status'     => $emailStatus,
+            ],
+        );
+    }
+
+    /**
+     * Email body for the legacy-detect reset link. Distinct from the
+     * admin-initiated reset copy because the user wasn't expecting a
+     * reset -- they were trying to sign up. Lead with that context.
+     */
+    private function buildLegacyResetEmailHtml(string $userName, string $url, string $expiresAt): string
+    {
+        $safeUser = htmlspecialchars($userName, ENT_QUOTES, 'UTF-8');
+        $safeUrl  = htmlspecialchars($url,      ENT_QUOTES, 'UTF-8');
+        $safeExp  = htmlspecialchars($expiresAt, ENT_QUOTES, 'UTF-8');
+        return <<<HTML
+<div style="font:16px/1.5 -apple-system,Segoe UI,sans-serif;color:#101418;max-width:560px;">
+    <p>Hi {$safeUser},</p>
+    <p>Someone (probably you) just tried to sign up at PayTracker using
+       this email address. Good news: we already have an account on
+       file from the legacy PayTracker — no need to register a new one.</p>
+    <p>Click the button below to set a new password and sign in:</p>
+    <p style="margin:1.5rem 0;">
+        <a href="{$safeUrl}"
+           style="display:inline-block;background:#1f6feb;color:#fff;text-decoration:none;padding:.6rem 1.4rem;border-radius:6px;">
+            Set a new password
+        </a>
+    </p>
+    <p style="color:#5a6470;font-size:14px;">
+        The link expires at <strong>{$safeExp} UTC</strong> and can
+        only be used once. If this wasn't you, you can safely ignore
+        the message — your account stays locked until somebody clicks
+        the link before it expires.
+    </p>
+    <p style="color:#5a6470;font-size:14px;">
+        Trouble with the button? Copy and paste this URL into your
+        browser:<br>
+        <span style="word-break:break-all;">{$safeUrl}</span>
+    </p>
+</div>
+HTML;
+    }
+
+    /**
+     * Absolute base URL (scheme + host) for building the reset link.
+     * Duplicated from AdminUsersController rather than promoted to a
+     * shared helper -- the surface is small and the dependency tree
+     * stays simpler this way.
+     */
+    private function absoluteBase(Request $request): string
+    {
+        $https = ! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        $proto = $https ? 'https' : 'http';
+        $host  = is_string($_SERVER['HTTP_HOST'] ?? null) ? (string) $_SERVER['HTTP_HOST'] : 'paytracker.xyz';
+        return $proto . '://' . $host;
+    }
+
     private function auditFailure(string $reason, array $metadata): void
     {
         $this->audit->record(
@@ -294,5 +450,25 @@ final class RegistrationController extends Controller
         $flash = $this->session->get('_flash');
         $this->session->forget('_flash');
         return is_string($flash) ? $flash : null;
+    }
+
+    /**
+     * Companion to popFlash() that drains an optional follow-up
+     * link the controller wants the flash card to surface (e.g. a
+     * "Sign in →" link on an email_taken refusal). Returns null
+     * when no link was stashed.
+     *
+     * @return array{href:string,label:string}|null
+     */
+    private function popFlashLink(): ?array
+    {
+        $href  = $this->session->get('_flash_link_url');
+        $label = $this->session->get('_flash_link_label');
+        $this->session->forget('_flash_link_url');
+        $this->session->forget('_flash_link_label');
+        if (! is_string($href) || $href === '' || ! is_string($label) || $label === '') {
+            return null;
+        }
+        return ['href' => $href, 'label' => $label];
     }
 }

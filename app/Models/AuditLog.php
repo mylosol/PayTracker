@@ -42,6 +42,13 @@ final class AuditLog extends Model
     public const ACTION_USER_DELETED        = 'USER_DELETED';
     public const ACTION_PASSWORD_RESET_SENT = 'PASSWORD_RESET_SENT';
     public const ACTION_PASSWORD_RESET_USED = 'PASSWORD_RESET_USED';
+    /**
+     * Auto-minted reset sent during /register because the typed email
+     * already exists on a legacy account that has never signed in to
+     * PayTracker 2.0. Distinct from PASSWORD_RESET_SENT so reporting
+     * can tell admin-initiated resets apart from self-service ones.
+     */
+    public const ACTION_LEGACY_RESET_SENT   = 'LEGACY_RESET_SENT';
     public const ACTION_USER_ROLE_CHANGED   = 'USER_ROLE_CHANGED';
     public const ACTION_USER_EDITED         = 'USER_EDITED';
     public const ACTION_ANNOUNCEMENT_CREATED    = 'ANNOUNCEMENT_CREATED';

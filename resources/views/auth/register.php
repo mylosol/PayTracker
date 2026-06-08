@@ -4,6 +4,7 @@
  * @var string                                              $csrfToken
  * @var int                                                 $minLen
  * @var ?string                                             $flash
+ * @var ?array{href:string,label:string}                    $flashLink
  * @var array{invite:string,username:string,email:string}   $old
  */
 layout('layouts/app');
@@ -19,6 +20,13 @@ layout('layouts/app');
 <?php if ($flash !== null): ?>
     <div class="card" style="background:#fee2e2;color:#991b1b;word-break:break-word;">
         <?= e($flash) ?>
+        <?php if (isset($flashLink) && $flashLink !== null): ?>
+            <p style="margin:.6rem 0 0;">
+                <a href="<?= e($flashLink['href']) ?>" style="color:#991b1b;font-weight:600;text-decoration:underline;">
+                    <?= e($flashLink['label']) ?>
+                </a>
+            </p>
+        <?php endif; ?>
     </div>
 <?php endif; ?>
 
