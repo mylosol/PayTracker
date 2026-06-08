@@ -2310,6 +2310,60 @@ timestamp. Read-only — no action buttons.
 
 ---
 
+## 26. Terminals — consolidated Begin Empty / pickup list
+
+This section covers the modern `terminals` table that replaces the
+legacy `terminal` + `pcola_terminal` split. The two-app cookie scope
+that justified the split is gone; the modern app reads only the new
+table. Both legacy tables remain on the host for now as a fallback
+during the soak period.
+
+### 26a. Schema present
+
+1. On the preview MariaDB, `SHOW CREATE TABLE terminals\G`.
+
+**Expected:**
+
+- Table exists with columns `id`, `name VARCHAR(120) NOT NULL UNIQUE`,
+  `city_id INT NULL`, `active TINYINT(1) DEFAULT 1`, plus the standard
+  `created_at` / `updated_at` timestamps.
+- Indexes on `(active)` and `(city_id)`.
+
+### 26b. Backfill populated the row set
+
+1. `SELECT COUNT(*) FROM terminals;`
+2. `SELECT COUNT(*) FROM (SELECT DISTINCT terminal FROM terminal UNION SELECT DISTINCT terminal FROM pcola_terminal) u;`
+
+**Expected:** the first count equals (or, if a legacy row's terminal
+string was NULL/empty, is at most) the second count. Every populated
+row has `active = 1` and a `city_id` matching the `city.id` whose
+`city.city` equals the terminal name (case-insensitive). Rows whose
+name has no matching `city` row carry `city_id IS NULL` — that's
+fine, the picker still surfaces them, distance lookup will fall
+back to the manual-miles path.
+
+### 26c. Load form picker still works
+
+1. As QA_TEST_USER, open `/preview/loads/new`.
+
+**Expected:**
+
+- The Pickup-city `<select>` still lists every active terminal name,
+  alphabetised. Visually indistinguishable from before the
+  consolidation.
+- A submission with one of those names still saves the load
+  (i.e. the validation path via `Terminal::isKnown()` still
+  recognises it).
+
+### 26d. Inactive terminals don't reach the picker
+
+(Will be exercised more fully under §27 once the admin CRUD ships.)
+For now: manually flip one row to `active = 0` via SQL, reload
+`/preview/loads/new`, and confirm that terminal disappears from the
+Pickup `<select>`. Flip it back to 1 to clean up.
+
+---
+
 ## Reporting template
 
 Copy this into the issue / chat thread when filing a bug:
