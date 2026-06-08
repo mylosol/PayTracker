@@ -2357,10 +2357,115 @@ back to the manual-miles path.
 
 ### 26d. Inactive terminals don't reach the picker
 
-(Will be exercised more fully under §27 once the admin CRUD ships.)
-For now: manually flip one row to `active = 0` via SQL, reload
+Use §27 (the admin CRUD) for end-to-end coverage. For a quick
+SQL-only check: flip one row to `active = 0` directly, reload
 `/preview/loads/new`, and confirm that terminal disappears from the
 Pickup `<select>`. Flip it back to 1 to clean up.
+
+---
+
+## 27. Begin Empty Locations admin CRUD
+
+Admin+ surface at `/admin/terminals` that drives the consolidated
+`terminals` table the picker reads.
+
+### 27a. Anonymous + non-admin gates
+
+1. Sign out, visit `/preview/admin/terminals`.
+
+**Expected:** redirect to `/preview/login`.
+
+2. Sign in as a base **User**, visit the same URL.
+
+**Expected:** 403 "Access denied — Admin or higher".
+
+### 27b. Index renders + nav from Admin Panel
+
+1. As QA_TEST_USER (Super Admin), open `/preview/admin`.
+
+**Expected:** a "Begin Empty Locations →" button alongside Invite
+codes / Audit log etc. Click it.
+
+**Expected:** the list shows every row from the consolidated table.
+Active rows carry the green `active` pill; inactive rows the amber
+`inactive` pill. Each active row shows a yellow **Deactivate**
+button; each inactive row shows a green **Reactivate** button.
+Inactive rows sort to the bottom.
+
+### 27c. Create a new location
+
+1. Click **+ New location**.
+2. Fill `Name` = `QA TEST hub, FL` (the QA TEST prefix is so the
+   cleanup sweep removes it later — see §27g).
+3. Leave the linked-city dropdown on `— not linked —`.
+4. Submit.
+
+**Expected:**
+
+- Redirect to `/preview/admin/terminals` with the green flash
+  `Added Begin Empty location "QA TEST hub, FL".`
+- Row appears at the top of the active block with an `active` pill.
+- `/preview/admin/audit` shows a `TERMINAL_CREATED` row, metadata
+  carrying `terminal_id` + `name` + `city_id = null`.
+
+### 27d. Edit + collision refusal
+
+1. From the index, **Edit** the row you just created.
+2. Change `Name` to `QA TEST hub renamed, FL`. Pick any
+   linked-city. Save.
+
+**Expected:**
+
+- Flash `Updated Begin Empty location "QA TEST hub renamed, FL".`
+- The row now shows the new name + city linkage on the index.
+- Audit log carries a `TERMINAL_UPDATED` row, metadata showing
+  both `previous_name` and `name`.
+
+3. Edit again, set `Name` to an existing terminal's name (e.g.
+   `Panama City, FL`), save.
+
+**Expected:** redirect back to the edit form with red flash
+`Could not save — the new name may collide with another
+terminal.` No audit row was written.
+
+### 27e. Deactivate hides from the driver picker
+
+1. From the index, click **Deactivate** on the QA TEST row.
+   Confirm.
+
+**Expected:**
+
+- Flash `Deactivated "QA TEST hub renamed, FL" — no longer shows
+  in the driver picker.`
+- Pill flips to amber `inactive`. Row sorts to the bottom.
+- Audit log carries `TERMINAL_DEACTIVATED`.
+
+2. As the same user, open `/preview/loads/new`.
+
+**Expected:** the QA TEST name is NOT in the Pickup `<select>`.
+
+### 27f. Reactivate restores the row
+
+1. Back at `/preview/admin/terminals`, click **Reactivate** on
+   the same row.
+
+**Expected:**
+
+- Flash `Reactivated "QA TEST hub renamed, FL".`
+- Pill flips back to green `active`; row sorts back to its
+  alphabetical position.
+- Audit log carries `TERMINAL_REACTIVATED`.
+- `/preview/loads/new` Pickup `<select>` lists the name again.
+
+### 27g. Cleanup
+
+The QA cleanup sweep doesn't currently know about the
+`terminals` table — these rows are tiny, harmless, and named
+with the `QA TEST` prefix so they're obvious in the list.
+Delete the row manually after the test (Deactivate twice is
+not the same as removal; for a permanent test row, run
+`DELETE FROM terminals WHERE name LIKE 'QA TEST%'` on the
+preview DB after the suite finishes).
 
 ---
 

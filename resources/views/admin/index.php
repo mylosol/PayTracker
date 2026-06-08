@@ -70,6 +70,11 @@ $fmt = static function ($value): string {
            style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
             Invite codes &rarr;
         </a>
+        &nbsp;
+        <a href="<?= e($base) ?>/admin/terminals"
+           style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
+            Begin Empty Locations &rarr;
+        </a>
         <?php if ($isSuperAdmin): ?>
             &nbsp;
             <a href="<?= e($base) ?>/admin/announcements"

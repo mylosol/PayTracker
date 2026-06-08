@@ -18,6 +18,7 @@ use PayTracker\Http\Controllers\AnnouncementController;
 use PayTracker\Http\Controllers\PasswordResetController;
 use PayTracker\Http\Controllers\RegistrationController;
 use PayTracker\Http\Controllers\AdminReconcileController;
+use PayTracker\Http\Controllers\AdminTerminalsController;
 use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Controllers\ProfileController;
 use PayTracker\Http\Controllers\ReconcileController;
@@ -121,6 +122,17 @@ return static function (Router $router): void {
     // Audit + diagnostics — read-only viewers, admin+.
     $router->get('/admin/audit',         [AdminAuditController::class, 'audit']);
     $router->get('/admin/diagnostics',   [AdminAuditController::class, 'diagnostics']);
+
+    // --- Begin Empty Locations (admin+) -------------------------------
+    // CRUD against the consolidated `terminals` table. The driver-facing
+    // load form reads the active subset via Terminal::all().
+    $router->get('/admin/terminals',                       [AdminTerminalsController::class, 'index']);
+    $router->get('/admin/terminals/new',                   [AdminTerminalsController::class, 'create']);
+    $router->post('/admin/terminals',                      [AdminTerminalsController::class, 'store']);
+    $router->get('/admin/terminals/{id}/edit',             [AdminTerminalsController::class, 'editForm']);
+    $router->post('/admin/terminals/{id}/edit',            [AdminTerminalsController::class, 'update']);
+    $router->post('/admin/terminals/{id}/deactivate',      [AdminTerminalsController::class, 'deactivate']);
+    $router->post('/admin/terminals/{id}/reactivate',      [AdminTerminalsController::class, 'reactivate']);
 
     // --- Invite codes (admin+) ---------------------------------------
     // Mint / edit / re-send / revoke single-use registration tokens
