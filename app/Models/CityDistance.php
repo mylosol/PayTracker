@@ -33,15 +33,48 @@ final class CityDistance extends Model
     protected static string $table = 'city_distances';
 
     /**
-     * Source string used by admin-set overrides. Sorts ASCII-first
-     * among the existing sources (`google_maps`, `largeMiles`,
-     * `pcola_largeMiles`) so lookupOrFetch's ORDER BY source ASC
-     * naturally picks an admin row over any legacy or live-Maps
-     * answer when both exist. That gives "admin edits win" without
-     * touching the legacy rows themselves -- removing the override
-     * reverts the cache to whichever source was there before.
+     * Source string used by admin-set overrides. See SOURCE_PRIORITY_SQL
+     * for the full priority order; admin sits at the top so an admin
+     * row wins over every other source for the same pair.
      */
     public const SOURCE_ADMIN = 'admin';
+
+    /**
+     * Source-priority SQL fragment. Used as the ORDER BY in
+     * lookupOrFetch + between() so the "winning" source is
+     * deterministic regardless of insertion order.
+     *
+     * Priority is INTENTIONAL, not alphabetical:
+     *
+     *   1. admin            -- explicit override set by an Admin+.
+     *                          Always wins; deleting the row reverts
+     *                          to the next-highest source.
+     *   2. largeMiles       -- legacy non-Pcola distance matrix.
+     *   2. pcola_largeMiles -- legacy Pcola distance matrix. Tied
+     *                          with largeMiles -- the rare pair
+     *                          where both exist tiebreaks
+     *                          alphabetically, but both are
+     *                          considered "authoritative legacy".
+     *   3. google_maps      -- LIVE fallback when no row exists in
+     *                          the cache. Once written, stays at
+     *                          the bottom: a stale Google answer
+     *                          should never beat a legacy matrix
+     *                          entry that turns up later (e.g. after
+     *                          a 2026_05_23 backfill rerun).
+     *   4. anything else    -- never expected. ELSE 99 keeps the
+     *                          query well-defined.
+     *
+     * Encoded as a CASE in raw SQL so the order can't drift from
+     * the docblock above.
+     */
+    private const SOURCE_PRIORITY_SQL =
+        "CASE d.source
+            WHEN 'admin'            THEN 1
+            WHEN 'largeMiles'       THEN 2
+            WHEN 'pcola_largeMiles' THEN 2
+            WHEN 'google_maps'      THEN 3
+            ELSE 99
+         END";
 
     public function __construct(
         Connection $connection,
@@ -119,7 +152,12 @@ final class CityDistance extends Model
      * Look up the recorded mileage(s) between two cities by name. Returns
      * every (source, miles) tuple recorded — usually one, occasionally two
      * when the same pair appears in both legacy matrices with different
-     * values. The view is responsible for picking which one to display.
+     * values, or when an admin override exists alongside a legacy / Google
+     * row.
+     *
+     * Rows are sorted by SOURCE_PRIORITY (admin first, then legacy, then
+     * google_maps) so callers that just take the first element get the
+     * "winning" value.
      *
      * @return list<array{miles:int, source:string}>
      */
@@ -131,7 +169,7 @@ final class CityDistance extends Model
             JOIN ' . self::ident('city') . ' cf ON cf.id = d.from_city_id
             JOIN ' . self::ident('city') . ' ct ON ct.id = d.to_city_id
             WHERE cf.city = ? AND ct.city = ?
-            ORDER BY d.source ASC';
+            ORDER BY ' . self::SOURCE_PRIORITY_SQL . ' ASC, d.source ASC';
         $rows = $this->prepared($sql, [$fromName, $toName])->fetchAll();
         return is_array($rows) ? $rows : [];
     }
@@ -147,15 +185,18 @@ final class CityDistance extends Model
      * error rather than failing the whole submission.
      *
      * Behaviour:
-     *   1. If between() finds any recorded distance, the FIRST one wins
-     *      (sources sort alphabetically — google_maps < largeMiles <
-     *      pcola_largeMiles — so a legacy matrix entry beats a Google entry
-     *      when both exist).
+     *   1. If between() finds any recorded distance, the FIRST one wins.
+     *      between() sorts by SOURCE_PRIORITY_SQL (admin → legacy →
+     *      google_maps), so an admin override beats every other source,
+     *      a legacy matrix entry beats a cached Google answer, and
+     *      Google only ever wins when nothing else exists for the pair.
      *   2. On cache miss, call GoogleMapsService::distanceMiles().
      *   3. On a real Google answer, insert/find both endpoint cities,
      *      then INSERT IGNORE the new (from, to, miles, source='google_maps')
      *      row. IGNORE handles the race where two concurrent requests
-     *      resolve the same pair.
+     *      resolve the same pair. The new row sits at the bottom of
+     *      the priority order, so a later admin override or legacy
+     *      backfill will immediately shadow it.
      *
      * Caches are written ONE-WAY (from → to) because the legacy data was
      * directional too. The opposite direction will be resolved + cached
@@ -296,7 +337,7 @@ final class CityDistance extends Model
             JOIN ' . self::ident('city') . ' cf ON cf.id = d.from_city_id
             JOIN ' . self::ident('city') . ' ct ON ct.id = d.to_city_id'
             . $where . '
-            ORDER BY cf.city ASC, ct.city ASC, d.source ASC
+            ORDER BY cf.city ASC, ct.city ASC, ' . self::SOURCE_PRIORITY_SQL . ' ASC, d.source ASC
             LIMIT ' . $perPage . ' OFFSET ' . $offset;
         $rowParams = array_merge([self::SOURCE_ADMIN], $params);
         $rows = $this->prepared($rowsSql, $rowParams)->fetchAll();
