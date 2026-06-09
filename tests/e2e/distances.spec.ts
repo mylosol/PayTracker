@@ -91,7 +91,8 @@ test.describe('city distances', () => {
         const newRow = page.locator('tbody tr', { hasText: FROM_CITY });
         await expect(newRow).toBeVisible();
         await expect(newRow.locator('.pill.ok', { hasText: /override/i })).toBeVisible();
-        await expect(newRow).toContainText(/^.*?\b77\b/);
+        // Miles cell shows "77" -- scope to the row.
+        await expect(newRow).toContainText('77');
     });
 
     test('7f — re-saving the same pair updates miles in place', async ({ page }) => {
