@@ -19,10 +19,12 @@
 layout('layouts/app');
 
 $totalPages = max(1, (int) ceil($totalRows / max(1, $perPage)));
+// All pagination + filter links land on #all-rows so the page
+// scrolls straight to the results instead of starting at the top.
 $buildPageUrl = static function (int $p) use ($base, $q): string {
     $qs = ['page' => $p];
     if ($q !== '') { $qs['q'] = $q; }
-    return $base . '/distances?' . http_build_query($qs);
+    return $base . '/distances?' . http_build_query($qs) . '#all-rows';
 };
 ?>
 <div class="card">
@@ -86,26 +88,6 @@ $buildPageUrl = static function (int $p) use ($base, $q): string {
 </div>
 
 <div class="card">
-    <h2>Backfill summary</h2>
-    <ul>
-        <li>Total rows: <code><?= e((string) $summary['total_rows']) ?></code></li>
-        <li>Unique (from, to) pairs: <code><?= e((string) $summary['unique_pairs']) ?></code></li>
-        <li>Distinct cities referenced: <code><?= e((string) $summary['unique_cities']) ?></code></li>
-        <li>By source:
-            <?php if ($summary['by_source'] === []): ?>
-                <em>none yet</em>
-            <?php else: ?>
-                <ul>
-                <?php foreach ($summary['by_source'] as $src => $n): ?>
-                    <li><code><?= e($src) ?></code> &mdash; <code><?= e((string) $n) ?></code></li>
-                <?php endforeach; ?>
-                </ul>
-            <?php endif; ?>
-        </li>
-    </ul>
-</div>
-
-<div class="card">
     <h2>Look up a pair</h2>
     <p class="muted">Returns every source row recorded for the pair, source-ASC ordered.</p>
     <form method="get" action="<?= e($base) ?>/distances"
@@ -143,14 +125,14 @@ $buildPageUrl = static function (int $p) use ($base, $q): string {
     <?php endif; ?>
 </div>
 
-<div class="card">
+<div class="card" id="all-rows">
     <h2>All rows
         <span class="muted" style="font-size:14px;font-weight:normal;">
             (<?= (int) $totalRows ?> total, showing page <?= (int) $page ?> / <?= (int) $totalPages ?>)
         </span>
     </h2>
 
-    <form method="get" action="<?= e($base) ?>/distances" style="margin:0 0 1rem 0;">
+    <form method="get" action="<?= e($base) ?>/distances#all-rows" style="margin:0 0 1rem 0;">
         <label>Search city
             <input name="q" type="text" value="<?= e($q) ?>" autocomplete="off"
                    placeholder="matches From OR To"
@@ -239,3 +221,23 @@ $buildPageUrl = static function (int $p) use ($base, $q): string {
 </div>
 
 <span id="override-form"></span>
+
+<div class="card">
+    <h2>Backfill summary</h2>
+    <ul>
+        <li>Total rows: <code><?= e((string) $summary['total_rows']) ?></code></li>
+        <li>Unique (from, to) pairs: <code><?= e((string) $summary['unique_pairs']) ?></code></li>
+        <li>Distinct cities referenced: <code><?= e((string) $summary['unique_cities']) ?></code></li>
+        <li>By source:
+            <?php if ($summary['by_source'] === []): ?>
+                <em>none yet</em>
+            <?php else: ?>
+                <ul>
+                <?php foreach ($summary['by_source'] as $src => $n): ?>
+                    <li><code><?= e($src) ?></code> &mdash; <code><?= e((string) $n) ?></code></li>
+                <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
+        </li>
+    </ul>
+</div>
