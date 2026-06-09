@@ -70,8 +70,13 @@ final class LocationController extends Controller
             return $guard;
         }
 
+        // Use the picker-friendly list so a legacy bare-name row
+        // hidden under a state-suffixed twin doesn't surface here.
+        // After 2026_06_09_001_consolidate_city_bares the table is
+        // bare-free; this stays as defence-in-depth for any future
+        // bare insertions.
         return $this->view('locations/index', [
-            'cities' => $this->cities->all(),
+            'cities' => $this->cities->allForPicker(),
             'base'   => $request->basePath(),
             'flash'  => $this->popFlash(),
         ]);

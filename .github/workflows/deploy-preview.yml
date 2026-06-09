@@ -231,18 +231,6 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
             "cd /home/robshe48/paytracker/preview && php scripts/migrate.php"
 
-      # TEMPORARY — Phase A of feature/city-bares-audit-consolidate.
-      # Runs the read-only audit and dumps the report to the workflow
-      # log so we can plan the consolidation migration without
-      # SSH-ing in. Remove this step in the same commit that ships
-      # the consolidate migration.
-      - name: Audit city bare-name duplicates (read-only)
-        env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
-        run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/audit-city-bares.php"
-
       # Sync the QA test account's password from GH secrets so the Playwright
       # suite below can log in with a known-good credential. The password
       # set here lives only on the preview channel — it is NEVER set on
