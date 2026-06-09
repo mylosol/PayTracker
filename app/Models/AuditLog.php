@@ -67,6 +67,8 @@ final class AuditLog extends Model
     public const ACTION_TERMINAL_UPDATED        = 'TERMINAL_UPDATED';
     public const ACTION_TERMINAL_DEACTIVATED    = 'TERMINAL_DEACTIVATED';
     public const ACTION_TERMINAL_REACTIVATED    = 'TERMINAL_REACTIVATED';
+    public const ACTION_DISTANCE_OVERRIDE_SET   = 'DISTANCE_OVERRIDE_SET';
+    public const ACTION_DISTANCE_ROW_DELETED    = 'DISTANCE_ROW_DELETED';
 
     // ---- Failed-login reason constants. Mirrors the discriminators
     // in AuthService::attempt so a downstream "why is this account

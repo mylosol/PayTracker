@@ -119,6 +119,25 @@ try {
                 printf("    - id=%d  city=%s\n", (int) $r['id'], (string) $r['city']);
             }
             if ($apply) {
+                // Drop any city_distances rows that reference the QA
+                // test city ids first -- there's no FK constraint, so
+                // failing to do this leaves orphan distance rows
+                // pointing at deleted city ids. Cleanup is best-effort:
+                // ignore if the table doesn't exist (clean dev DBs).
+                try {
+                    $delDist = $pdo->prepare(
+                        'DELETE FROM `city_distances`
+                          WHERE from_city_id IN
+                                (SELECT id FROM `city` WHERE city LIKE ?)
+                             OR to_city_id IN
+                                (SELECT id FROM `city` WHERE city LIKE ?)'
+                    );
+                    $delDist->execute([$pattern, $pattern]);
+                } catch (\PDOException $e) {
+                    if (! str_contains($e->getMessage(), 'city_distances')) {
+                        throw $e;
+                    }
+                }
                 $del = $pdo->prepare('DELETE FROM `city` WHERE city LIKE ?');
                 $del->execute([$pattern]);
                 echo "    → deleted.\n";

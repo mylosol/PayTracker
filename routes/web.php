@@ -73,8 +73,13 @@ return static function (Router $router): void {
     $router->get('/locations/new', [LocationController::class, 'create']);
     $router->post('/locations',    [LocationController::class, 'store']);
 
-    // --- City distances (signed-in, read-only for now) ----------------
-    $router->get('/distances',     [DistancesController::class, 'index']);
+    // --- City distances (admin+ CRUD) ---------------------------------
+    // Admin edits land as `source='admin'` rows that win over legacy
+    // / Google entries in CityDistance::lookupOrFetch. See
+    // DistancesController for the full mechanic.
+    $router->get('/distances',         [DistancesController::class, 'index']);
+    $router->post('/distances',        [DistancesController::class, 'store']);
+    $router->post('/distances/delete', [DistancesController::class, 'destroy']);
 
     // --- Driver loads -------------------------------------------------
     // Read-only summary surface + the modern write form (one load per

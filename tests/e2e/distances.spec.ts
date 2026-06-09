@@ -63,4 +63,73 @@ test.describe('city distances', () => {
 
         await expect(page.getByText(/no recorded distance/i)).toBeVisible();
     });
+
+    // --- Admin CRUD ----------------------------------------------------
+    //
+    // The override pair is intentionally synthetic ("QA From, ZZ" / "QA To, ZZ")
+    // so the qa-cleanup script's cities sweep removes the rows after the
+    // suite ends -- they share the "Qa Test" prefix shape it sweeps on.
+    // (We pass the prefix directly via --pattern in the workflow.)
+    const FROM_CITY = 'Qa Test From, ZZ';
+    const TO_CITY   = 'Qa Test To, ZZ';
+
+    test('7e — admin can save a new override + sees it as source=admin', async ({ page }) => {
+        await signIn(page);
+        await page.goto('distances');
+
+        await page.locator('input[name="from_name"]').fill(FROM_CITY);
+        await page.locator('input[name="to_name"]').fill(TO_CITY);
+        await page.locator('input[name="miles"]').fill('77');
+        await page.getByRole('button', { name: /save override/i }).click();
+
+        await expect(page.getByText(new RegExp(`Set ${FROM_CITY} → ${TO_CITY} = 77 mi`, 'i'))).toBeVisible();
+
+        // The new row shows up under the "All rows" section with the
+        // override pill. Search to scope.
+        await page.locator('input[name="q"]').fill('Qa Test');
+        await page.getByRole('button', { name: /^filter$/i }).click();
+        const newRow = page.locator('tbody tr', { hasText: FROM_CITY });
+        await expect(newRow).toBeVisible();
+        await expect(newRow.locator('.pill.ok', { hasText: /override/i })).toBeVisible();
+        await expect(newRow).toContainText(/^.*?\b77\b/);
+    });
+
+    test('7f — re-saving the same pair updates miles in place', async ({ page }) => {
+        await signIn(page);
+        await page.goto('distances');
+
+        // Seed (idempotent re-save uses the existing row).
+        await page.locator('input[name="from_name"]').fill(FROM_CITY);
+        await page.locator('input[name="to_name"]').fill(TO_CITY);
+        await page.locator('input[name="miles"]').fill('77');
+        await page.getByRole('button', { name: /save override/i }).click();
+
+        // Bump miles.
+        await page.locator('input[name="from_name"]').fill(FROM_CITY);
+        await page.locator('input[name="to_name"]').fill(TO_CITY);
+        await page.locator('input[name="miles"]').fill('99');
+        await page.getByRole('button', { name: /save override/i }).click();
+
+        await expect(page.getByText(new RegExp(`Updated ${FROM_CITY} → ${TO_CITY} = 99 mi`, 'i'))).toBeVisible();
+    });
+
+    test('7g — delete on an admin row drops the override', async ({ page }) => {
+        await signIn(page);
+        await page.goto('distances');
+
+        // Make sure the override exists so we have something to delete.
+        await page.locator('input[name="from_name"]').fill(FROM_CITY);
+        await page.locator('input[name="to_name"]').fill(TO_CITY);
+        await page.locator('input[name="miles"]').fill('55');
+        await page.getByRole('button', { name: /save override/i }).click();
+
+        // Filter to scope, then delete the row.
+        await page.locator('input[name="q"]').fill('Qa Test');
+        await page.getByRole('button', { name: /^filter$/i }).click();
+        const row = page.locator('tbody tr', { hasText: FROM_CITY });
+        page.once('dialog', d => d.accept());
+        await row.getByRole('button', { name: /^delete$/i }).click();
+
+        await expect(page.getByText(/deleted.*qa test from.*qa test to.*source=admin/i)).toBeVisible();
+    });
 });

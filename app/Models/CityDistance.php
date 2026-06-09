@@ -32,6 +32,17 @@ final class CityDistance extends Model
 {
     protected static string $table = 'city_distances';
 
+    /**
+     * Source string used by admin-set overrides. Sorts ASCII-first
+     * among the existing sources (`google_maps`, `largeMiles`,
+     * `pcola_largeMiles`) so lookupOrFetch's ORDER BY source ASC
+     * naturally picks an admin row over any legacy or live-Maps
+     * answer when both exist. That gives "admin edits win" without
+     * touching the legacy rows themselves -- removing the override
+     * reverts the cache to whichever source was there before.
+     */
+    public const SOURCE_ADMIN = 'admin';
+
     public function __construct(
         Connection $connection,
         private readonly City $cities,
@@ -186,5 +197,160 @@ final class CityDistance extends Model
                 . ' (from_city_id, to_city_id, miles, source) VALUES (?, ?, ?, ?)';
         $this->prepared($sql, [$fromId, $toId, $miles, 'google_maps']);
         return $miles;
+    }
+
+    // ====================================================================
+    // Admin CRUD
+    // ====================================================================
+
+    /**
+     * Insert or update an admin-set override for a (from, to) pair.
+     * Doesn't touch any existing non-admin row -- the override
+     * shadows them via the source-sort priority in lookupOrFetch.
+     *
+     * Returns true when the row was newly inserted, false when it
+     * was updated in place. Callers use this to distinguish "added"
+     * from "changed" in the audit metadata.
+     */
+    public function upsertOverride(int $fromCityId, int $toCityId, int $miles): bool
+    {
+        // INSERT ... ON DUPLICATE KEY UPDATE means the (from, to,
+        // 'admin') row is created on first call and overwritten on
+        // every subsequent call. rowCount() reports 1 for an insert
+        // and 2 for an update (the MySQL convention for ON DUP UPD).
+        $sql = 'INSERT INTO ' . self::ident(self::$table)
+             . ' (from_city_id, to_city_id, miles, source)
+                VALUES (?, ?, ?, ?)
+              ON DUPLICATE KEY UPDATE miles = VALUES(miles)';
+        $stmt = $this->prepared($sql, [$fromCityId, $toCityId, $miles, self::SOURCE_ADMIN]);
+        return $stmt->rowCount() === 1;
+    }
+
+    /**
+     * Delete a single (from_city_id, to_city_id, source) row.
+     * Returns true when a row was removed, false when no such row
+     * existed (e.g. concurrent click, stale UI).
+     */
+    public function deleteRow(int $fromCityId, int $toCityId, string $source): bool
+    {
+        $sql  = 'DELETE FROM ' . self::ident(self::$table)
+              . ' WHERE from_city_id = ? AND to_city_id = ? AND source = ?';
+        $stmt = $this->prepared($sql, [$fromCityId, $toCityId, $source]);
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Paginated, searchable list for the admin index. Each row
+     * carries the joined city names PLUS an override_active flag
+     * so the view can decorate the row when an admin source row
+     * exists for the same (from, to) pair regardless of which
+     * source's row is being rendered.
+     *
+     * Search matches the from-city OR to-city name (case-insensitive
+     * via MySQL's default collation).
+     *
+     * @return array{rows:list<array{from_id:int,to_id:int,from:string,to:string,miles:int,source:string,override_active:bool}>, total:int}
+     */
+    public function listForAdmin(string $search, int $page, int $perPage): array
+    {
+        $perPage = max(1, min(100, $perPage));
+        $page    = max(1, $page);
+        $offset  = ($page - 1) * $perPage;
+
+        $where  = '';
+        $params = [];
+        if ($search !== '') {
+            $where = ' WHERE cf.city LIKE ? OR ct.city LIKE ?';
+            $like  = '%' . $search . '%';
+            $params = [$like, $like];
+        }
+
+        $countSql = '
+            SELECT COUNT(*) FROM ' . self::ident(self::$table) . ' d
+            JOIN ' . self::ident('city') . ' cf ON cf.id = d.from_city_id
+            JOIN ' . self::ident('city') . ' ct ON ct.id = d.to_city_id'
+            . $where;
+        $total = (int) $this->prepared($countSql, $params)->fetchColumn();
+
+        // Correlated subquery flags every row whose (from, to) pair
+        // has an `admin` row anywhere in the table -- not just the
+        // row being rendered. The view uses that to badge the
+        // legacy row "shadowed by admin override" so the admin can
+        // tell at a glance which displayed numbers are actually
+        // load-bearing.
+        $rowsSql = '
+            SELECT
+                d.from_city_id AS from_id,
+                d.to_city_id   AS to_id,
+                cf.city        AS `from`,
+                ct.city        AS `to`,
+                d.miles,
+                d.source,
+                EXISTS (
+                    SELECT 1 FROM ' . self::ident(self::$table) . ' d2
+                     WHERE d2.from_city_id = d.from_city_id
+                       AND d2.to_city_id   = d.to_city_id
+                       AND d2.source       = ?
+                ) AS override_active
+            FROM ' . self::ident(self::$table) . ' d
+            JOIN ' . self::ident('city') . ' cf ON cf.id = d.from_city_id
+            JOIN ' . self::ident('city') . ' ct ON ct.id = d.to_city_id'
+            . $where . '
+            ORDER BY cf.city ASC, ct.city ASC, d.source ASC
+            LIMIT ' . $perPage . ' OFFSET ' . $offset;
+        $rowParams = array_merge([self::SOURCE_ADMIN], $params);
+        $rows = $this->prepared($rowsSql, $rowParams)->fetchAll();
+        if (! is_array($rows)) {
+            $rows = [];
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $out[] = [
+                'from_id'         => (int) $r['from_id'],
+                'to_id'           => (int) $r['to_id'],
+                'from'            => (string) $r['from'],
+                'to'              => (string) $r['to'],
+                'miles'           => (int) $r['miles'],
+                'source'          => (string) $r['source'],
+                'override_active' => (int) $r['override_active'] === 1,
+            ];
+        }
+        return ['rows' => $out, 'total' => $total];
+    }
+
+    /**
+     * Look up a single row by composite PK. Used by the admin
+     * surface to fetch the row that's currently being edited so
+     * the form can prefill miles.
+     *
+     * @return array{from_id:int,to_id:int,from:string,to:string,miles:int,source:string}|null
+     */
+    public function findExact(int $fromCityId, int $toCityId, string $source): ?array
+    {
+        $sql = '
+            SELECT
+                d.from_city_id AS from_id,
+                d.to_city_id   AS to_id,
+                cf.city        AS `from`,
+                ct.city        AS `to`,
+                d.miles,
+                d.source
+            FROM ' . self::ident(self::$table) . ' d
+            JOIN ' . self::ident('city') . ' cf ON cf.id = d.from_city_id
+            JOIN ' . self::ident('city') . ' ct ON ct.id = d.to_city_id
+            WHERE d.from_city_id = ? AND d.to_city_id = ? AND d.source = ?
+            LIMIT 1';
+        $row = $this->prepared($sql, [$fromCityId, $toCityId, $source])->fetch();
+        if (! is_array($row)) {
+            return null;
+        }
+        return [
+            'from_id' => (int) $row['from_id'],
+            'to_id'   => (int) $row['to_id'],
+            'from'    => (string) $row['from'],
+            'to'      => (string) $row['to'],
+            'miles'   => (int) $row['miles'],
+            'source'  => (string) $row['source'],
+        ];
     }
 }
