@@ -60,7 +60,7 @@ final class DistancesController extends Controller
         $from   = trim((string) $request->input('from', ''));
         $to     = trim((string) $request->input('to', ''));
         $search = trim((string) $request->input('q',   ''));
-        $page   = max(1, (int) $request->input('page', 1));
+        $page   = max(1, (int) (string) $request->input('page', '1'));
 
         $lookup = ($from !== '' && $to !== '')
             ? $this->distances->between($from, $to)
