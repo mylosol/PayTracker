@@ -27,10 +27,13 @@ $__csrfForLogout = is_array($__account)
     : '';
 
 // Resolve the compiled stylesheet path relative to the current
-// channel. The build pipeline writes it to public/assets/app.css;
-// at runtime PHP sees that under $__appPath/assets/app.css.
-$__cssUrl = $__appPath . '/assets/app.css';
-$__logoUrl = $__appPath . '/assets/logo-mark.svg';
+// channel. The build pipeline writes it to public/assets/app.css.
+// The .htaccess static-asset passthrough is scoped to URLs that
+// literally contain "/public/" so requests stay isolated from
+// the legacy code tree -- hence the /public/assets/... shape here
+// rather than a "cleaner" /assets/... URL.
+$__cssUrl  = $__appPath . '/public/assets/app.css';
+$__logoUrl = $__appPath . '/public/assets/logo-mark.svg';
 
 // Nav items. Each entry is [href, label, visible?]. The visible
 // flag lets us role-gate at the data layer rather than scattering
