@@ -2,8 +2,9 @@
 /** @var string $base */
 layout('layouts/app');
 ?>
-<div class="card">
-    <h1>Tutorial</h1>
+<div class="max-w-3xl mx-auto">
+<div class="card prose-static">
+    <h1 class="m-0">Tutorial</h1>
     <p class="muted">
         A walkthrough of submitting a load, reviewing your daily and
         weekly pay totals, and editing or back-dating an entry.
@@ -85,16 +86,17 @@ layout('layouts/app');
         legacy tutorial is available below for reference, but the
         interface it shows is no longer current.
     </p>
-    <div style="position:relative;padding-top:56.25%;border-radius:8px;overflow:hidden;border:1px solid #cbd2da;">
+    <div class="aspect-video rounded-lg overflow-hidden border border-brand-line mt-3">
         <iframe
             src="https://www.youtube.com/embed/Wy8e1iz9qZo"
-            style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+            class="w-full h-full"
             allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
             allowfullscreen
             title="PayTracker legacy tutorial"></iframe>
     </div>
 
-    <p style="margin-top:1.5rem;">
-        <a href="<?= e($base) ?>/">&larr; Back home</a>
+    <p class="mt-6">
+        <a href="<?= e($base) ?>/">← Back home</a>
     </p>
+</div>
 </div>

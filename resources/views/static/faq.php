@@ -2,8 +2,9 @@
 /** @var string $base */
 layout('layouts/app');
 ?>
-<div class="card">
-    <h1>Frequently asked questions</h1>
+<div class="max-w-3xl mx-auto">
+<div class="card prose-static">
+    <h1 class="m-0">Frequently asked questions</h1>
     <p class="muted">
         If your answer isn't here, head to
         <a href="<?= e($base) ?>/contact">Contact</a> and let us know &mdash;
@@ -88,7 +89,8 @@ layout('layouts/app');
         <a href="<?= e($base) ?>/contact">Contact</a> to request access.
     </p>
 
-    <p style="margin-top:2rem;">
-        <a href="<?= e($base) ?>/">&larr; Back home</a>
+    <p class="mt-8">
+        <a href="<?= e($base) ?>/">← Back home</a>
     </p>
+</div>
 </div>
