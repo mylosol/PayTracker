@@ -132,6 +132,27 @@ jobs:
         run: |
           ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" "mkdir -p '$DEST'"
 
+      # cPanel ships PHP with session.save_path locked via
+      # php_admin_value, often pointing at a tmp dir that doesn't
+      # exist on a fresh subdomain. If that dir is missing every
+      # page load opens with a "No such file or directory" warning
+      # from session_start(). Read the configured path from PHP and
+      # mkdir it (idempotent — does nothing if it's already there).
+      - name: Ensure PHP session save_path exists on remote
+        env:
+          REMOTE: ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:   ${{ secrets.WHM_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" "$(cat <<'REMOTE_SCRIPT'
+            set -euo pipefail
+            SAVE_PATH=$(php -r 'echo session_save_path() ?: sys_get_temp_dir();')
+            mkdir -p "$SAVE_PATH"
+            chmod 700 "$SAVE_PATH"
+            echo "Session save_path ready: $SAVE_PATH"
+          REMOTE_SCRIPT
+          )"
+
       # Rsync deploys the project root INTO the docroot. The root .htaccess
       # rewrites every non-static request to public/index.php, which is the
       # modern front controller. The legacy PHP tree is NOT rsynced -- this

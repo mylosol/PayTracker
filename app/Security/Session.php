@@ -29,29 +29,19 @@ final class Session
         $secure   = (bool) config('session.secure_cookie', true);
         $samesite = (string) config('session.samesite', 'Lax');
 
-        // Pin session storage to a directory we control. cPanel hosts
-        // sometimes inherit session.save_path from the primary domain's
-        // tmp directory, which doesn't exist on subdomains; PHP then
-        // emits a `No such file or directory` warning at session_start()
-        // BEFORE the layout has a chance to render, breaking the page
-        // load. Storing under storage/sessions/ keeps the path stable
-        // across hosts.
-        //
-        // Path is resolved against THIS file's location (rather than
-        // base_path()) so the override fires before the app's bootstrap
-        // is fully wired and survives subcommand contexts where helpers
-        // haven't been loaded yet.
-        $sessionDir = dirname(__DIR__, 2) . '/storage/sessions';
-        if (! is_dir($sessionDir)) {
-            @mkdir($sessionDir, 0700, true);
+        // Best-effort: ensure session.save_path exists. cPanel hosts
+        // typically lock session.save_path via php_admin_value (so a
+        // runtime session_save_path() call is silently ignored) and
+        // sometimes point that path at a directory that doesn't exist
+        // on a new subdomain. We mkdir the configured save_path here
+        // so the first session_start() doesn't blow up the page with
+        // a "No such file or directory" warning before the layout
+        // gets a chance to render. The deploy workflow also creates
+        // this directory; this is the belt to that suspenders.
+        $configuredSavePath = (string) session_save_path();
+        if ($configuredSavePath !== '' && ! is_dir($configuredSavePath)) {
+            @mkdir($configuredSavePath, 0700, true);
         }
-        // Always override, even if the directory check failed -- the
-        // alternative is letting PHP fall back to a path that doesn't
-        // exist and warning before every page render. A failed
-        // session_save_path() at worst leaves the host default in
-        // place; the visible regression is identical.
-        session_save_path($sessionDir);
-        ini_set('session.gc_maxlifetime', (string) $lifetime);
 
         session_name($name);
         session_set_cookie_params([
