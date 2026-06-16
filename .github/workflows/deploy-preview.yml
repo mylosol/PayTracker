@@ -137,29 +137,73 @@ jobs:
       # modern front controller. The legacy PHP tree is NOT rsynced -- this
       # host carries the modern app only (Robert's call during the WHM
       # migration). Excluded paths are CI / framework / dev-only files.
-      - name: Rsync repository to preview path
+      # WHM/cPanel hosts often don't put rsync on the shell-user's PATH
+      # even when the binary exists. Try without --rsync-path first
+      # (rsync usually finds itself); if that fails, retry with the
+      # common cPanel path /usr/bin/rsync. If both fail we fall back
+      # to tar-over-ssh which avoids needing rsync on the remote at all.
+      - name: Deploy repository to preview path
         env:
           REMOTE: ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
           PORT:   ${{ secrets.WHM_SSH_PORT }}
           DEST:   ${{ secrets.WHM_PREVIEW_BASE_PATH }}
         run: |
           set -euo pipefail
-          rsync -avz --delete \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='node_modules/' \
-            --exclude='tests/' \
-            --exclude='playwright-report/' \
-            --exclude='test-results/' \
-            --exclude='blob-report/' \
-            --exclude='playwright.config.ts' \
-            --exclude='package.json' \
-            --exclude='package-lock.json' \
-            --exclude='.PayTracker/' \
-            --exclude='.env' \
-            --exclude='.env.local' \
-            -e "ssh -p $PORT -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new" \
-            ./ "$REMOTE:$DEST/"
+
+          EXCLUDES=(
+            --exclude='.git/'
+            --exclude='.github/'
+            --exclude='node_modules/'
+            --exclude='tests/'
+            --exclude='playwright-report/'
+            --exclude='test-results/'
+            --exclude='blob-report/'
+            --exclude='playwright.config.ts'
+            --exclude='package.json'
+            --exclude='package-lock.json'
+            --exclude='.PayTracker/'
+            --exclude='.env'
+            --exclude='.env.local'
+          )
+          SSH="ssh -p $PORT -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new"
+
+          # Try plain rsync first.
+          if rsync -avz --delete "${EXCLUDES[@]}" -e "$SSH" \
+                ./ "$REMOTE:$DEST/" 2>rsync-stderr.log; then
+            echo "Deployed via rsync."
+            exit 0
+          fi
+
+          # Retry forcing the remote rsync binary path. Some cPanel hosts
+          # have rsync installed under /usr/bin but not on the shell user's PATH.
+          if rsync -avz --delete --rsync-path=/usr/bin/rsync "${EXCLUDES[@]}" \
+                -e "$SSH" \
+                ./ "$REMOTE:$DEST/" 2>rsync-stderr.log; then
+            echo "Deployed via rsync --rsync-path=/usr/bin/rsync."
+            exit 0
+          fi
+
+          # Fall back to tar over ssh. We can't easily replicate --delete
+          # semantics in a tar-only pipeline, so before unpacking we wipe
+          # everything in the docroot EXCEPT the .htaccess and .env (those
+          # are placed by separate workflow steps). This keeps the deploy
+          # tree identical to a fresh rsync.
+          echo "rsync failed; falling back to tar over ssh."
+          cat rsync-stderr.log
+
+          # 1. Clear out the destination, preserving .htaccess + .env.
+          $SSH "$REMOTE" "set -euo pipefail; cd '$DEST' && \
+            find . -mindepth 1 -maxdepth 1 \
+              ! -name '.htaccess' \
+              ! -name '.env' \
+              -exec rm -rf {} +"
+
+          # 2. Stream a tar of the local tree (the rsync excludes
+          # transfer cleanly because tar uses the same --exclude=PATTERN
+          # syntax) and unpack it on the remote.
+          tar -czf - "${EXCLUDES[@]}" . \
+            | $SSH "$REMOTE" "tar -xzf - -C '$DEST'"
+          echo "Deployed via tar over ssh."
 
       # Promote the preview-specific root .htaccess into place. The repo
       # version is named differently so it stays inert during local
