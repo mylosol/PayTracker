@@ -7,33 +7,29 @@
 layout('layouts/app');
 ?>
 <div class="card">
-    <h1>Locations</h1>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <h1 class="m-0">Locations</h1>
+            <p class="text-brand-muted mt-2">
+                <?= count($cities) ?> cities on file.
+            </p>
+        </div>
+        <a href="<?= e($base) ?>/locations/new" class="btn-primary">+ Add city</a>
+    </div>
+</div>
 
-    <?php if ($flash !== null): ?>
-        <p class="muted" style="background:#dcfce7;color:#166534;border-radius:6px;padding:.6rem .8rem;">
-            <?= e($flash) ?>
-        </p>
-    <?php endif; ?>
+<?php if ($flash !== null): ?>
+    <div class="flash-ok" role="status"><?= e($flash) ?></div>
+<?php endif; ?>
 
-    <p>
-        <a href="<?= e($base) ?>/locations/new"
-           style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-            + Add city
-        </a>
-        &nbsp;<a href="<?= e($base) ?>/">&larr; Back</a>
-    </p>
-
-    <p class="muted">
-        <?= count($cities) ?> cities on file.
-    </p>
-
+<div class="card">
     <?php if ($cities === []): ?>
-        <p>No cities recorded yet.</p>
+        <p class="text-brand-muted m-0">No cities recorded yet.</p>
     <?php else: ?>
-        <ul style="columns:2;column-gap:1.5rem;font-size:14px;">
-        <?php foreach ($cities as $city): ?>
-            <li><?= e((string) $city['city']) ?></li>
-        <?php endforeach; ?>
+        <ul class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 list-none p-0 m-0 text-[0.95rem]">
+            <?php foreach ($cities as $city): ?>
+                <li class="py-1.5 border-b border-brand-line/60"><?= e((string) $city['city']) ?></li>
+            <?php endforeach; ?>
         </ul>
     <?php endif; ?>
 </div>
