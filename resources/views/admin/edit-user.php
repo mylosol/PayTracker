@@ -9,64 +9,60 @@
 layout('layouts/app');
 $isSelf = (int) ($actor['id'] ?? 0) === (int) ($target['id'] ?? 0);
 ?>
-<div class="card">
-    <h1>Edit account #<?= (int) ($target['id'] ?? 0) ?></h1>
-    <p class="muted">
-        Editing <strong><?= e((string) ($target['user'] ?? '')) ?></strong>
-        as <code><?= e((string) ($actor['user'] ?? '')) ?></code>.
-        <?php if ($isSelf): ?>
-            (This is your own account &mdash; saving here is the same as
-            using <a href="<?= e($base) ?>/profile">/profile</a>.)
-        <?php endif; ?>
-    </p>
-</div>
-
-<?php if ($flash !== null): ?>
-    <div class="card" style="background:#fee2e2;color:#991b1b;">
-        <?= e($flash) ?>
+<div class="max-w-2xl mx-auto">
+    <div class="card">
+        <h1 class="m-0">Edit account #<?= (int) ($target['id'] ?? 0) ?></h1>
+        <p class="text-brand-muted mt-2">
+            Editing <strong><?= e((string) ($target['user'] ?? '')) ?></strong>
+            as <code><?= e((string) ($actor['user'] ?? '')) ?></code>.
+            <?php if ($isSelf): ?>
+                (This is your own account — saving here is the same as
+                using <a href="<?= e($base) ?>/profile">/profile</a>.)
+            <?php endif; ?>
+        </p>
     </div>
-<?php endif; ?>
 
-<div class="card">
-    <form method="post" action="<?= e($base) ?>/admin/users/<?= (int) ($target['id'] ?? 0) ?>/edit"
-          novalidate autocomplete="off">
-        <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+    <?php if ($flash !== null): ?>
+        <div class="flash-err" role="alert"><?= e($flash) ?></div>
+    <?php endif; ?>
 
-        <p>
-            <label for="username"><strong>Username</strong></label><br>
-            <input id="username" name="username" type="text" required
-                   value="<?= e((string) ($target['user'] ?? '')) ?>"
-                   pattern="[A-Za-z0-9._\-]{3,32}" minlength="3" maxlength="32"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
-            <small class="muted">
-                3-32 characters &mdash; letters, digits, dot, underscore, dash.
-                No spaces or <code>@</code>. Used to sign in.
-            </small>
+    <div class="card">
+        <form method="post" action="<?= e($base) ?>/admin/users/<?= (int) ($target['id'] ?? 0) ?>/edit"
+              novalidate autocomplete="off" class="space-y-5">
+            <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+
+            <div>
+                <label for="username" class="field-label">Username</label>
+                <input id="username" name="username" type="text" required
+                       value="<?= e((string) ($target['user'] ?? '')) ?>"
+                       pattern="[A-Za-z0-9._\-]{3,32}" minlength="3" maxlength="32"
+                       class="field">
+                <span class="field-hint">
+                    3-32 characters — letters, digits, dot, underscore, dash.
+                    No spaces or <code>@</code>. Used to sign in.
+                </span>
+            </div>
+
+            <div>
+                <label for="email" class="field-label">Email</label>
+                <input id="email" name="email" type="email" required
+                       value="<?= e((string) ($target['email'] ?? '')) ?>"
+                       maxlength="255" class="field">
+                <span class="field-hint">
+                    Required. Where admin-issued password-reset links and
+                    operational mail land.
+                </span>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                <button type="submit" class="btn-primary">Save</button>
+                <a href="<?= e($base) ?>/admin" class="text-sm">Cancel</a>
+            </div>
+        </form>
+
+        <p class="text-sm text-brand-muted mt-6">
+            Role assignment, ban / unban, delete, and reset-password live on
+            the <a href="<?= e($base) ?>/admin">admin list view</a>.
         </p>
-
-        <p>
-            <label for="email"><strong>Email</strong></label><br>
-            <input id="email" name="email" type="email" required
-                   value="<?= e((string) ($target['email'] ?? '')) ?>"
-                   maxlength="255"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
-            <small class="muted">
-                Required. Where admin-issued password-reset links and
-                operational mail land.
-            </small>
-        </p>
-
-        <p>
-            <button type="submit"
-                    style="background:var(--accent);color:#fff;border:0;padding:.6rem 1.4rem;border-radius:6px;font:inherit;cursor:pointer;">
-                Save
-            </button>
-            &nbsp;<a href="<?= e($base) ?>/admin">Cancel</a>
-        </p>
-    </form>
-
-    <p class="muted" style="margin-top:1rem;font-size:13px;">
-        Role assignment, ban / unban, delete, and reset-password live on
-        the <a href="<?= e($base) ?>/admin">admin list view</a>.
-    </p>
+    </div>
 </div>

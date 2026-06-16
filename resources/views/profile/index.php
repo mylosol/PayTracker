@@ -20,8 +20,6 @@ layout('layouts/app');
 // over-pays).
 $bandPreview = '6 (junior fallback — set your hire date for the correct band)';
 if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
-    // '!' resets unspecified time fields to 00:00:00 so the diff isn't
-    // skewed by the current wall clock — see VariableBlobBuilder for why.
     $hire = DateTimeImmutable::createFromFormat('!Y-m-d', $hireDate);
     if ($hire !== false) {
         $now    = new DateTimeImmutable('today');
@@ -39,118 +37,126 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
     }
 }
 ?>
-<?php if ($flash !== null): ?>
-    <div class="card" style="background:#dcfce7;color:#166534;">
-        <?= e($flash) ?>
+<div class="max-w-2xl mx-auto">
+    <?php if ($flash !== null): ?>
+        <div class="flash-ok" role="status"><?= e($flash) ?></div>
+    <?php endif; ?>
+
+    <div class="card">
+        <h1 class="m-0">Profile</h1>
+        <p class="text-brand-muted mt-2">
+            Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong>
+            (driver id <?= (int) ($driver['id'] ?? 0) ?>).
+            These values drive the per-load pay math — tenure decides
+            your rate band, shift decides whether you get the night bonus.
+        </p>
     </div>
-<?php endif; ?>
 
-<div class="card">
-    <h1>Profile</h1>
-    <p class="muted">
-        Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong>
-        (driver id <?= (int) ($driver['id'] ?? 0) ?>).
-        These values drive the per-load pay math &mdash; tenure decides
-        your rate band, shift decides whether you get the night bonus.
-    </p>
+    <div class="card">
+        <form method="post" action="<?= e($base) ?>/profile" novalidate autocomplete="off" class="space-y-6">
+            <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
 
-    <form method="post" action="<?= e($base) ?>/profile" novalidate autocomplete="off">
-        <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+            <div>
+                <label for="username" class="field-label">Username</label>
+                <input id="username" name="username" type="text" required
+                       value="<?= e($username) ?>" pattern="[A-Za-z0-9._\-]{3,32}"
+                       minlength="3" maxlength="32" autocomplete="username"
+                       class="field">
+                <span class="field-hint">
+                    3-32 characters — letters, digits, dot, underscore, dash.
+                    No spaces or <code>@</code> (that's what Email is for).
+                    Used to sign in.
+                </span>
+            </div>
 
-        <p>
-            <label for="username"><strong>Username</strong></label><br>
-            <input id="username" name="username" type="text" required
-                   value="<?= e($username) ?>" pattern="[A-Za-z0-9._\-]{3,32}"
-                   minlength="3" maxlength="32" autocomplete="username"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
-            <small class="muted">
-                3-32 characters &mdash; letters, digits, dot, underscore, dash.
-                No spaces or <code>@</code> (that's what Email is for).
-                Used to sign in.
-            </small>
-        </p>
+            <div>
+                <label for="email" class="field-label">Email</label>
+                <input id="email" name="email" type="email" required
+                       value="<?= e($email) ?>" maxlength="255" autocomplete="email"
+                       class="field">
+                <span class="field-hint">
+                    Required. Where admin-issued password-reset links and
+                    other operational mail land.
+                </span>
+            </div>
 
-        <p>
-            <label for="email"><strong>Email</strong></label><br>
-            <input id="email" name="email" type="email" required
-                   value="<?= e($email) ?>" maxlength="255" autocomplete="email"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
-            <small class="muted">
-                Required. Where admin-issued password-reset links and
-                other operational mail land.
-            </small>
-        </p>
+            <div>
+                <label for="payroll_email" class="field-label">
+                    Payroll contact email <span class="text-brand-muted font-normal">(optional)</span>
+                </label>
+                <input id="payroll_email" name="payroll_email" type="email"
+                       value="<?= e($payrollEmail) ?>" maxlength="255" autocomplete="off"
+                       class="field">
+                <span class="field-hint">
+                    The address dispute notifications go to when you click
+                    <strong>Send batch</strong> on the Reconcile page. Leave
+                    blank to disable batch notifications — you can still
+                    mark loads paid / disputed without it.
+                </span>
+            </div>
 
-        <p>
-            <label for="payroll_email"><strong>Payroll contact email</strong> <span class="muted">(optional)</span></label><br>
-            <input id="payroll_email" name="payroll_email" type="email"
-                   value="<?= e($payrollEmail) ?>" maxlength="255" autocomplete="off"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:24rem;max-width:100%;">
-            <small class="muted">
-                Optional. The address dispute notifications go to when you
-                click <strong>Send batch</strong> on the Reconcile page.
-                Leave blank to disable batch notifications &mdash; you can
-                still mark loads paid / short / disputed without it.
-            </small>
-        </p>
+            <div>
+                <label for="hire_date" class="field-label">
+                    Hire date <span class="text-brand-muted font-normal">(optional)</span>
+                </label>
+                <input id="hire_date" name="hire_date" type="date"
+                       value="<?= e($hireDate) ?>"
+                       max="<?= e(date('Y-m-d')) ?>"
+                       class="field max-w-xs">
+                <span class="field-hint">
+                    Current band: <strong><?= e($bandPreview) ?></strong>.
+                    Leave blank and we default to the junior (6) band until you set a date.
+                </span>
+            </div>
 
-        <p>
-            <label for="hire_date"><strong>Hire date</strong> <span class="muted">(optional)</span></label><br>
-            <input id="hire_date" name="hire_date" type="date"
-                   value="<?= e($hireDate) ?>"
-                   max="<?= e(date('Y-m-d')) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-            <small class="muted">
-                Current band: <strong><?= e($bandPreview) ?></strong>.
-                Leave blank and we default to the junior (6) band until you set a date.
-            </small>
-        </p>
+            <fieldset class="border border-brand-line rounded-lg p-4">
+                <legend class="px-2 text-sm font-semibold text-brand-ink">Default shift</legend>
+                <div class="flex flex-wrap gap-x-6 gap-y-2 mt-1">
+                    <label class="inline-flex items-center gap-2 min-h-[44px]">
+                        <input type="radio" name="shift" value="day" class="field-radio"
+                               <?= $shift === 'day' ? 'checked' : '' ?>>
+                        <span>Day</span>
+                    </label>
+                    <label class="inline-flex items-center gap-2 min-h-[44px]">
+                        <input type="radio" name="shift" value="night" class="field-radio"
+                               <?= $shift === 'night' ? 'checked' : '' ?>>
+                        <span>Night</span>
+                    </label>
+                </div>
+                <p class="field-hint mt-2">
+                    Applied to every load you submit. If you swap shifts for a day, an admin
+                    recompute won't change history — the load's variables blob is snapshotted
+                    at write time.
+                </p>
+            </fieldset>
 
-        <fieldset style="border:1px solid #cbd2da;border-radius:6px;padding:.6rem 1rem;margin:0 0 1rem 0;">
-            <legend><strong>Default shift</strong></legend>
-            <label style="margin-right:1.2rem;">
-                <input type="radio" name="shift" value="day" <?= $shift === 'day' ? 'checked' : '' ?>>
-                Day
-            </label>
-            <label>
-                <input type="radio" name="shift" value="night" <?= $shift === 'night' ? 'checked' : '' ?>>
-                Night
-            </label>
-            <br>
-            <small class="muted">Applied to every load you submit. If you swap shifts for a day, an admin recompute won't change history &mdash; the load's variables blob is snapshotted at write time.</small>
-        </fieldset>
+            <div>
+                <label for="pay_week_start_day" class="field-label">Pay week starts on</label>
+                <select id="pay_week_start_day" name="pay_week_start_day" class="field-select max-w-xs">
+                    <?php foreach ([
+                        'sun' => 'Sunday',
+                        'mon' => 'Monday',
+                        'tue' => 'Tuesday',
+                        'wed' => 'Wednesday',
+                        'thu' => 'Thursday',
+                        'fri' => 'Friday',
+                        'sat' => 'Saturday',
+                    ] as $key => $label): ?>
+                        <option value="<?= e($key) ?>" <?= $payWeekStartDay === $key ? 'selected' : '' ?>>
+                            <?= e($label) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="field-hint">
+                    Drives the dashboard's <strong>This Week</strong> card.
+                    Most US carriers use Sunday; pick whatever matches your payroll.
+                </span>
+            </div>
 
-        <p>
-            <label for="pay_week_start_day"><strong>Pay week starts on</strong></label><br>
-            <select id="pay_week_start_day" name="pay_week_start_day"
-                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-                <?php foreach ([
-                    'sun' => 'Sunday',
-                    'mon' => 'Monday',
-                    'tue' => 'Tuesday',
-                    'wed' => 'Wednesday',
-                    'thu' => 'Thursday',
-                    'fri' => 'Friday',
-                    'sat' => 'Saturday',
-                ] as $key => $label): ?>
-                    <option value="<?= e($key) ?>" <?= $payWeekStartDay === $key ? 'selected' : '' ?>>
-                        <?= e($label) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <br>
-            <small class="muted">
-                Drives the dashboard's <strong>This Week</strong> card.
-                Most US carriers use Sunday; pick whatever matches your payroll.
-            </small>
-        </p>
-
-        <p>
-            <button type="submit"
-                    style="background:var(--accent);color:#fff;border:0;padding:.6rem 1.4rem;border-radius:6px;font:inherit;cursor:pointer;">
-                Save profile
-            </button>
-            &nbsp;<a href="<?= e($base) ?>/dashboard">Back to dashboard</a>
-        </p>
-    </form>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                <button type="submit" class="btn-primary">Save profile</button>
+                <a href="<?= e($base) ?>/dashboard" class="text-sm">Back to dashboard</a>
+            </div>
+        </form>
+    </div>
 </div>

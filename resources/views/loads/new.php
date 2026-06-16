@@ -35,85 +35,90 @@ if ($dateValue === '') {
 $beChecked = (int) ($old['begin_empty_miles'] ?? 0) > 0;
 $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
 ?>
+<div class="max-w-2xl mx-auto">
 <div class="card">
-    <h1><?= $isEdit ? 'Edit load #' . (int) $editFrtl : 'Add a load' ?></h1>
+    <h1 class="m-0"><?= $isEdit ? 'Edit load #' . (int) $editFrtl : 'Add a load' ?></h1>
+    <p class="text-brand-muted mt-2">
+        Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong>
+        (driver id <?= (int) ($driver['id'] ?? 0) ?>).
+    </p>
+</div>
 
-    <p class="muted">Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong> (driver id <?= (int) ($driver['id'] ?? 0) ?>).</p>
-
-    <?php if ($flash !== null): ?>
-        <p class="muted" style="background:#fee2e2;color:#991b1b;border-radius:6px;padding:.6rem .8rem;">
-            <?= e($flash) ?>
-        </p>
-    <?php endif; ?>
+<?php if ($flash !== null): ?>
+    <div class="flash-err" role="alert"><?= e($flash) ?></div>
+<?php endif; ?>
 
 <?php if (! $isEdit): ?>
-    <div id="store-toggle-card" class="card"
-         style="background:#f0f9ff;border:1px solid #bae6fd;">
-        <label style="display:block;font-size:15px;">
-            <input id="store_load_info" type="checkbox" checked
-                   style="vertical-align:middle;width:18px;height:18px;margin-right:.4rem;">
-            <strong>Store Load Info</strong>
+    <div id="store-toggle-card" class="card bg-sky-50 border-sky-200">
+        <label class="flex items-start gap-3 cursor-pointer min-h-[44px]">
+            <input id="store_load_info" type="checkbox" checked class="field-checkbox mt-1">
+            <span>
+                <strong class="text-base">Store Load Info</strong>
+                <span class="block text-sm text-brand-muted mt-1" id="store-toggle-help">
+                    ON: saves to your account using your FRTL #.
+                    OFF: keeps the load in this browser only as an
+                    <em>unconfirmed</em> entry, useful for testing or when
+                    you don't have the FRTL # yet.
+                </span>
+            </span>
         </label>
-        <p class="muted" id="store-toggle-help" style="margin:.5rem 0 0 0;font-size:13px;">
-            ON: saves to your account using your FRTL #.
-            OFF: keeps the load in this browser only as an
-            <em>unconfirmed</em> entry, useful for testing or when
-            you don't have the FRTL # yet.
-        </p>
         <div id="scratchpad-pitfall" hidden
-             style="margin-top:.8rem;background:#fef3c7;color:#854d0e;border:1px solid #fde68a;border-radius:6px;padding:.6rem .8rem;font-size:13px;">
+             class="mt-3 rounded-lg px-3.5 py-3 bg-amber-50 text-amber-900 border border-amber-200 text-sm">
             <strong>Heads up:</strong> with <em>Store Load Info</em> off,
-            this load stays <em>unconfirmed</em> &mdash; it lives only
+            this load stays <em>unconfirmed</em> — it lives only
             in your browser:
-            <ul style="margin:.4rem 0 .2rem 1.2rem;padding:0;">
+            <ul class="list-disc list-inside mt-2 space-y-1">
                 <li>It only shows on <em>today's</em> dashboard — viewing past or future days hides it.</li>
                 <li>Clearing this device's browser data, switching browsers, or switching phones will lose it.</li>
                 <li>It can't be reconciled against pay until you edit it and add a FRTL # to save it.</li>
             </ul>
-            We'll auto-clear it 24 hours after entry. Add the FRTL # whenever your paperwork catches up.
+            <p class="mt-2">We'll auto-clear it 24 hours after entry. Add the FRTL # whenever your paperwork catches up.</p>
         </div>
     </div>
 <?php endif; ?>
 
+<div class="card">
     <form method="post" action="<?= e($formAction) ?>" novalidate autocomplete="off"
           data-base-path="<?= e($base) ?>"
-          data-mode="<?= $isEdit ? 'edit' : 'create' ?>">
+          data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
+          class="space-y-5">
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
         <input type="hidden" name="unsaved_id" id="unsaved_id" value="">
 
-        <p id="frtl-block">
-            <label for="frtl"><strong>FRTL #</strong></label><br>
+        <div id="frtl-block">
+            <label for="frtl" class="field-label">FRTL #</label>
             <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]*"
                    value="<?= e((string) $old['frtl']) ?>"
                    <?= $isEdit ? 'readonly' : 'required' ?>
-                   style="width:14rem;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;<?= $isEdit ? 'background:#f1f5f9;color:#475569;' : '' ?>">
-            <small class="muted">
+                   class="field max-w-[14rem] <?= $isEdit ? 'bg-slate-100 text-slate-500' : '' ?>">
+            <span class="field-hint">
                 <?php if ($isEdit): ?>
                     The FRTL number is locked. To change it, delete this load and re-add.
                 <?php else: ?>
                     From your dispatch paperwork. Required to save the load to your account.
                 <?php endif; ?>
-            </small>
-        </p>
+            </span>
+        </div>
 
-        <p>
-            <label for="load_date"><strong>Load date</strong></label><br>
+        <div>
+            <label for="load_date" class="field-label">Load date</label>
             <input id="load_date" name="load_date" type="date" required
-                   value="<?= e($dateValue) ?>"
-                   max="<?= e($today) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-            <small class="muted">
+                   value="<?= e($dateValue) ?>" max="<?= e($today) ?>"
+                   class="field max-w-xs">
+            <span class="field-hint">
                 Defaults to today. Set to the actual delivery date if you're entering
-                paperwork after the fact &mdash; the dashboard groups by this date,
+                paperwork after the fact — the dashboard groups by this date,
                 not entry time.
-            </small>
-        </p>
+            </span>
+        </div>
 
-        <div id="begin-empty-wrapper" style="margin:0 0 1rem 0;<?= $beVisible ? '' : 'display:none;' ?>">
-            <label for="begin_empty_terminal"><strong>Begin empty from</strong></label><br>
+        <div id="begin-empty-wrapper"
+             class="rounded-lg bg-slate-50 border border-brand-line px-4 py-4"
+             style="<?= $beVisible ? '' : 'display:none;' ?>">
+            <label for="begin_empty_terminal" class="field-label">Begin empty from</label>
             <select id="begin_empty_terminal"
                     data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
-                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:18rem;max-width:100%;">
+                    class="field-select max-w-md">
                 <?php if ($isEdit): ?>
                     <option value="keep" selected>— Keep current miles —</option>
                 <?php else: ?>
@@ -124,43 +129,42 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                 <?php endforeach; ?>
                 <option value="other">Other / I'll type my own miles…</option>
             </select>
-            <small class="muted" style="display:block;margin-top:.25rem;">
+            <span class="field-hint">
                 Pick the terminal you started empty from. We'll fill in
                 the miles to your pickup automatically.
-            </small>
-            <p id="begin-empty-status"
-               style="margin:.4rem 0 .2rem 0;font-size:13px;display:none;"></p>
-            <label for="begin_empty_miles"
-                   style="display:block;margin-top:.4rem;font-weight:600;">Begin empty miles</label>
+            </span>
+            <p id="begin-empty-status" class="text-sm mt-2 mb-0" style="display:none;"></p>
+            <label for="begin_empty_miles" class="field-label mt-3">Begin empty miles</label>
             <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
                    value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
-            <small class="muted">
+                   class="field max-w-[8rem]">
+            <span class="field-hint">
                 Auto-filled by the terminal pick above. Pick
                 <em>Other</em> to type the miles yourself.
-            </small>
+            </span>
         </div>
 
-        <p>
-            <label for="pickup_city"><strong>Pick-up terminal</strong></label><br>
-            <select id="pickup_city" name="pickup_city" required
-                    style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-                <option value="" disabled <?= $old['pickup'] === '' ? 'selected' : '' ?>>Choose a terminal&hellip;</option>
+        <div>
+            <label for="pickup_city" class="field-label">Pick-up terminal</label>
+            <select id="pickup_city" name="pickup_city" required class="field-select">
+                <option value="" disabled <?= $old['pickup'] === '' ? 'selected' : '' ?>>Choose a terminal…</option>
                 <?php foreach ($terminals as $t): ?>
                     <option value="<?= e($t) ?>" <?= $old['pickup'] === $t ? 'selected' : '' ?>>
                         <?= e($t) ?>
                     </option>
                 <?php endforeach; ?>
             </select>
-            <small class="muted">Drivers pick up loads at one of the dispatch terminals; the full city list is for delivery only.</small>
-        </p>
+            <span class="field-hint">
+                Drivers pick up loads at one of the dispatch terminals; the
+                full city list is for delivery only.
+            </span>
+        </div>
 
-        <p>
-            <label for="delivery_city"><strong>Delivery city</strong></label><br>
+        <div>
+            <label for="delivery_city" class="field-label">Delivery city</label>
             <input list="city-options" id="delivery_city" name="delivery_city" type="text" required
-                   value="<?= e((string) $old['delivery']) ?>"
-                   style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-        </p>
+                   value="<?= e((string) $old['delivery']) ?>" class="field">
+        </div>
 
         <datalist id="city-options">
             <?php foreach ($cities as $c): ?>
@@ -168,95 +172,105 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
             <?php endforeach; ?>
         </datalist>
 
-        <fieldset style="border:1px solid #cbd2da;border-radius:6px;padding:.6rem 1rem;margin:0 0 1rem 0;">
-            <legend><strong>Load type</strong></legend>
-            <label style="margin-right:1.2rem;">
-                <input type="radio" name="load_type" value="0" <?= $old['load_type'] !== '1' ? 'checked' : '' ?>>
-                Loaded one-way
-            </label>
-            <label>
-                <input type="radio" name="load_type" value="1" <?= $old['load_type'] === '1' ? 'checked' : '' ?>>
-                Round-trip
-            </label>
+        <fieldset class="border border-brand-line rounded-lg p-4">
+            <legend class="px-2 text-sm font-semibold text-brand-ink">Load type</legend>
+            <div class="flex flex-wrap gap-x-6 gap-y-2 mt-1">
+                <label class="inline-flex items-center gap-2 min-h-[44px]">
+                    <input type="radio" name="load_type" value="0" class="field-radio"
+                           <?= $old['load_type'] !== '1' ? 'checked' : '' ?>>
+                    <span>Loaded one-way</span>
+                </label>
+                <label class="inline-flex items-center gap-2 min-h-[44px]">
+                    <input type="radio" name="load_type" value="1" class="field-radio"
+                           <?= $old['load_type'] === '1' ? 'checked' : '' ?>>
+                    <span>Round-trip</span>
+                </label>
+            </div>
         </fieldset>
 
-        <p id="end-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
-            <label for="end_empty_city"><strong>End Empty location</strong></label><br>
+        <div id="end-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
+            <label for="end_empty_city" class="field-label">End Empty location</label>
             <input list="city-options" id="end_empty_city" name="end_empty_city" type="text"
-                   value="<?= e((string) ($old['end_empty'] ?? '')) ?>"
-                   style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-            <small class="muted">
+                   value="<?= e((string) ($old['end_empty'] ?? '')) ?>" class="field">
+            <span class="field-hint">
                 Where you ended after the delivery (typically the terminal you returned to).
-                Empty leg = delivery &rarr; here. Leave blank if you didn't go anywhere empty.
-            </small>
-        </p>
+                Empty leg = delivery → here. Leave blank if you didn't go anywhere empty.
+            </span>
+        </div>
 
-        <p>
-            <label>
-                <input type="checkbox" name="is_split" value="1" <?= $old['split'] === '1' ? 'checked' : '' ?>>
-                Split load
-            </label>
-            &nbsp;&nbsp;
-            <label>
-                <input type="checkbox" name="is_weekend" value="1" <?= $old['weekend'] === '1' ? 'checked' : '' ?>>
-                Weekend
-            </label>
-            &nbsp;&nbsp;
-            <label id="begin-empty-toggle-label">
-                <input type="checkbox" id="begin_empty_checkbox" <?= $beChecked ? 'checked' : '' ?>>
-                Begin Empty
-            </label>
-        </p>
+        <fieldset class="border border-brand-line rounded-lg p-4">
+            <legend class="px-2 text-sm font-semibold text-brand-ink">Flags</legend>
+            <div class="flex flex-wrap gap-x-6 gap-y-2 mt-1">
+                <label class="inline-flex items-center gap-2 min-h-[44px]">
+                    <input type="checkbox" name="is_split" value="1" class="field-checkbox"
+                           <?= $old['split'] === '1' ? 'checked' : '' ?>>
+                    <span>Split load</span>
+                </label>
+                <label class="inline-flex items-center gap-2 min-h-[44px]">
+                    <input type="checkbox" name="is_weekend" value="1" class="field-checkbox"
+                           <?= $old['weekend'] === '1' ? 'checked' : '' ?>>
+                    <span>Weekend</span>
+                </label>
+                <label id="begin-empty-toggle-label" class="inline-flex items-center gap-2 min-h-[44px]">
+                    <input type="checkbox" id="begin_empty_checkbox" class="field-checkbox"
+                           <?= $beChecked ? 'checked' : '' ?>>
+                    <span>Begin Empty</span>
+                </label>
+            </div>
+        </fieldset>
 
-        <p>
-            <label for="dem_minutes"><strong>Demurrage minutes</strong></label><br>
-            <input id="dem_minutes" name="dem_minutes" type="number" min="0" max="1440" step="1"
-                   value="<?= e((string) $old['dem']) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
-            <small class="muted">0 if none.</small>
-        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+                <label for="dem_minutes" class="field-label">Demurrage minutes</label>
+                <input id="dem_minutes" name="dem_minutes" type="number" min="0" max="1440" step="1"
+                       value="<?= e((string) $old['dem']) ?>"
+                       class="field">
+                <span class="field-hint">0 if none.</span>
+            </div>
 
-        <p>
-            <label for="break_minutes"><strong>Breakdown minutes</strong></label><br>
-            <input id="break_minutes" name="break_minutes" type="number" min="0" max="1440" step="1"
-                   value="<?= e((string) $old['break']) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
-            <small class="muted">0 if none.</small>
-        </p>
+            <div>
+                <label for="break_minutes" class="field-label">Breakdown minutes</label>
+                <input id="break_minutes" name="break_minutes" type="number" min="0" max="1440" step="1"
+                       value="<?= e((string) $old['break']) ?>"
+                       class="field">
+                <span class="field-hint">0 if none.</span>
+            </div>
 
-        <p>
-            <label for="extra_pay"><strong>Extra pay ($)</strong></label><br>
-            <input id="extra_pay" name="extra_pay" type="number" min="0" max="999.99" step="0.01"
-                   value="<?= e((string) $old['extra']) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
-        </p>
+            <div>
+                <label for="extra_pay" class="field-label">Extra pay ($)</label>
+                <input id="extra_pay" name="extra_pay" type="number" min="0" max="999.99" step="0.01"
+                       value="<?= e((string) $old['extra']) ?>"
+                       class="field">
+            </div>
+        </div>
 
-        <p>
-            <label for="out_of_route_miles"><strong>Out-of-route miles</strong></label><br>
+        <div>
+            <label for="out_of_route_miles" class="field-label">Out-of-route miles</label>
             <input id="out_of_route_miles" name="out_of_route_miles" type="number" min="0" max="9999" step="1"
                    value="<?= e((string) ($old['out_of_route_miles'] ?? '0')) ?>"
-                   style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;width:8rem;">
-            <small class="muted">
+                   class="field max-w-[10rem]">
+            <span class="field-hint">
                 Total <em>actual</em> loaded miles when a detour added significant distance
                 (construction, road closure, etc.). Only used if it exceeds the
                 map distance by more than 3 miles; otherwise the map distance pays.
-            </small>
-        </p>
+            </span>
+        </div>
 
-        <p>
-            <label for="notes"><strong>Notes (optional)</strong></label><br>
+        <div>
+            <label for="notes" class="field-label">Notes (optional)</label>
             <textarea id="notes" name="notes" rows="2" maxlength="900"
-                      style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;"><?= e((string) ($old['notes'] ?? '')) ?></textarea>
-        </p>
+                      class="field"><?= e((string) ($old['notes'] ?? '')) ?></textarea>
+        </div>
 
-        <p>
-            <button type="submit"
-                    style="background:var(--accent);color:#fff;border:0;padding:.6rem 1.4rem;border-radius:6px;font:inherit;cursor:pointer;">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+            <button type="submit" class="btn-primary">
                 <?= $isEdit ? 'Save changes' : 'Add load' ?>
             </button>
-            &nbsp;<a href="<?= e($base) ?>/<?= $isEdit ? 'dashboard' : 'loads' ?>">Cancel</a>
-        </p>
+            <a href="<?= e($base) ?>/<?= $isEdit ? 'dashboard' : 'loads' ?>" class="text-sm">Cancel</a>
+        </div>
     </form>
+</div>
+</div>
 
     <script>
         // Visibility rules for the two empty-leg sections.
@@ -687,9 +701,12 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
         })();
     </script>
 
-    <p class="muted" style="margin-top:1.5rem;font-size:13px;">
-        Mileage is looked up in the city-distances matrix first; on a miss
-        we fall through to Google Maps and cache the result so the next
-        load with the same pair stays local.
-    </p>
-</div>
+    <div class="max-w-2xl mx-auto">
+        <div class="card">
+            <p class="text-sm text-brand-muted m-0">
+                Mileage is looked up in the city-distances matrix first; on a miss
+                we fall through to Google Maps and cache the result so the next
+                load with the same pair stays local.
+            </p>
+        </div>
+    </div>

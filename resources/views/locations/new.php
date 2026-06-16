@@ -8,53 +8,58 @@
  */
 layout('layouts/app');
 ?>
-<div class="card">
-    <h1>Add a city</h1>
+<div class="max-w-xl mx-auto">
+    <div class="card">
+        <h1 class="m-0">Add a city</h1>
+        <p class="text-brand-muted mt-2">
+            Inserts a row into the <code>city</code> table for use across the
+            pickup / delivery pickers and the distance cache.
+        </p>
+    </div>
 
     <?php if ($flash !== null): ?>
-        <p class="muted" style="background:#fee2e2;color:#991b1b;border-radius:6px;padding:.6rem .8rem;">
-            <?= e($flash) ?>
-        </p>
+        <div class="flash-err" role="alert"><?= e($flash) ?></div>
     <?php endif; ?>
 
-    <form method="post" action="<?= e($base) ?>/locations" novalidate autocomplete="off">
-        <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
+    <div class="card">
+        <form method="post" action="<?= e($base) ?>/locations" novalidate autocomplete="off" class="space-y-5">
+            <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
 
-        <p>
-            <label for="name"><strong>City name</strong></label><br>
-            <input id="name" name="name" type="text" required autofocus maxlength="48"
-                   value="<?= e((string) $old['name']) ?>"
-                   pattern="[A-Za-z][A-Za-z .'\-]{0,47}"
-                   style="width:100%;padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-            <small class="muted">Letters, spaces, periods, hyphens, apostrophes only.</small>
+            <div>
+                <label for="name" class="field-label">City name</label>
+                <input id="name" name="name" type="text" required autofocus maxlength="48"
+                       value="<?= e((string) $old['name']) ?>"
+                       pattern="[A-Za-z][A-Za-z .'\-]{0,47}"
+                       class="field">
+                <span class="field-hint">Letters, spaces, periods, hyphens, apostrophes only.</span>
+            </div>
+
+            <div>
+                <label for="state" class="field-label">State</label>
+                <select id="state" name="state" required class="field-select w-32">
+                    <option value="">— choose —</option>
+                    <?php foreach ($states as $code): ?>
+                        <option value="<?= e($code) ?>" <?= $old['state'] === $code ? 'selected' : '' ?>>
+                            <?= e($code) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                <button type="submit" class="btn-primary">Add city</button>
+                <a href="<?= e($base) ?>/locations" class="text-sm">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <p class="text-sm text-brand-muted m-0">
+            This form inserts a row into the <code>city</code> table only.
+            The legacy <code>largeMiles</code> distance matrix is not updated
+            here — the modern lookup goes through <code>city_distances</code>
+            (with a Google Maps fill-fallback) and admins can override pair
+            distances on the <a href="<?= e($base) ?>/distances">distances</a> page.
         </p>
-
-        <p>
-            <label for="state"><strong>State</strong></label><br>
-            <select id="state" name="state" required
-                    style="padding:.5rem;border:1px solid #cbd2da;border-radius:6px;font:inherit;">
-                <option value="">— choose —</option>
-                <?php foreach ($states as $code): ?>
-                    <option value="<?= e($code) ?>" <?= $old['state'] === $code ? 'selected' : '' ?>>
-                        <?= e($code) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </p>
-
-        <p>
-            <button type="submit"
-                    style="background:var(--accent);color:#fff;border:0;padding:.6rem 1.4rem;border-radius:6px;font:inherit;cursor:pointer;">
-                Add city
-            </button>
-            &nbsp;<a href="<?= e($base) ?>/locations">Cancel</a>
-        </p>
-    </form>
-
-    <p class="muted" style="margin-top:1.5rem;font-size:13px;">
-        This modern form inserts a row into the <code>city</code> table only.
-        The legacy <code>largeMiles</code> distance matrix is not updated yet
-        &mdash; a follow-up branch will replace that anti-relational design
-        with a normalised <code>city_distances</code> table.
-    </p>
+    </div>
 </div>
