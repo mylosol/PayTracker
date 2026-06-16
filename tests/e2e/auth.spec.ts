@@ -20,7 +20,10 @@ test.describe('auth flow', () => {
     test('5a — anonymous landing offers Sign in', async ({ page }) => {
         await page.goto('');
         await expect(page.getByRole('heading', { name: /sign in to continue/i })).toBeVisible();
-        await expect(page.getByRole('link', { name: /sign in/i })).toBeVisible();
+        // The new shell renders a Sign in link in the header AND a
+        // Sign in button on the hero card. Both should be reachable;
+        // assert at least one is visible.
+        await expect(page.getByRole('link', { name: /sign in/i }).first()).toBeVisible();
     });
 
     test('5a — wrong password rejected with generic banner', async ({ page }) => {
