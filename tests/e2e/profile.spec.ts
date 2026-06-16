@@ -33,7 +33,7 @@ test.describe('driver profile', () => {
         await page.goto('profile');
         // The native date picker rejects garbage at the browser layer;
         // force it through by setting noValidate on the form.
-        await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
+        await page.locator('main form').first().evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.locator('#hire_date').evaluate((el) => {
             (el as HTMLInputElement).type = 'text';
             (el as HTMLInputElement).value = 'not-a-date';

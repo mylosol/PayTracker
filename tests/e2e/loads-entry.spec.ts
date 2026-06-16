@@ -101,7 +101,7 @@ test.describe('load entry (write path)', () => {
         // submission. We disable it here to exercise the SERVER's
         // required-FRTL rule (defense in depth — JS-off clients hit
         // the same friendly error).
-        await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
+        await page.locator('main form').first().evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Lynn Haven, FL');
         await page.locator('input[name="load_type"][value="0"]').check();

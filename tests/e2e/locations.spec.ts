@@ -45,7 +45,7 @@ test.describe('locations (add-city)', () => {
         // Bypass HTML5 validation by setting the field then submitting via JS.
         await page.locator('#name').fill('');
         await page.locator('#state').selectOption('FL');
-        await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
+        await page.locator('main form').first().evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.getByRole('button', { name: /add city/i }).click();
         await expect(page.getByText(/enter both a city name and a state/i)).toBeVisible();
     });
@@ -53,7 +53,7 @@ test.describe('locations (add-city)', () => {
     test('6c — digits in city name are rejected', async ({ page }) => {
         await signIn(page);
         await page.goto('locations/new');
-        await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
+        await page.locator('main form').first().evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.locator('#name').fill('Testville2');
         await page.locator('#state').selectOption('FL');
         await page.getByRole('button', { name: /add city/i }).click();
