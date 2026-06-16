@@ -2,8 +2,9 @@
 /** @var string $base */
 layout('layouts/app');
 ?>
-<div class="card">
-    <h1>Contact</h1>
+<div class="max-w-3xl mx-auto">
+<div class="card prose-static">
+    <h1 class="m-0">Contact</h1>
 
     <p>
         Found a bug, have a feature request, or need an account seeded?
@@ -34,7 +35,8 @@ layout('layouts/app');
         for; an admin will reply with sign-in instructions.
     </p>
 
-    <p style="margin-top:2rem;">
-        <a href="<?= e($base) ?>/">&larr; Back home</a>
+    <p class="mt-8">
+        <a href="<?= e($base) ?>/">← Back home</a>
     </p>
+</div>
 </div>

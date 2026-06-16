@@ -229,6 +229,31 @@
         @apply px-3 py-3 align-top text-[0.95rem];
     }
 
+    /* --- Static prose pages --------------------------------------- */
+    /* Help pages (tutorial / FAQ / about / contact) and error pages
+       are mostly long-form text. Single component class so spacing,
+       list bullets, and link affordances stay consistent across them
+       without sprinkling Tailwind utilities at every paragraph. */
+    .prose-static h2 {
+        @apply text-xl font-semibold mt-7 mb-2;
+    }
+    .prose-static h3 {
+        @apply text-lg font-semibold mt-5 mb-2;
+    }
+    .prose-static p {
+        @apply mt-3 leading-relaxed;
+    }
+    .prose-static ul {
+        @apply mt-3 pl-6 list-disc space-y-1.5;
+    }
+    .prose-static a {
+        @apply underline decoration-brand-primary/40 underline-offset-2
+               hover:decoration-brand-primary;
+    }
+    .prose-static code {
+        @apply px-1 py-0.5 rounded bg-slate-100 text-[0.95em];
+    }
+
     /* --- Legacy compatibility -------------------------------------- */
     /* Old views still reference these utility classnames; aliasing
        them here keeps unconverted Phase-2/3 views readable until they

@@ -2,10 +2,11 @@
 /** @var string $base */
 layout('layouts/app');
 ?>
-<div class="card">
-    <h1>About PayTracker</h1>
+<div class="max-w-3xl mx-auto">
+<div class="card prose-static">
+    <h1 class="m-0">About PayTracker</h1>
 
-    <p>
+    <p class="mt-4">
         PayTracker is a per-driver pay-tracking tool for fuel-haul
         trucking: log a load, see what it pays, and know where your
         weekly total stands without waiting on the paper stub.
@@ -62,7 +63,8 @@ layout('layouts/app');
         legacy stack until parity is complete.
     </p>
 
-    <p style="margin-top:2rem;">
-        <a href="<?= e($base) ?>/">&larr; Back home</a>
+    <p class="mt-8">
+        <a href="<?= e($base) ?>/">← Back home</a>
     </p>
+</div>
 </div>
