@@ -28,7 +28,7 @@ export default defineConfig({
         timeout: 5_000,
     },
     use: {
-        baseURL: process.env.BASE_URL ?? 'https://paytracker.xyz/preview/',
+        baseURL: process.env.BASE_URL ?? 'https://preview.paytracker.xyz/',
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
         // Be a polite UA — flagged so the legacy site can identify automated

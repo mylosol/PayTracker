@@ -33,8 +33,11 @@ export async function signIn(page: Page): Promise<void> {
 
     await page.goto('login');
 
-    // If we somehow already had a session, the login route bounces home.
-    if (page.url().endsWith('/preview/') || page.url().endsWith('/preview')) {
+    // If we somehow already had a session, the login route bounces home --
+    // so the URL no longer ends in /login. Test for that semantic
+    // ("am I still on the login page?") instead of hard-coding a domain,
+    // which would have to change on every host migration.
+    if (!page.url().endsWith('/login')) {
         return;
     }
 

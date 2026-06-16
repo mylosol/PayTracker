@@ -1,31 +1,33 @@
 # PayTracker — preview-channel deployment.
 #
 # Trigger:  push to any `feature/**` branch
-# Target:   /home/robshe48/paytracker/preview  on DreamHost
-# URL:      https://paytracker.xyz/preview/
+# Target:   Web Host Most (cPanel / LiteSpeed)
+#           ${{ secrets.WHM_PREVIEW_BASE_PATH }}
+#           (typically /home/<user>/domains/preview.paytracker.xyz/public_html)
+# URL:      https://preview.paytracker.xyz/
 #
 # Goal of the preview channel: let stakeholders validate a branch end-to-end
 # without ever touching production code, files, or session cookies. Because
-# the deploy lives at a distinct URL path (`/preview/`) the session cookie
-# automatically scopes away from the production root.
+# the preview lives on a separate subdomain (preview.paytracker.xyz) the
+# session cookie naturally scopes away from production.
 #
-# The preview deploy WILL overwrite anything previously deployed at the
-# preview path — that is by design; only one branch is "previewed live" at
-# a time. Re-running the workflow from a different feature branch swaps it
-# in.
+# The preview deploy WILL overwrite anything previously deployed there —
+# that is by design; only one branch is "previewed live" at a time. Re-running
+# the workflow from a different feature branch swaps it in.
 #
-# Secrets required (same set as production):
-#   DH_SSH_HOST  DH_SSH_USER  DH_SSH_PRIVATE_KEY  DH_SSH_KNOWN_HOSTS
-#   APP_KEY  SQL_HOST  SQL_DB  SQL_UN  SQL_PW  MAPS_API_PAT
-#   RESEND_API   (transactional email; empty disables sending)
-#   MAIL_FROM    (optional; verified Resend sender, defaults to PayTracker <noreply@paytracker.xyz>)
+# Secrets required:
+#   WHM_SSH_HOST          cPanel SSH host (often the cPanel domain itself)
+#   WHM_SSH_USER          cPanel account user
+#   WHM_SSH_PORT          cPanel SSH port (commonly 22 or 21098)
+#   WHM_SSH_KEY           SSH private key with deploy access
+#   WHM_PREVIEW_BASE_PATH absolute path to the preview subdomain's docroot
+#   WHM_DB_NAME / WHM_DB_USER / WHM_DB_PASS   MySQL credentials
+#   APP_KEY  MAPS_API_PAT  RESEND_API  MAIL_FROM (latter two optional)
 #
 # Optional (Playwright E2E tests skip gracefully when unset):
 #   QA_TEST_USER       login handle for the seeded preview test account
-#                      (e.g. mylosol@gmail.com)
 #   QA_TEST_PASSWORD   the password the deploy seeds into that account
-#                      via scripts/set-password.php on every run, AND
-#                      the password Playwright uses to log in
+#                      via scripts/set-password.php on every run
 
 name: Deploy preview
 
@@ -41,7 +43,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy to DreamHost (preview)
+    name: Deploy to Web Host Most (preview)
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 15
@@ -50,10 +52,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Pin the CI runtime to the exact PHP version DreamHost shared hosting
-      # ships (8.2). Linting and platform_check then catch any 8.3-only
-      # syntax before it hits the server. Bump in lockstep if/when DreamHost
-      # rolls 8.3 to this shared host.
+      # Pin the CI runtime to PHP 8.2. WHM/cPanel hosts typically expose
+      # multiple PHP versions but our scripts target 8.3 features; linting
+      # against 8.2 catches anything that won't run on a slightly older
+      # host. The live preview's PHP version is whatever's configured in
+      # cPanel's MultiPHP Manager.
       - name: Set up PHP 8.2
         uses: shivammathur/setup-php@v2
         with:
@@ -65,9 +68,6 @@ jobs:
       - name: Validate composer manifest
         run: composer validate --strict
 
-      # Install with dev dependencies so phpstan is available below.
-      # We re-install --no-dev right before rsync so the deployed vendor/
-      # tree stays lean.
       - name: Install PHP dependencies (with dev for static analysis)
         run: composer install --prefer-dist --no-interaction --no-progress
 
@@ -77,44 +77,21 @@ jobs:
           find app bootstrap config public routes -name '*.php' -print0 \
             | xargs -0 -n1 php -l > /dev/null
 
-      # PSR-4 conformance check. `--strict-psr` makes composer fail when any
-      # class's namespace doesn't match its file location. This catches
-      # rename/typo bugs before they reach the server. It's lightweight and
-      # doesn't try to instantiate classes (which would risk false positives
-      # from autoload side-effects). LSP / load-time fatals are caught by
-      # the live /health.json smoke at the end of the workflow.
       - name: Validate PSR-4 autoload mapping
         run: composer dump-autoload --optimize --strict-psr --no-interaction
 
-      # Static analysis. Catches the class of bug that bare-class-reference
-      # inside a method body produces (e.g. forgetting `use PDO;` before
-      # `PDO::FETCH_ASSOC`), which `php -l` and PSR-4 validation both miss.
-      # Config in phpstan.neon; level can be bumped over time.
       - name: Static analysis (phpstan)
         run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress --error-format=github
 
-      # Unit tests. These run BEFORE deploy so a regression in pure-PHP
-      # logic (PayCalculator, model behaviour) fails fast rather than
-      # waiting for the Playwright suite to surface it. The suite is
-      # intentionally small (PHPUnit on tests/Unit only) — DB-touching
-      # tests are covered by Playwright against the live preview.
       - name: PHP unit tests
         run: vendor/bin/phpunit --colors=never
 
-      # Strip dev dependencies before rsync so the deployed vendor/ tree
-      # doesn't carry phpstan, phpunit, and their transitive deps. We
-      # already proved the build is clean above; reinstalling without dev
-      # deps is fast (composer cache is hot).
       - name: Re-install without dev dependencies (for deploy)
         run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
-      # Compile the Tailwind stylesheet into public/assets/app.css
-      # before rsync. DreamHost shared hosting has no Node runtime;
-      # the build has to happen here. We set up Node briefly (the
-      # later Playwright step does its own setup), install the
-      # tooling subset npm needs (no Playwright browsers yet), and
-      # emit the minified CSS. The compiled file is then rsynced as
-      # part of the public/ tree.
+      # Compile the Tailwind stylesheet into public/assets/app.css before
+      # rsync. The remote host has no Node runtime; the build has to happen
+      # here, and the resulting file rides along in the rsynced tree.
       - name: Set up Node.js for CSS build
         uses: actions/setup-node@v4
         with:
@@ -126,29 +103,45 @@ jobs:
       - name: Build Tailwind CSS (minified)
         run: npm run css:build
 
+      # ----- Prepare SSH ---------------------------------------------------
+      # WHM/cPanel hosts often use a non-standard SSH port. We pin the
+      # known-hosts entry on first connect via StrictHostKeyChecking=accept-new
+      # rather than shipping a pre-computed WHM_KNOWN_HOSTS secret, so a
+      # legitimate host-key rotation just re-fingerprints rather than
+      # failing the deploy. Re-pinning would require deleting the
+      # known_hosts entry in this job's tempdir which doesn't persist.
       - name: Install SSH key
+        env:
+          WHM_SSH_KEY:  ${{ secrets.WHM_SSH_KEY }}
+          WHM_SSH_HOST: ${{ secrets.WHM_SSH_HOST }}
+          WHM_SSH_PORT: ${{ secrets.WHM_SSH_PORT }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "${{ secrets.DH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          echo "$WHM_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          echo "${{ secrets.DH_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          ssh-keyscan -p "${WHM_SSH_PORT}" "$WHM_SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           chmod 644 ~/.ssh/known_hosts
 
       - name: Ensure preview directory exists on remote
         env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          REMOTE: ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:   ${{ secrets.WHM_SSH_PORT }}
+          DEST:   ${{ secrets.WHM_PREVIEW_BASE_PATH }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "mkdir -p /home/robshe48/paytracker/preview"
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" "mkdir -p '$DEST'"
 
-      # `--delete` keeps the preview tree clean; we exclude the legacy root
-      # files the rebuild does not need so the preview shows only the modern
-      # stack. Once the modern app fully supersedes the legacy code these
-      # exclusions can be tightened or removed.
+      # Rsync deploys the project root INTO the docroot. The root .htaccess
+      # rewrites every non-static request to public/index.php, which is the
+      # modern front controller. The legacy PHP tree is NOT rsynced -- this
+      # host carries the modern app only (Robert's call during the WHM
+      # migration). Excluded paths are CI / framework / dev-only files.
       - name: Rsync repository to preview path
         env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          REMOTE: ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:   ${{ secrets.WHM_SSH_PORT }}
+          DEST:   ${{ secrets.WHM_PREVIEW_BASE_PATH }}
         run: |
           set -euo pipefail
           rsync -avz --delete \
@@ -165,27 +158,30 @@ jobs:
             --exclude='.PayTracker/' \
             --exclude='.env' \
             --exclude='.env.local' \
-            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=yes" \
-            ./ "$REMOTE:/home/robshe48/paytracker/preview/"
+            -e "ssh -p $PORT -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new" \
+            ./ "$REMOTE:$DEST/"
 
       # Promote the preview-specific root .htaccess into place. The repo
-      # version is intentionally named differently so it stays inert during
-      # local development.
+      # version is named differently so it stays inert during local
+      # development.
       - name: Activate preview .htaccess
         env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          REMOTE: ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:   ${{ secrets.WHM_SSH_PORT }}
+          DEST:   ${{ secrets.WHM_PREVIEW_BASE_PATH }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cp /home/robshe48/paytracker/preview/deploy/preview.htaccess /home/robshe48/paytracker/preview/.htaccess"
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cp '$DEST/deploy/preview.htaccess' '$DEST/.htaccess'"
 
       - name: Write preview .env on remote
         env:
-          REMOTE:    ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          REMOTE:    ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:      ${{ secrets.WHM_SSH_PORT }}
+          DEST:      ${{ secrets.WHM_PREVIEW_BASE_PATH }}
           APP_KEY:   ${{ secrets.APP_KEY }}
-          DB_HOST:   ${{ secrets.SQL_HOST }}
-          DB_NAME:   ${{ secrets.SQL_DB }}
-          DB_USER:   ${{ secrets.SQL_UN }}
-          DB_PASS:   ${{ secrets.SQL_PW }}
+          DB_NAME:   ${{ secrets.WHM_DB_NAME }}
+          DB_USER:   ${{ secrets.WHM_DB_USER }}
+          DB_PASS:   ${{ secrets.WHM_DB_PASS }}
           MAPS_KEY:  ${{ secrets.MAPS_API_PAT }}
           RESEND_KEY: ${{ secrets.RESEND_API }}
           MAIL_FROM_ADDR: ${{ secrets.MAIL_FROM }}
@@ -194,19 +190,18 @@ jobs:
           RUN_NUM:   ${{ github.run_number }}
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "cat > /home/robshe48/paytracker/preview/.env" <<EOF
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" "cat > '$DEST/.env'" <<EOF
           APP_ENV=preview
           APP_DEBUG=true
           APP_NAME="PayTracker (preview: ${BRANCH})"
-          APP_URL=https://paytracker.xyz/preview
+          APP_URL=https://preview.paytracker.xyz
           APP_TIMEZONE=America/Chicago
           APP_KEY=${APP_KEY}
 
-          # The preview channel reads the same database as production by
-          # default — read-only flows are safe. Once write flows arrive,
-          # point this at a sandboxed schema to keep production data
-          # completely untouched, per the spec's isolation requirement.
-          DB_HOST=${DB_HOST}
+          # cPanel-default DB host. The preview subdomain points at the
+          # WHM-side schema migrated from DreamHost; same per-table layout,
+          # different credentials.
+          DB_HOST=localhost
           DB_PORT=3306
           DB_DATABASE=${DB_NAME}
           DB_USERNAME=${DB_USER}
@@ -220,45 +215,33 @@ jobs:
 
           GOOGLE_MAPS_API_KEY=${MAPS_KEY}
 
-          # Resend transactional email (admin-initiated password reset).
-          # Empty RESEND_API disables sending; the admin panel still shows
-          # the reset URL in the flash banner so the action keeps working.
-          # MAIL_FROM defaults in config to a verified-domain sender, but
-          # the deploy secret overrides for env-specific addresses.
+          # Resend transactional email. Empty RESEND_API disables sending;
+          # the admin panel still shows the reset URL in the flash banner
+          # so the action keeps working.
           RESEND_API=${RESEND_KEY}
           MAIL_FROM="${MAIL_FROM_ADDR:-PayTracker <noreply@paytracker.xyz>}"
 
           # Build provenance — surfaced on /health and in the footer.
-          # BUILD_NUMBER is GH Actions' per-workflow run counter; the
-          # preview channel's counter is independent of production's.
           BUILD_BRANCH=${BRANCH}
           BUILD_COMMIT=${COMMIT}
           BUILD_NUMBER=${RUN_NUM}
           EOF
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 /home/robshe48/paytracker/preview/.env"
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" "chmod 600 '$DEST/.env'"
 
-      # Run pending DB migrations on the remote using the live preview .env.
-      # Migrations are additive-only by policy (see app/Console/Migrator.php)
-      # so re-running is safe: the tracking table skips anything already
-      # applied. If a migration fails, the deploy fails — production traffic
-      # is unaffected because the Pi is still authoritative for paytracker.xyz.
       - name: Apply database migrations on remote
         env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          REMOTE: ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:   ${{ secrets.WHM_SSH_PORT }}
+          DEST:   ${{ secrets.WHM_PREVIEW_BASE_PATH }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/migrate.php"
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd '$DEST' && php scripts/migrate.php"
 
-      # Sync the QA test account's password from GH secrets so the Playwright
-      # suite below can log in with a known-good credential. The password
-      # set here lives only on the preview channel — it is NEVER set on
-      # production. Gating happens at the shell level (not via a GH Actions
-      # `if:` expression) because `${{ secrets.X != '' }}` doesn't evaluate
-      # reliably when the secret is masked; checking the env var directly
-      # in bash is straightforward and explicit.
       - name: Sync QA test account password (preview only)
         env:
-          REMOTE:  ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          REMOTE:  ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:    ${{ secrets.WHM_SSH_PORT }}
+          DEST:    ${{ secrets.WHM_PREVIEW_BASE_PATH }}
           QA_USER: ${{ secrets.QA_TEST_USER }}
           QA_PASS: ${{ secrets.QA_TEST_PASSWORD }}
         run: |
@@ -267,38 +250,22 @@ jobs:
             echo "Playwright auth tests will skip themselves; non-auth tests still run."
             exit 0
           fi
-          # --role=super_admin: the QA account drives the Admin Panel
-          # walk-through (Sections 16-18 of the QA plan), which requires
-          # Super Admin for role assignment. Migration 2026_06_03_001
-          # already promotes mylosol@gmail.com to super_admin at migrate
-          # time; this --role flag preserves that posture across the
-          # deploy-time password sync that otherwise resets the column.
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/set-password.php '$QA_USER' '$QA_PASS' --role=super_admin"
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd '$DEST' && php scripts/set-password.php '$QA_USER' '$QA_PASS' --role=super_admin"
 
       - name: Smoke test (preview /health.json)
         run: |
           set -euo pipefail
           curl --fail --silent --show-error --max-time 15 \
-            "https://paytracker.xyz/preview/health.json" \
+            "https://preview.paytracker.xyz/health.json" \
             | tee preview-health.json
           test "$(jq -r .database.ok preview-health.json)" = "true"
 
       # ----- Playwright end-to-end suite -----------------------------------
-      # Runs the browser-level coverage of Sections 5-8 of docs/qa/test_plan.md
-      # against the just-deployed preview channel. The suite handles its own
-      # auth via QA_TEST_USER / QA_TEST_PASSWORD (synced into the DB above),
-      # and individual tests `.skip()` cleanly when those env vars are unset.
       - name: Set up Node.js 20 (for Playwright)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # `cache: 'npm'` would speed up subsequent runs, but it requires a
-          # committed package-lock.json. We don't have one yet — the first
-          # `npm install` on a fresh runner generates it. Skipping the
-          # cache directive is the trade-off; ~10s extra per run vs the
-          # complication of committing and maintaining the lockfile.
-          # Revisit when the JS dep list grows beyond a couple of packages.
 
       - name: Install Playwright dependencies
         run: npm install --no-audit --no-fund
@@ -308,30 +275,21 @@ jobs:
 
       - name: Run Playwright suite against the live preview
         env:
-          BASE_URL:         https://paytracker.xyz/preview/
+          BASE_URL:         https://preview.paytracker.xyz/
           QA_TEST_USER:     ${{ secrets.QA_TEST_USER }}
           QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
         run: npx playwright test --reporter=github,list
 
-      # Always-run cleanup. Sweeps QA-test rows across cities (Qa Test %),
-      # account lockouts, and driver_loads (notes prefixed "QA TEST ") so
-      # the preview DB doesn't accumulate orphan artefacts across runs.
-      # `if: always()` ensures we still tidy when Playwright itself failed.
-      # Running with no scope flag cleans all three; we used to pass
-      # --loads but that left stale QA test cities behind whenever an
-      # earlier deploy failed, which then made the locations.spec
-      # "valid submission" test trip the duplicate-rejected path on
-      # the next run.
       - name: Sweep QA test data from preview DB
         if: always()
         env:
-          REMOTE: ${{ secrets.DH_SSH_USER }}@${{ secrets.DH_SSH_HOST }}
+          REMOTE: ${{ secrets.WHM_SSH_USER }}@${{ secrets.WHM_SSH_HOST }}
+          PORT:   ${{ secrets.WHM_SSH_PORT }}
+          DEST:   ${{ secrets.WHM_PREVIEW_BASE_PATH }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 "$REMOTE" \
-            "cd /home/robshe48/paytracker/preview && php scripts/qa-cleanup.php --apply"
+          ssh -p "$PORT" -i ~/.ssh/id_ed25519 "$REMOTE" \
+            "cd '$DEST' && php scripts/qa-cleanup.php --apply"
 
-      # Upload the HTML report on failure so we can inspect screenshots,
-      # traces, and timings without re-running the suite locally.
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4

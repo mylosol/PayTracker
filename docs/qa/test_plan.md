@@ -26,7 +26,7 @@ lives at a separate URL specifically so production stays untouched.
 - Any modern desktop browser (Chrome, Firefox, Safari, or Edge).
 - An incognito / private window — keeps your session cookies isolated
   from anything else you're signed into.
-- The preview URL: **https://paytracker.xyz/preview/**
+- The preview URL: **https://preview.paytracker.xyz/**
 
 > If the preview URL is unreachable, the deploy did not finish. Ask the
 > engineering team to re-run the **Deploy preview** GitHub Actions
@@ -37,7 +37,7 @@ lives at a separate URL specifically so production stays untouched.
 ## 1. Landing page loads
 
 1. Open an incognito window.
-2. Visit **https://paytracker.xyz/preview/**.
+2. Visit **https://preview.paytracker.xyz/**.
 
 **Expected:**
 
@@ -74,7 +74,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 **Expected:**
 
 - The URL in the browser bar reads
-  `https://paytracker.xyz/preview/health`.
+  `https://preview.paytracker.xyz/health`.
 - The page lists:
   - **PHP version** — starts with `8.3`.
   - **Environment** — `preview`.
@@ -91,7 +91,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 ## 3. Machine-readable health probe
 
 1. In the same browser tab, change the URL to
-   `https://paytracker.xyz/preview/health.json` and press Enter.
+   `https://preview.paytracker.xyz/health.json` and press Enter.
 
 **Expected:**
 
@@ -107,7 +107,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 ## 4. Unknown page returns a friendly 404
 
-1. Visit **https://paytracker.xyz/preview/this-page-does-not-exist**.
+1. Visit **https://preview.paytracker.xyz/this-page-does-not-exist**.
 
 **Expected:**
 
@@ -133,7 +133,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 ### 5a. Wrong password is rejected
 
 1. From the preview landing page click **Sign in →**.
-2. You should arrive at `https://paytracker.xyz/preview/login` with a
+2. You should arrive at `https://preview.paytracker.xyz/login` with a
    form titled **"Sign in"**.
 3. Enter your test handle but a deliberately wrong password
    (e.g. `definitely-not-it`).
@@ -141,7 +141,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 **Expected:**
 
-- The page reloads at `/preview/login` with a red banner reading
+- The page reloads at `/login` with a red banner reading
   **"Incorrect login or password."**
 - The URL bar still shows `/login`. You are NOT signed in.
 
@@ -160,7 +160,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 **Expected:**
 
-- The URL changes to `https://paytracker.xyz/preview/`.
+- The URL changes to `https://preview.paytracker.xyz/`.
 - A new card appears reading **"Welcome, *your-handle*"** with a green
   `signed in` tag.
 - The card shows your role (`user` or `admin`) and the timestamp of
@@ -178,7 +178,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 **Expected:**
 
-- The URL becomes `https://paytracker.xyz/preview/login`.
+- The URL becomes `https://preview.paytracker.xyz/login`.
 - The login form is empty and ready to receive a fresh sign-in.
 - If you press the browser **Back** button you do NOT see the
   "Welcome" card — the session is genuinely gone, not just hidden.
@@ -219,12 +219,12 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 ### 6a. The link is gated behind authentication
 
 1. Sign out of the preview if you're currently signed in.
-2. Manually type **https://paytracker.xyz/preview/locations** into the
+2. Manually type **https://preview.paytracker.xyz/locations** into the
    browser address bar.
 
 **Expected:**
 
-- You are redirected to **`/preview/login`**. You never see the
+- You are redirected to **`/login`**. You never see the
   Locations page.
 
 **Fail conditions:**
@@ -239,7 +239,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 
 **Expected:**
 
-- URL changes to **`/preview/locations`**.
+- URL changes to **`/locations`**.
 - Heading reads **"Locations"** with a green **+ Add city** button.
 - A paragraph reading **"N cities on file."** appears (N matches the
   current count — at least a few, since the legacy app has been
@@ -250,7 +250,7 @@ old shared "monkey" cookie. The login flow itself is tested in step 5.
 ### 6c. The add-city form validates input
 
 1. Click **+ Add city**.
-2. URL changes to `/preview/locations/new`.
+2. URL changes to `/locations/new`.
 3. Leave the city name blank, pick **FL**, click **Add city**.
 
 **Expected:** red banner reads **"Enter both a city name and a state."**
@@ -276,7 +276,7 @@ is preserved in the form (so you don't have to retype it).
 
 **Expected:**
 
-- You land on `/preview/locations`.
+- You land on `/locations`.
 - A green banner reads **`Added "Qa Test Echo, FL" (id NNN).`**
 - Scrolling the list, the new city appears alphabetically.
 
@@ -326,7 +326,7 @@ table is read-only for now; writes will land in a future branch.
 
 **Expected:**
 
-- URL changes to `/preview/distances`.
+- URL changes to `/distances`.
 - A **"Backfill summary"** card shows:
     - Total rows: at least a few hundred (depends on legacy density —
       the matrix is sparse, but should not be zero).
@@ -387,10 +387,10 @@ Below the summary, the page shows the first 25 rows alphabetically.
 ### 7d. Auth gate still applies
 
 1. Sign out.
-2. Manually type `https://paytracker.xyz/preview/distances` into the
+2. Manually type `https://preview.paytracker.xyz/distances` into the
    address bar.
 
-**Expected:** redirected to `/preview/login`. The distances page is
+**Expected:** redirected to `/login`. The distances page is
 behind the same auth gate as `/locations`.
 
 > No cleanup needed for this section — it's purely a read-only
@@ -407,7 +407,7 @@ copies the 21 legacy `loadsNN` per-driver tables (where `N` is the
 driver's `account.id`) into a single relational table keyed by
 `driver_id` + `frtl`. The new table is read-only for now.
 
-**Access:** `/preview/loads` is the cross-driver survey surface — it
+**Access:** `/loads` is the cross-driver survey surface — it
 shows every driver's loads. Gated at **Super Admin** so a regular User
 or Admin can't enumerate other drivers' data. Anonymous → `/login`;
 User / Admin → 403 "Access denied"; Super Admin → 200. Per-driver
@@ -420,7 +420,7 @@ authenticated user against their OWN driver_id only.
 
 **Expected:**
 
-- URL changes to `/preview/loads`.
+- URL changes to `/loads`.
 - **"Backfill summary"** card shows:
     - Total rows: in the low thousands (the 21 legacy tables hold
       around 3,300 rows combined, dominated by one driver with ~2,500).
@@ -475,10 +475,10 @@ Both numbers should match exactly (the backfill is a verbatim copy).
 ### 8d. Auth gate still applies
 
 1. Sign out.
-2. Manually type `https://paytracker.xyz/preview/loads` into the
+2. Manually type `https://preview.paytracker.xyz/loads` into the
    address bar.
 
-**Expected:** redirected to `/preview/login`.
+**Expected:** redirected to `/login`.
 
 > No cleanup needed — read-only verification page.
 
@@ -494,13 +494,13 @@ spec exercises.
 
 ### 9a. Anonymous redirect
 1. Sign out (or open a private window).
-2. Visit `/preview/loads/new`.
+2. Visit `/loads/new`.
 
-**Expected:** redirected to `/preview/login`.
+**Expected:** redirected to `/login`.
 
 ### 9b. Form renders for signed-in user
 1. Sign in.
-2. Visit `/preview/loads/new`.
+2. Visit `/loads/new`.
 
 **Expected:**
 - Heading "Add a load".
@@ -574,7 +574,7 @@ The form preserves your typed inputs so you can correct the FRTL.
 3. Submit.
 
 **Expected:**
-- Redirect to `/preview/dashboard`.
+- Redirect to `/dashboard`.
 - Flash banner: `Added load frtl=NNN: Panama City, FL → Lynn Haven, FL, NN miles. Pay: $X.XX.`
   (the trailing `(via Google Maps, now cached)` only appears the first
    time a pair is resolved that wasn't already in `city_distances`;
@@ -652,17 +652,17 @@ hand without notes prefixed `QA TEST `.
 
 Pre-req: signed in as the QA admin account.
 
-Visit `https://paytracker.xyz/preview/pay-admin`.
+Visit `https://preview.paytracker.xyz/pay-admin`.
 
 ### 10a. Anon visitor is redirected
 
-1. Open a private tab, navigate to `/preview/pay-admin`.
+1. Open a private tab, navigate to `/pay-admin`.
 
-**Expected:** redirect to `/preview/login`.
+**Expected:** redirect to `/login`.
 
 ### 10b. Page renders with backfilled data
 
-1. Sign in, visit `/preview/pay-admin`.
+1. Sign in, visit `/pay-admin`.
 
 **Expected:**
 - "Pay-rate admin" heading + Summary card showing non-zero
@@ -746,7 +746,7 @@ disposable).
 Pre-req: signed in; PR #12 (pay-calculator) deployed; `pay_variables`
 backfill has run (preview log shows `backfill complete: {"default":32,"current":32}`).
 
-Sign in, visit `/preview/pay-admin`. Scroll past the rate-editor cards
+Sign in, visit `/pay-admin`. Scroll past the rate-editor cards
 to the **Recompute pay (np/op)** card.
 
 ### 11a. Recompute respects the date filter
@@ -765,7 +765,7 @@ to the **Recompute pay (np/op)** card.
 
 ### 11b. Recompute respects the driver_id filter
 
-1. From `/preview/loads`, pick a driver_id that has loads in the recent
+1. From `/loads`, pick a driver_id that has loads in the recent
    sample.
 2. On the pay-admin recompute card, set **Driver id** to that number,
    leave **Since** blank (defaults to last 30 days).
@@ -813,17 +813,17 @@ defaulted — the preview is disposable).
 
 Pre-req: signed in as the QA admin account.
 
-Visit `https://paytracker.xyz/preview/dashboard`.
+Visit `https://preview.paytracker.xyz/dashboard`.
 
 ### 12a. Anon redirect
 
-1. Open a private tab, navigate to `/preview/dashboard`.
+1. Open a private tab, navigate to `/dashboard`.
 
-**Expected:** redirect to `/preview/login`.
+**Expected:** redirect to `/login`.
 
 ### 12b. Today's view renders
 
-1. Sign in, visit `/preview/dashboard`.
+1. Sign in, visit `/dashboard`.
 
 **Expected:**
 - Heading reads **My pay — `YYYY-MM-DD`** with a `today` pill.
@@ -874,9 +874,9 @@ PayCalculator recompute is needed.
 
 1. Note the current pay-week window shown in the **This Week** card
    (e.g. `Sun 2026-05-31 → Sat 2026-06-06` for the default Sunday start).
-2. Visit `/preview/profile`, change **Pay week starts on** to
+2. Visit `/profile`, change **Pay week starts on** to
    **Monday**, save.
-3. Return to `/preview/dashboard`.
+3. Return to `/dashboard`.
 
 **Expected:**
 - The This Week card now shows a Monday → Sunday window covering the
@@ -886,7 +886,7 @@ PayCalculator recompute is needed.
 
 ### 12g. Self-serve "Refresh my pay"
 
-1. From `/preview/dashboard`, click the **Refresh my pay** button.
+1. From `/dashboard`, click the **Refresh my pay** button.
 
 **Expected:**
 - Flash banner like
@@ -908,17 +908,17 @@ The profile page drives PayCalculator's tenure-band selection
 used a hardcoded `168-night--0` blob that inflated pay for junior /
 day-shift drivers.
 
-Visit `https://paytracker.xyz/preview/profile`.
+Visit `https://preview.paytracker.xyz/profile`.
 
 ### 13a. Anon redirect
 
-1. Open a private tab, navigate to `/preview/profile`.
+1. Open a private tab, navigate to `/profile`.
 
-**Expected:** redirect to `/preview/login`.
+**Expected:** redirect to `/login`.
 
 ### 13b. Form renders
 
-1. Sign in, visit `/preview/profile`.
+1. Sign in, visit `/profile`.
 
 **Expected:**
 - Heading "Profile" with the signed-in user + driver id.
@@ -944,7 +944,7 @@ email). The `@` character violates the new USER_PATTERN, but a
 grandfather clause in `Account::updateBasics` skips the pattern
 check when the submitted username matches the EXISTING one.
 
-1. Visit `/preview/profile`. Don't change the Username input
+1. Visit `/profile`. Don't change the Username input
    (leave it at the legacy email-shaped value). Edit only the
    shift radio. Save.
 
@@ -1020,13 +1020,13 @@ account can read the tutorial and contact info before they sign in.
 
 ### 14a. Tutorial renders for anonymous and signed-in users
 
-1. Open a private tab, visit `/preview/tutorial`.
+1. Open a private tab, visit `/tutorial`.
 
 **Expected:**
 - Heading "Tutorial" with sections for profile setup, adding a
   load, reviewing pay, and editing.
 - An embedded YouTube video plays in a responsive iframe.
-- A "Back home" link returns to `/preview/`.
+- A "Back home" link returns to `/`.
 
 2. Sign in as the QA account and visit the same URL.
 
@@ -1034,7 +1034,7 @@ account can read the tutorial and contact info before they sign in.
 
 ### 14b. FAQ renders
 
-1. Visit `/preview/faq`.
+1. Visit `/faq`.
 
 **Expected:** Heading "Frequently asked questions" with seven Q&A
 blocks covering pay math, the OP removal, hire-date snapshotting,
@@ -1043,7 +1043,7 @@ and how to get an account.
 
 ### 14c. About renders
 
-1. Visit `/preview/about`.
+1. Visit `/about`.
 
 **Expected:** Heading "About PayTracker" with a status note that the
 modern build runs on the preview channel and production still runs
@@ -1051,7 +1051,7 @@ legacy until parity is complete.
 
 ### 14d. Contact renders
 
-1. Visit `/preview/contact`.
+1. Visit `/contact`.
 
 **Expected:**
 - Heading "Contact" with a `mailto:` link.
@@ -1059,18 +1059,18 @@ legacy until parity is complete.
 
 ### 14e. Help nav is hidden on the anonymous home page
 
-1. Open a private tab, visit `/preview/`.
+1. Open a private tab, visit `/`.
 
 **Expected:**
 - The anonymous landing shows the marketing card and Sign-In CTA
   only. The "Help & info" card is NOT shown.
 - The four static pages remain reachable by direct URL
-  (`/preview/tutorial`, `/preview/faq`, `/preview/about`,
-  `/preview/contact`) — covered in 14a–14d.
+  (`/tutorial`, `/faq`, `/about`,
+  `/contact`) — covered in 14a–14d.
 
 ### 14f. Help nav appears on the signed-in home page
 
-1. Sign in, visit `/preview/`.
+1. Sign in, visit `/`.
 
 **Expected:**
 - A "Help & info" card lists the four static pages with one-line
@@ -1097,7 +1097,7 @@ QA walk runs as super_admin, so the previously-walked sections 6, 7,
 
 ### 15a. Admin nav is visible for super_admin
 
-1. Sign in as the QA account, visit `/preview/`.
+1. Sign in as the QA account, visit `/`.
 
 **Expected:**
 - The welcome card's button row shows Driver loads, **Manage
@@ -1107,8 +1107,8 @@ QA walk runs as super_admin, so the previously-walked sections 6, 7,
 
 ### 15b. Admin pages return 200 for super_admin
 
-1. Visit `/preview/locations`, `/preview/distances`, and
-   `/preview/pay-admin` in sequence.
+1. Visit `/locations`, `/distances`, and
+   `/pay-admin` in sequence.
 
 **Expected:** each renders normally (no 403 page).
 
@@ -1118,13 +1118,13 @@ This step requires a seeded test account with `role='user'`. We
 don't have one on preview yet; once we do, the manual walk is:
 
 1. Sign in as the User-role account.
-2. Visit `/preview/pay-admin`.
+2. Visit `/pay-admin`.
 
 **Expected:**
 - Heading **Access denied** with a red `403` pill.
 - Body reads "This area is restricted to **Admin** accounts or
   higher. Your account role is `user`."
-- A "Back to dashboard" CTA returns to `/preview/dashboard`.
+- A "Back to dashboard" CTA returns to `/dashboard`.
 - The home page's button row hides the three admin links for
   this user.
 
@@ -1152,18 +1152,18 @@ Pre-req: signed in as the QA Super Admin account.
 
 ### 16a. Anon redirect, base User → 403
 
-1. Open a private tab, visit `/preview/admin`.
+1. Open a private tab, visit `/admin`.
 
-**Expected:** redirect to `/preview/login`.
+**Expected:** redirect to `/login`.
 
 2. (Manual / future) Sign in as a base User account, visit
-   `/preview/admin`.
+   `/admin`.
 
 **Expected:** the 403 "Access denied" page from section 15.
 
 ### 16b. User table renders
 
-1. Sign in, visit `/preview/admin`.
+1. Sign in, visit `/admin`.
 
 **Expected:**
 - Heading **Admin Panel** with a role pill showing your role.
@@ -1208,7 +1208,7 @@ the search).
 
 **Expected:**
 - A green flash banner at the top of `/admin` reading:
-  `Reset link for <user> (expires YYYY-MM-DD HH:MM:SS UTC, emailed to <email> (msg <id>)): https://paytracker.xyz/preview/password-reset/<64-hex-chars>`
+  `Reset link for <user> (expires YYYY-MM-DD HH:MM:SS UTC, emailed to <email> (msg <id>)): https://preview.paytracker.xyz/password-reset/<64-hex-chars>`
 - The URL is copyable.
 - An email arrives at the target's inbox (subject "Reset your
   PayTracker password") with a "Set a new password" button
@@ -1263,7 +1263,7 @@ button returns to `/login`.
 - The user is NOT redirected into the app; they stay on the
   login page with the explanatory flash.
 - An audit row appears at
-  `/preview/admin/audit?action=USER_LOGIN_FAILED` with
+  `/admin/audit?action=USER_LOGIN_FAILED` with
   reason=`banned` (only fires when the password verified).
 
 4. Return to `/admin`, click **Unban**.
@@ -1341,7 +1341,7 @@ ban / unban, delete, reset-password, and role assignment.
 1. Sign in as the QA Super Admin.
 2. Promote a test account to **Admin** (via the role dropdown).
 3. Sign out. Sign in as that **Admin** account.
-4. Visit `/preview/admin`. Find your Super Admin row in the
+4. Visit `/admin`. Find your Super Admin row in the
    table.
 
 **Expected:**
@@ -1353,14 +1353,14 @@ ban / unban, delete, reset-password, and role assignment.
 - Other Admin rows ALSO show "Outranks you" — peer Admins
   can't mutate each other either.
 
-5. Attempt to visit `/preview/admin/users/<super-admin-id>/edit`
+5. Attempt to visit `/admin/users/<super-admin-id>/edit`
    directly.
 
 **Expected:** redirect back to `/admin` with the flash
 `Cannot edit an account at your role tier or higher.`
 
 6. Attempt a hand-crafted POST to
-   `/preview/admin/users/<super-admin-id>/ban` (use the browser
+   `/admin/users/<super-admin-id>/ban` (use the browser
    dev-tools console with a known CSRF token).
 
 **Expected:** flash `Cannot ban an account at your role tier
@@ -1396,7 +1396,7 @@ Pre-req: signed in as the QA Super Admin.
 
 ### 17a. Audit viewer renders + filters
 
-1. From `/preview/admin` click **Audit log →**.
+1. From `/admin` click **Audit log →**.
 
 **Expected:**
 - Heading "Audit log" with the role pill.
@@ -1414,7 +1414,7 @@ Pre-req: signed in as the QA Super Admin.
 
 ### 17b. Diagnostics renders
 
-1. From `/preview/admin` click **System diagnostics →**.
+1. From `/admin` click **System diagnostics →**.
 
 **Expected:**
 - Three cards: **Runtime**, **Audit counters — last hour**,
@@ -1431,7 +1431,7 @@ Pre-req: signed in as the QA Super Admin.
 ### 17c. Login is audited
 
 1. Sign out, sign back in.
-2. Visit `/preview/admin/audit?action=USER_LOGIN`.
+2. Visit `/admin/audit?action=USER_LOGIN`.
 
 **Expected:** the top row's Action cell is **USER_LOGIN** with
 your account user/id, your IP, and a JSON metadata blob
@@ -1439,12 +1439,12 @@ containing user_agent + accept_language + attempted_handle.
 
 ### 17d. Failed login is audited with a reason
 
-1. Sign out. From `/preview/login`, type your QA handle but a
+1. Sign out. From `/login`, type your QA handle but a
    WRONG password. Submit.
 
 **Expected:** generic "invalid credentials" error (no leak).
 
-2. Sign in correctly. Visit `/preview/admin/audit?action=USER_LOGIN_FAILED`.
+2. Sign in correctly. Visit `/admin/audit?action=USER_LOGIN_FAILED`.
 
 **Expected:**
 - A new row at the top with Action **USER_LOGIN_FAILED**, Reason
@@ -1489,7 +1489,7 @@ Pre-req: signed in as the QA Super Admin account.
 
 ### 18a. Role dropdown is visible on non-self rows
 
-1. Visit `/preview/admin`. Scroll the Role column.
+1. Visit `/admin`. Scroll the Role column.
 
 **Expected:**
 - Your own row still shows your role as plain `super_admin`
@@ -1580,13 +1580,13 @@ account from the admin panel.`).
 
 This step requires a seeded test account with `role='admin'`.
 
-1. Sign in as that account, visit `/preview/admin`.
+1. Sign in as that account, visit `/admin`.
 
 **Expected:**
 - The user table still renders (Admin has read access).
 - Every Role cell shows the static `<code>` badge, NOT the
   select / Save form.
-- A POST against `/preview/admin/users/{id}/role` from this
+- A POST against `/admin/users/{id}/role` from this
   account returns the 403 page (the controller enforces the
   Super Admin gate at action entry; the missing UI is just
   the visible mirror).
@@ -1606,7 +1606,7 @@ Pre-req: signed in as the QA Super Admin account.
 
 ### 19a. Admin surface renders + create
 
-1. Visit `/preview/admin`. Click **Announcements**.
+1. Visit `/admin`. Click **Announcements**.
 
 **Expected:**
 - Heading "Announcements" with the role pill.
@@ -1648,7 +1648,7 @@ includes admins.
 **Expected:**
 - Modal closes; page reloads to the same URL with the
   underlying content visible.
-- The seen-by report at `/preview/admin/announcements/<id>`
+- The seen-by report at `/admin/announcements/<id>`
   now lists your account with "Don't show again? — no — will
   see again".
 
@@ -1671,7 +1671,7 @@ again").
 
 ### 19e. Audit log entries
 
-1. Visit `/preview/admin/audit?action=ANNOUNCEMENT_DISMISSED`.
+1. Visit `/admin/audit?action=ANNOUNCEMENT_DISMISSED`.
 
 **Expected:** the dismissals from 19c-19d appear as
 `ANNOUNCEMENT_DISMISSED` rows with metadata
@@ -1707,7 +1707,7 @@ again").
 **Expected:** modal still shows the currently active
 announcement (#2), NOT the template.
 
-3. From `/preview/admin/announcements`, click **Use template**
+3. From `/admin/announcements`, click **Use template**
    on the template row.
 
 **Expected:**
@@ -1736,7 +1736,7 @@ hides it).
 
 **Expected:**
 - Row vanishes from the list.
-- `/preview/admin/audit?action=ANNOUNCEMENT_DELETED` shows the
+- `/admin/audit?action=ANNOUNCEMENT_DELETED` shows the
   delete row.
 - Subsequent logins by the QA user no longer show the modal
   (the table row is gone; no active announcement).
@@ -1760,7 +1760,7 @@ Pre-req: signed in as the QA Super Admin (Admin works too).
 
 ### 20a. Admin surface renders
 
-1. Visit `/preview/admin`. Click **Invite codes →**.
+1. Visit `/admin`. Click **Invite codes →**.
 
 **Expected:**
 - Heading "Invite codes".
@@ -1774,11 +1774,11 @@ Pre-req: signed in as the QA Super Admin (Admin works too).
 
 **Expected:**
 - Redirect to `/admin/invites` with a flash banner:
-  `Created invite XXXXXXXX (no email on file): https://paytracker.xyz/preview/register?invite=XXXXXXXX`
+  `Created invite XXXXXXXX (no email on file): https://preview.paytracker.xyz/register?invite=XXXXXXXX`
 - The list shows the new row with the **active** pill, the
   invite URL shown beneath the code for easy copy/paste, and
   invitee email `—`.
-- `/preview/admin/audit?action=INVITE_CREATED` shows a new row
+- `/admin/audit?action=INVITE_CREATED` shows a new row
   with the code, expiry (null), and `email_status: "no email
   on file"` in the metadata blob.
 
@@ -1867,7 +1867,7 @@ invite code from Section 20 is the gate.
 
 ### 21a. Form renders from a URL invite
 
-1. From `/preview/admin/invites`, copy an active code's
+1. From `/admin/invites`, copy an active code's
    `/register?invite=…` URL.
 2. Open a private tab, paste the URL.
 
@@ -1890,12 +1890,12 @@ invite code from Section 20 is the gate.
 2. Click **Create account & sign in**.
 
 **Expected:**
-- Redirect to `/preview/` (home).
+- Redirect to `/` (home).
 - Green flash banner: `Welcome, <username> — your account is ready.`
 - The home page shows the welcome card for your new account.
-- `/preview/admin/audit?action=USER_REGISTERED` shows a row with
+- `/admin/audit?action=USER_REGISTERED` shows a row with
   your new account id, username, and email in the metadata.
-- `/preview/admin/audit?action=INVITE_USED` shows the matching
+- `/admin/audit?action=INVITE_USED` shows the matching
   consume row with the code.
 - The invite code in the admin list: if it was auto-delete=on, it's
   gone; if auto-delete=off, it shows "used by `<username>`".
@@ -1917,7 +1917,7 @@ not preserved). Test cases:
 - Existing email → `An account already exists for that email.`
 
 Each failure also lands a row at
-`/preview/admin/audit?action=USER_REGISTER_FAILED` with a
+`/admin/audit?action=USER_REGISTER_FAILED` with a
 `reason` discriminator (`missing_invite`, `malformed_invite`,
 `bad_username`, `bad_email`, `weak_password`, `password_mismatch`,
 `user_taken`, `email_taken`).
@@ -1926,7 +1926,7 @@ Each failure also lands a row at
 
 1. Take a code that was just successfully consumed in 21b (only
    relevant when auto_delete was off, otherwise the row's gone).
-2. Visit `/preview/register?invite=<that-code>`. Submit with
+2. Visit `/register?invite=<that-code>`. Submit with
    any valid form values.
 
 **Expected:**
@@ -1956,11 +1956,11 @@ succeed; the other gets the "invite no longer valid" flash.
 
 ### 21g. Login page links here
 
-1. Visit `/preview/login` while signed out.
+1. Visit `/login` while signed out.
 
 **Expected:** the muted footer now reads
 *"Have an invite code? Create an account →"* with a working link
-to `/preview/register`.
+to `/register`.
 
 ### 21h. Active-duplicate email is signposted to /login
 
@@ -1970,19 +1970,19 @@ follow-up sign-in link — so the user isn't stranded re-typing the
 same email.
 
 1. Mint an invite (any email).
-2. Open `/preview/register?invite=…` while signed out.
+2. Open `/register?invite=…` while signed out.
 3. Fill: invite code, a fresh username, **the QA_TEST_USER's
    email** (i.e. an active 2.0 account), a valid password, confirm.
 4. Submit.
 
 **Expected:**
 
-- Redirect back to `/preview/register?invite=…` (form preserved).
+- Redirect back to `/register?invite=…` (form preserved).
 - Red flash card reads
   *"An account already exists for that email."*
 - Beneath the flash text, a clickable **"Sign in →"** link that
-  goes to `/preview/login`.
-- The invite is NOT consumed — re-checking `/preview/admin/invites`
+  goes to `/login`.
+- The invite is NOT consumed — re-checking `/admin/invites`
   shows the row still **live**.
 - No audit row of type `LEGACY_RESET_SENT` was written
   (this branch only fires for never-signed-in legacy accounts).
@@ -1999,14 +1999,14 @@ IS NULL` and a deliverable `email` you can read. Easiest: pick any
 backfilled row from `2026_06_04_001_backfill_email_from_user.sql`
 that you haven't signed in as.
 
-1. Open `/preview/register?invite=<live code>` while signed out.
+1. Open `/register?invite=<live code>` while signed out.
 2. Fill: invite, fresh username, the legacy account's email,
    valid password, confirm.
 3. Submit.
 
 **Expected:**
 
-- Redirect back to `/preview/register?invite=…`.
+- Redirect back to `/register?invite=…`.
 - Red flash card reads
   *"We already have an account on file from the legacy PayTracker.
   Please check your email for instructions, or ask an admin to
@@ -2016,8 +2016,8 @@ that you haven't signed in as.
 - The invite is NOT consumed.
 - An email from PayTracker lands in the legacy account's inbox
   with subject *"Welcome back to PayTracker — set your password"*
-  and a button that links to `/preview/password-reset/<token>`.
-- `/preview/admin/audit` shows a fresh row:
+  and a button that links to `/password-reset/<token>`.
+- `/admin/audit` shows a fresh row:
   - Action = `LEGACY_RESET_SENT`
   - User = the legacy account (id matches the row whose email
     you typed)
@@ -2045,7 +2045,7 @@ attacker who guessed a legacy email take the account.
 - You see the existing, legacy PayTracker login screen — *not* the new
   preview landing page.
 - The browser address bar still shows `paytracker.xyz` with no
-  `/preview/` segment.
+  `/` segment.
 
 **Fail conditions:**
 
@@ -2086,7 +2086,7 @@ hours from creation.
 
 ### 24a. Toggle hides FRTL + reveals pitfall box
 
-1. Sign in. Visit `/preview/loads/new`.
+1. Sign in. Visit `/loads/new`.
 2. Confirm **Store Load Info** is ON (default), the FRTL # field
    is visible, and the amber "Heads up" pitfall list is hidden.
 3. Click the checkbox to turn it OFF.
@@ -2104,7 +2104,7 @@ the page persists the OFF state.
 
 **Expected:**
 
-- Lands on `/preview/dashboard`.
+- Lands on `/dashboard`.
 - Today's **Loads** table shows the new row at the top with FRTL `—`,
   the pay value the server computed, and the muted "unconfirmed —
   in this browser only" footer.
@@ -2130,7 +2130,7 @@ disclaimer is also gone since hydration doesn't run on past dates.
 1. Return to today's dashboard.
 2. Click **Edit** on the unconfirmed row.
 
-**Expected:** lands at `/preview/loads/new?unsaved=<localId>` (the
+**Expected:** lands at `/loads/new?unsaved=<localId>` (the
 `unsaved` query param is the legacy on-wire name; the user-facing
 heading reads "Edit unconfirmed load"). Form prefills with the
 stored values, **Store Load Info** is OFF, FRTL block is hidden.
@@ -2140,7 +2140,7 @@ stored values, **Store Load Info** is OFF, FRTL block is hidden.
 
 **Expected:**
 
-- Lands on `/preview/dashboard` with flash "Added load frtl=999900050".
+- Lands on `/dashboard` with flash "Added load frtl=999900050".
 - Back on the dashboard, the unconfirmed row is GONE (the localId
   was consumed). The new DB-backed row appears instead with the
   real FRTL in the column.
@@ -2182,13 +2182,13 @@ compare line-by-line against their paystub.
 
 ### 25a. Anonymous access redirects to login
 
-1. Sign out. Visit `/preview/reconcile` directly.
+1. Sign out. Visit `/reconcile` directly.
 
-**Expected:** redirect to `/preview/login`.
+**Expected:** redirect to `/login`.
 
 ### 25b. Signed-in render
 
-1. Sign in. Visit `/preview/reconcile`.
+1. Sign in. Visit `/reconcile`.
 
 **Expected:**
 
@@ -2250,7 +2250,7 @@ to the default tint and `pending` pill.
 
 ### 25e. Payroll contact email + Send batch button states
 
-1. Visit `/preview/profile`. Confirm the **Payroll contact email**
+1. Visit `/profile`. Confirm the **Payroll contact email**
    field is present, optional, type=email, validated client-side.
 2. Leave it blank → Pending batch card shows a
    *"Set a payroll contact email →"* link to `/profile`; no send button.
@@ -2297,7 +2297,7 @@ disputed — close it out without losing the dispute trail.
 
 ### 25g. Admin queue (Super Admin)
 
-1. As a Super Admin, visit `/preview/admin/reconcile`.
+1. As a Super Admin, visit `/admin/reconcile`.
 
 **Expected:** table of every open disputed claim across every
 driver, with driver `user` + login email + payroll email, FRTL,
@@ -2344,7 +2344,7 @@ back to the manual-miles path.
 
 ### 26c. Load form picker still works
 
-1. As QA_TEST_USER, open `/preview/loads/new`.
+1. As QA_TEST_USER, open `/loads/new`.
 
 **Expected:**
 
@@ -2359,7 +2359,7 @@ back to the manual-miles path.
 
 Use §27 (the admin CRUD) for end-to-end coverage. For a quick
 SQL-only check: flip one row to `active = 0` directly, reload
-`/preview/loads/new`, and confirm that terminal disappears from the
+`/loads/new`, and confirm that terminal disappears from the
 Pickup `<select>`. Flip it back to 1 to clean up.
 
 ---
@@ -2371,9 +2371,9 @@ Admin+ surface at `/admin/terminals` that drives the consolidated
 
 ### 27a. Anonymous + non-admin gates
 
-1. Sign out, visit `/preview/admin/terminals`.
+1. Sign out, visit `/admin/terminals`.
 
-**Expected:** redirect to `/preview/login`.
+**Expected:** redirect to `/login`.
 
 2. Sign in as a base **User**, visit the same URL.
 
@@ -2381,7 +2381,7 @@ Admin+ surface at `/admin/terminals` that drives the consolidated
 
 ### 27b. Index renders + nav from Admin Panel
 
-1. As QA_TEST_USER (Super Admin), open `/preview/admin`.
+1. As QA_TEST_USER (Super Admin), open `/admin`.
 
 **Expected:** a "Begin Empty Locations →" button alongside Invite
 codes / Audit log etc. Click it.
@@ -2402,10 +2402,10 @@ Inactive rows sort to the bottom.
 
 **Expected:**
 
-- Redirect to `/preview/admin/terminals` with the green flash
+- Redirect to `/admin/terminals` with the green flash
   `Added Begin Empty location "QA TEST hub, FL".`
 - Row appears at the top of the active block with an `active` pill.
-- `/preview/admin/audit` shows a `TERMINAL_CREATED` row, metadata
+- `/admin/audit` shows a `TERMINAL_CREATED` row, metadata
   carrying `terminal_id` + `name` + `city_id = null`.
 
 ### 27d. Edit + collision refusal
@@ -2440,13 +2440,13 @@ terminal.` No audit row was written.
 - Pill flips to amber `inactive`. Row sorts to the bottom.
 - Audit log carries `TERMINAL_DEACTIVATED`.
 
-2. As the same user, open `/preview/loads/new`.
+2. As the same user, open `/loads/new`.
 
 **Expected:** the QA TEST name is NOT in the Pickup `<select>`.
 
 ### 27f. Reactivate restores the row
 
-1. Back at `/preview/admin/terminals`, click **Reactivate** on
+1. Back at `/admin/terminals`, click **Reactivate** on
    the same row.
 
 **Expected:**
@@ -2455,7 +2455,7 @@ terminal.` No audit row was written.
 - Pill flips back to green `active`; row sorts back to its
   alphabetical position.
 - Audit log carries `TERMINAL_REACTIVATED`.
-- `/preview/loads/new` Pickup `<select>` lists the name again.
+- `/loads/new` Pickup `<select>` lists the name again.
 
 ### 27g. Cleanup
 
@@ -2493,7 +2493,7 @@ hides the section AND auto-unticks the checkbox, so flipping
 back to one-way doesn't surprise the driver with the section
 reappearing.
 
-1. Open `/preview/loads/new`. Default is one-way.
+1. Open `/loads/new`. Default is one-way.
 
 **Expected:**
 - `Begin Empty` checkbox is unticked.
