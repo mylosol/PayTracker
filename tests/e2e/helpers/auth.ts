@@ -52,7 +52,10 @@ export async function signIn(page: Page): Promise<void> {
  */
 export async function signOut(page: Page): Promise<void> {
     await page.goto('');
-    const signOut = page.getByRole('button', { name: /sign out/i });
+    // The layout renders Sign-out buttons in both the desktop nav AND
+    // the (hidden) mobile drawer, so the role lookup matches twice
+    // even at desktop viewport. Pick the first visible one.
+    const signOut = page.getByRole('button', { name: /sign out/i }).first();
     if (await signOut.isVisible()) {
         await signOut.click();
         await expect(page).toHaveURL(/\/login$/);
