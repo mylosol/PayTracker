@@ -63,7 +63,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
     <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
             <h1 class="m-0">My pay — <?= e($date) ?>
-                <?= $isToday ? '<span class="pill-ok align-middle ml-1 text-xs">today</span>' : '' ?>
+                <?= $isToday ? '<span class="pill ok align-middle ml-1 text-xs">today</span>' : '' ?>
             </h1>
             <p class="text-brand-muted mt-2">
                 Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong>

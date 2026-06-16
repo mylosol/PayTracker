@@ -167,9 +167,9 @@ $buildPageUrl = static function (int $p) use ($base, $q): string {
                                 <div class="flex flex-wrap items-center gap-2">
                                     <code><?= e((string) $row['source']) ?></code>
                                     <?php if ($isAdmin): ?>
-                                        <span class="pill-ok">override</span>
+                                        <span class="pill ok">override</span>
                                     <?php elseif ($shadowed): ?>
-                                        <span class="pill-warn" title="An admin override exists for this pair; this row is dormant.">shadowed</span>
+                                        <span class="pill warn" title="An admin override exists for this pair; this row is dormant.">shadowed</span>
                                     <?php endif; ?>
                                 </div>
                             </td>

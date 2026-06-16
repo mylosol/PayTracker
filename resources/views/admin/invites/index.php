@@ -93,9 +93,9 @@ $fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $v
                         <td><?= e((string) ($r['invitee_email'] ?? '—')) ?></td>
                         <td>
                             <div class="flex flex-wrap items-center gap-1">
-                                <?php if ($used):    ?><span class="pill-warn">used</span><?php endif; ?>
-                                <?php if ($expired && ! $used): ?><span class="pill-err">expired</span><?php endif; ?>
-                                <?php if ($active):  ?><span class="pill-ok">active</span><?php endif; ?>
+                                <?php if ($used):    ?><span class="pill warn">used</span><?php endif; ?>
+                                <?php if ($expired && ! $used): ?><span class="pill err">expired</span><?php endif; ?>
+                                <?php if ($active):  ?><span class="pill ok">active</span><?php endif; ?>
                             </div>
                         </td>
                         <td class="text-brand-muted text-sm"><?= e($fmt($r['expires_at'] ?? null)) ?></td>
@@ -105,7 +105,7 @@ $fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $v
                         </td>
                         <td>
                             <?php if ($autoDel): ?>
-                                <span class="pill-muted">yes</span>
+                                <span class="pill muted">yes</span>
                             <?php else: ?>
                                 <span class="text-brand-muted text-sm">no — kept after consume</span>
                             <?php endif; ?>

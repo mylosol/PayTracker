@@ -37,7 +37,7 @@ $fmt = static function ($value): string {
 ?>
 <div class="card">
     <h1 class="m-0">Admin Panel
-        <span class="pill-ok align-middle ml-1 text-xs"><?= e((string) $actor['role']) ?></span>
+        <span class="pill ok align-middle ml-1 text-xs"><?= e((string) $actor['role']) ?></span>
     </h1>
     <p class="text-brand-muted mt-2">
         Signed in as <strong><?= e((string) $actor['user']) ?></strong> (id <?= (int) $actor['id'] ?>).
@@ -138,7 +138,7 @@ $fmt = static function ($value): string {
                         <td>
                             <?= e((string) $u['user']) ?>
                             <?php if ($isSelf): ?>
-                                <span class="pill-ok ml-1">you</span>
+                                <span class="pill ok ml-1">you</span>
                             <?php endif; ?>
                         </td>
                         <td><?= e((string) ($u['email'] ?? '—')) ?></td>
@@ -165,13 +165,13 @@ $fmt = static function ($value): string {
                         <td>
                             <div class="flex flex-wrap items-center gap-1">
                                 <?php if ($banned): ?>
-                                    <span class="pill-err">banned</span>
+                                    <span class="pill err">banned</span>
                                 <?php endif; ?>
                                 <?php if ($locked): ?>
-                                    <span class="pill-warn">locked</span>
+                                    <span class="pill warn">locked</span>
                                 <?php endif; ?>
                                 <?php if (! $banned && ! $locked): ?>
-                                    <span class="pill-ok">active</span>
+                                    <span class="pill ok">active</span>
                                 <?php endif; ?>
                             </div>
                         </td>

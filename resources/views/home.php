@@ -21,16 +21,16 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
                 <h1 class="m-0">Welcome, <?= e((string) $account['user']) ?>
-                    <span class="pill-ok align-middle ml-1 text-xs">signed in</span>
+                    <span class="pill ok align-middle ml-1 text-xs">signed in</span>
                 </h1>
                 <p class="text-brand-muted mt-2 flex flex-wrap items-center gap-2">
-                    <span class="pill-muted">role: <?= e((string) $account['role']) ?></span>
+                    <span class="pill muted">role: <?= e((string) $account['role']) ?></span>
                     <?php if (! empty($account['last_login_at'])): ?>
                         <span class="text-sm">Last login <code><?= e((string) $account['last_login_at']) ?> UTC</code></span>
                     <?php endif; ?>
                 </p>
             </div>
-            <span class="pill <?= $isProduction ? 'pill-ok' : 'pill-warn' ?>"><?= e($env) ?></span>
+            <span class="pill <?= $isProduction ? 'ok' : 'warn' ?>"><?= e($env) ?></span>
         </div>
     </section>
 
@@ -86,7 +86,7 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
 <?php else: ?>
     <section class="card">
         <h1 class="m-0">PayTracker
-            <span class="pill <?= $isProduction ? 'pill-ok' : 'pill-warn' ?> ml-2 align-middle text-base">
+            <span class="pill <?= $isProduction ? 'ok' : 'warn' ?> ml-2 align-middle text-base">
                 <?= e($env) ?>
             </span>
         </h1>

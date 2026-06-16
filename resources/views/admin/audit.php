@@ -10,7 +10,7 @@ layout('layouts/app');
 ?>
 <div class="card">
     <h1 class="m-0">Audit log
-        <span class="pill-ok align-middle ml-1 text-xs"><?= e((string) $actor['role']) ?></span>
+        <span class="pill ok align-middle ml-1 text-xs"><?= e((string) $actor['role']) ?></span>
     </h1>
     <p class="text-brand-muted mt-2">
         Append-only event ledger. Filter by user id, action, or IP.

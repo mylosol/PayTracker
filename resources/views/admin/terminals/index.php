@@ -60,9 +60,9 @@ $fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $v
                             </td>
                             <td>
                                 <?php if ($active): ?>
-                                    <span class="pill-ok">active</span>
+                                    <span class="pill ok">active</span>
                                 <?php else: ?>
-                                    <span class="pill-warn">inactive</span>
+                                    <span class="pill warn">inactive</span>
                                 <?php endif; ?>
                             </td>
                             <td class="text-brand-muted text-sm"><?= e($fmt($r['updated_at'] ?? null)) ?></td>

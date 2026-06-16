@@ -14,7 +14,7 @@ $fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $v
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
             <h1 class="m-0">Announcements
-                <span class="pill-ok align-middle ml-1 text-xs">super_admin</span>
+                <span class="pill ok align-middle ml-1 text-xs">super_admin</span>
             </h1>
             <p class="text-brand-muted mt-2">
                 Subject + body, shown to every signed-in user as a modal on
@@ -71,16 +71,16 @@ $fmt = static fn ($value): string => utc_to_local_display(is_string($value) ? $v
                         <td>
                             <div class="flex flex-wrap items-center gap-1">
                                 <?php if ($isTplt): ?>
-                                    <span class="pill-warn">template</span>
+                                    <span class="pill warn">template</span>
                                 <?php endif; ?>
                                 <?php if ($isActive && ! $isTplt && ! $expired): ?>
-                                    <span class="pill-ok">active</span>
+                                    <span class="pill ok">active</span>
                                 <?php endif; ?>
                                 <?php if ($expired): ?>
-                                    <span class="pill-err">expired</span>
+                                    <span class="pill err">expired</span>
                                 <?php endif; ?>
                                 <?php if (! $isTplt && ! $isActive && ! $expired): ?>
-                                    <span class="pill-muted">inactive</span>
+                                    <span class="pill muted">inactive</span>
                                 <?php endif; ?>
                             </div>
                         </td>

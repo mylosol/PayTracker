@@ -5,7 +5,7 @@ layout('layouts/app');
 <div class="max-w-md mx-auto">
     <div class="card">
         <h1 class="m-0">Reset link no longer valid
-            <span class="pill-warn align-middle ml-1 text-xs">410</span>
+            <span class="pill warn align-middle ml-1 text-xs">410</span>
         </h1>
         <p class="text-brand-muted mt-2">
             This password reset link has expired, already been used, or
