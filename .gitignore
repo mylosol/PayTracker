@@ -21,6 +21,8 @@ storage/logs/*.log
 storage/cache/*
 !storage/logs/.gitkeep
 !storage/cache/.gitkeep
+# Tailwind CSS is compiled in CI before rsync; never committed.
+public/assets/app.css
 
 # --- Playwright artefacts ---------------------------------------------------
 /playwright-report/

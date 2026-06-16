@@ -95,6 +95,20 @@ jobs:
       - name: Re-install without dev dependencies (for deploy)
         run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
+      # Build the Tailwind CSS bundle that public/assets/app.css ships
+      # at runtime. DH has no Node, so we compile in CI and rsync the
+      # output.
+      - name: Set up Node.js for CSS build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm dependencies for CSS build
+        run: npm install --no-audit --no-fund
+
+      - name: Build Tailwind CSS (minified)
+        run: npm run css:build
+
       # ----- Prepare SSH ----------------------------------------------------
       - name: Install SSH key
         run: |

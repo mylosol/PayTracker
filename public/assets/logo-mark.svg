@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PayTracker logo mark — a rounded square in safety-orange with a
+  bold "P" cut from the surface. Designed at 32x32 with a
+  generous viewBox so it stays crisp at any size from 16px to 64px.
+  Fill is set on the root element so the mark inherits color when
+  used as a CSS background or with `currentColor`.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-hidden="true" role="img" focusable="false">
+    <rect x="0" y="0" width="32" height="32" rx="6" fill="#F97316"/>
+    <path d="M9 7h7.4c3.8 0 6.6 2.6 6.6 6.2 0 3.6-2.8 6.2-6.6 6.2H13.4V25H9V7Zm4.4 8.4h2.7c1.7 0 2.8-.9 2.8-2.2 0-1.3-1.1-2.2-2.8-2.2h-2.7v4.4Z" fill="#FFFFFF"/>
+</svg>

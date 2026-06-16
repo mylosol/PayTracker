@@ -1,0 +1,204 @@
+/*
+ * PayTracker — source CSS compiled by Tailwind CLI into
+ *   public/assets/app.css
+ *
+ * Compile locally with `npm run css:watch`; CI builds the production
+ * minified file via `npm run css:build` during the deploy workflow.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    /* WCAG AA: keep focus states visible everywhere. Tailwind v3
+       turns these off by default for mouse users; we reinstate
+       them with an offset ring in brand-primary. */
+    :where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px #ffffff, 0 0 0 4px #F97316;
+        border-radius: 6px;
+    }
+
+    /* Skip link — invisible until focused via Tab. Screen-reader
+       + keyboard navigators can jump past the navigation chrome. */
+    .skip-link {
+        position: absolute;
+        left: -10000px;
+        top: 0;
+        background: #1E293B;
+        color: #ffffff;
+        padding: 12px 20px;
+        z-index: 100;
+        border-radius: 0 0 8px 0;
+        font-weight: 600;
+    }
+    .skip-link:focus {
+        left: 0;
+    }
+
+    html {
+        scroll-behavior: smooth;
+    }
+    body {
+        @apply bg-brand-surfaceBg text-brand-ink font-sans antialiased;
+    }
+    h1 {
+        @apply text-3xl sm:text-4xl font-semibold tracking-tight;
+    }
+    h2 {
+        @apply text-2xl sm:text-3xl font-semibold tracking-tight;
+    }
+    h3 {
+        @apply text-xl sm:text-2xl font-semibold tracking-tight;
+    }
+    code {
+        @apply font-mono text-[0.95em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded;
+    }
+    a {
+        @apply text-brand-primary hover:text-brand-primary-hover transition-colors;
+    }
+
+    /* Respect user motion preferences (WCAG 2.3.3). */
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+}
+
+@layer components {
+    /* --- Surface cards ---------------------------------------------- */
+    .card {
+        @apply bg-white border border-brand-line rounded-xl2 shadow-card p-5 sm:p-7 mb-4;
+    }
+
+    /* --- Buttons --------------------------------------------------- */
+    .btn {
+        @apply inline-flex items-center justify-center gap-2
+               min-h-[44px] px-5 py-2.5 rounded-lg font-semibold text-base
+               transition-colors cursor-pointer
+               disabled:opacity-50 disabled:cursor-not-allowed
+               focus:outline-none;
+    }
+    .btn-primary {
+        @apply btn bg-brand-primary text-white hover:bg-brand-primary-hover;
+    }
+    .btn-secondary {
+        @apply btn bg-white text-brand-ink border border-brand-line
+               hover:bg-slate-50;
+    }
+    .btn-danger {
+        @apply btn bg-rose-50 text-rose-800 border border-rose-200
+               hover:bg-rose-100;
+    }
+    .btn-ghost {
+        @apply btn bg-transparent text-brand-ink hover:bg-slate-100;
+    }
+    .btn-sm {
+        @apply min-h-[36px] px-3 py-1.5 text-sm rounded-md;
+    }
+
+    /* --- Form fields ----------------------------------------------- */
+    .field {
+        @apply form-input block w-full min-h-[44px] px-3.5 py-2.5
+               border border-brand-line rounded-lg text-base text-brand-ink
+               placeholder:text-slate-400
+               focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/30
+               disabled:bg-slate-100 disabled:text-slate-500;
+    }
+    .field-select {
+        @apply form-select block w-full min-h-[44px] px-3.5 py-2.5
+               border border-brand-line rounded-lg text-base text-brand-ink
+               focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/30;
+    }
+    .field-checkbox {
+        @apply form-checkbox h-5 w-5 rounded border-slate-400
+               text-brand-primary
+               focus:ring-brand-primary focus:ring-offset-2;
+    }
+    .field-radio {
+        @apply form-radio h-5 w-5 border-slate-400
+               text-brand-primary
+               focus:ring-brand-primary focus:ring-offset-2;
+    }
+    .field-label {
+        @apply block text-sm font-semibold text-brand-ink mb-1.5;
+    }
+    .field-hint {
+        @apply block text-sm text-brand-muted mt-1.5;
+    }
+
+    /* --- Status pills ---------------------------------------------- */
+    /* The legacy views referenced .pill .pill.ok .pill.warn .pill.err
+       so we keep both syntaxes available. */
+    .pill,
+    .pill-base {
+        @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
+               text-xs font-semibold uppercase tracking-wide;
+    }
+    .pill-ok,
+    .pill.ok {
+        @apply pill bg-emerald-100 text-emerald-800;
+    }
+    .pill-warn,
+    .pill.warn {
+        @apply pill bg-amber-100 text-amber-800;
+    }
+    .pill-err,
+    .pill.err {
+        @apply pill bg-rose-100 text-rose-800;
+    }
+    .pill-muted,
+    .pill.muted {
+        @apply pill bg-slate-100 text-slate-600;
+    }
+
+    /* --- Flash banners --------------------------------------------- */
+    .flash {
+        @apply rounded-lg px-4 py-3 mb-4 border;
+    }
+    .flash-ok {
+        @apply flash bg-emerald-50 text-emerald-900 border-emerald-200;
+    }
+    .flash-err {
+        @apply flash bg-rose-50 text-rose-900 border-rose-200;
+    }
+    .flash-info {
+        @apply flash bg-sky-50 text-sky-900 border-sky-200;
+    }
+
+    /* --- Tables ---------------------------------------------------- */
+    .table-wrap {
+        @apply w-full overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0;
+    }
+    .data-table {
+        @apply w-full text-left border-collapse;
+    }
+    .data-table thead {
+        @apply text-xs font-semibold uppercase tracking-wider text-brand-muted
+               border-b-2 border-brand-line;
+    }
+    .data-table th {
+        @apply px-3 py-2.5;
+    }
+    .data-table tbody tr {
+        @apply border-b border-brand-line/70;
+    }
+    .data-table td {
+        @apply px-3 py-3 align-top text-[0.95rem];
+    }
+
+    /* --- Legacy compatibility -------------------------------------- */
+    /* Old views still reference these utility classnames; aliasing
+       them here keeps unconverted Phase-2/3 views readable until they
+       get ported. */
+    .muted {
+        @apply text-brand-muted;
+    }
+}

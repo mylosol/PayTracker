@@ -12,125 +12,106 @@ use PayTracker\Models\Account;
 layout('layouts/app');
 $isProduction  = $env === 'production';
 $authenticated = is_array($account);
-// RBAC role helpers for the nav. Admin+ sees the admin surfaces;
-// Super Admin gets the cross-driver Driver loads survey + the
-// Admin Panel button.
 $isAdmin       = $authenticated && Account::hasRole($account, Account::ROLE_ADMIN);
 $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPER_ADMIN);
 ?>
-<div class="card">
-    <h1><?= e($appName) ?> <span class="pill <?= $isProduction ? 'ok' : 'warn' ?>"><?= e($env) ?></span></h1>
-    <p class="muted">
-        You are viewing the modernized PayTracker stack
-        <?php if (! $isProduction): ?>
-            on an <strong>isolated preview channel</strong>. Production data is untouched.
-        <?php else: ?>
-            in production.
-        <?php endif; ?>
-    </p>
-    <p>Build: <code><?= e($version) ?></code></p>
-</div>
 
 <?php if ($authenticated): ?>
-    <div class="card">
-        <h2>Welcome, <?= e((string) $account['user']) ?> <span class="pill ok">signed in</span></h2>
-        <p class="muted">
-            Role: <code><?= e((string) $account['role']) ?></code>
-            <?php if (! empty($account['last_login_at'])): ?>
-                &middot; Last login: <code><?= e((string) $account['last_login_at']) ?> UTC</code>
-            <?php endif; ?>
-        </p>
-        <p>The modernized dashboard surfaces will land here as feature
-            branches port them off the legacy app.</p>
+    <section class="card">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+                <h1 class="m-0">Welcome, <?= e((string) $account['user']) ?></h1>
+                <p class="text-brand-muted mt-2 flex flex-wrap items-center gap-2">
+                    <span class="pill-muted">role: <?= e((string) $account['role']) ?></span>
+                    <?php if (! empty($account['last_login_at'])): ?>
+                        <span class="text-sm">Last login <code><?= e((string) $account['last_login_at']) ?> UTC</code></span>
+                    <?php endif; ?>
+                </p>
+            </div>
+            <span class="pill <?= $isProduction ? 'pill-ok' : 'pill-warn' ?>"><?= e($env) ?></span>
+        </div>
+    </section>
 
-        <p>
-            <a href="<?= e($base) ?>/dashboard"
-               style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                My pay (today) &rarr;
+    <section class="card">
+        <h2 class="m-0">Jump in</h2>
+        <p class="text-brand-muted mt-2 mb-5">Pick where you're headed today.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <a href="<?= e($base) ?>/dashboard" class="btn-primary w-full">
+                My pay (today)
             </a>
-            <?php if ($isSuperAdmin): ?>
-                &nbsp;
-                <a href="<?= e($base) ?>/loads"
-                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                    Driver loads &rarr;
-                </a>
-            <?php endif; ?>
-            <?php if ($isAdmin): ?>
-                &nbsp;
-                <a href="<?= e($base) ?>/locations"
-                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                    Manage locations &rarr;
-                </a>
-                &nbsp;
-                <a href="<?= e($base) ?>/distances"
-                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                    City distances &rarr;
-                </a>
-                &nbsp;
-                <a href="<?= e($base) ?>/pay-admin"
-                   style="display:inline-block;background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                    Pay-rate admin &rarr;
-                </a>
-                &nbsp;
-                <a href="<?= e($base) ?>/admin"
-                   style="display:inline-block;background:#101418;color:#fff;border:1px solid #101418;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                    Admin Panel &rarr;
-                </a>
-            <?php endif; ?>
-        </p>
-
-        <form method="post" action="<?= e($base) ?>/logout" style="margin-top:1rem;">
-            <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-            <button type="submit"
-                    style="background:#fff;color:#101418;border:1px solid #cbd2da;padding:.4rem 1rem;border-radius:6px;font:inherit;cursor:pointer;">
-                Sign out
-            </button>
-        </form>
-    </div>
-<?php else: ?>
-    <div class="card">
-        <h2>Sign in to continue</h2>
-        <p class="muted">
-            Modern PayTracker requires a per-account login — the shared
-            password is retired. If you don't have an account on this
-            channel yet, an administrator can seed one for you.
-        </p>
-        <p>
-            <a href="<?= e($base) ?>/login"
-               style="display:inline-block;background:var(--accent);color:#fff;padding:.5rem 1.2rem;border-radius:6px;text-decoration:none;">
-                Sign in &rarr;
+            <a href="<?= e($base) ?>/loads/new" class="btn-secondary w-full">
+                Add a load
             </a>
-        </p>
-    </div>
-<?php endif; ?>
+            <a href="<?= e($base) ?>/reconcile" class="btn-secondary w-full">
+                Reconcile pay
+            </a>
+            <a href="<?= e($base) ?>/profile" class="btn-secondary w-full">
+                Driver profile
+            </a>
+        </div>
+    </section>
 
-<?php if ($authenticated): ?>
-    <div class="card">
-        <h2>Help &amp; info</h2>
-        <ul>
-            <li><a href="<?= e($base) ?>/tutorial">Tutorial</a> &mdash;
-                walkthrough of profile setup, adding loads, and reading
-                the dashboard.</li>
-            <li><a href="<?= e($base) ?>/faq">FAQ</a> &mdash; the
-                short version of "how does pay actually work?" plus the
-                common driver questions.</li>
-            <li><a href="<?= e($base) ?>/about">About</a> &mdash; what
-                this rebuild is and how it differs from the legacy site.</li>
-            <li><a href="<?= e($base) ?>/contact">Contact</a> &mdash;
-                email for bug reports, feature requests, and access
-                seeding.</li>
+    <?php if ($isAdmin): ?>
+        <section class="card">
+            <h2 class="m-0">Admin tools</h2>
+            <p class="text-brand-muted mt-2 mb-5">Available to your <code><?= e((string) $account['role']) ?></code> role.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <a href="<?= e($base) ?>/admin" class="btn-secondary w-full">Admin panel</a>
+                <a href="<?= e($base) ?>/distances" class="btn-secondary w-full">City distances</a>
+                <a href="<?= e($base) ?>/locations" class="btn-secondary w-full">Manage locations</a>
+                <a href="<?= e($base) ?>/pay-admin" class="btn-secondary w-full">Pay-rate admin</a>
+                <?php if ($isSuperAdmin): ?>
+                    <a href="<?= e($base) ?>/loads" class="btn-secondary w-full">Driver loads</a>
+                <?php endif; ?>
+            </div>
+        </section>
+    <?php endif; ?>
+
+    <section class="card">
+        <h2 class="m-0">Help &amp; info</h2>
+        <ul class="mt-3 space-y-2 list-none p-0">
+            <li><a href="<?= e($base) ?>/tutorial" class="font-medium">Tutorial</a>
+                <span class="text-brand-muted">— walkthrough of profile setup, adding loads, and reading the dashboard.</span></li>
+            <li><a href="<?= e($base) ?>/faq" class="font-medium">FAQ</a>
+                <span class="text-brand-muted">— short version of "how does pay actually work?" plus common questions.</span></li>
+            <li><a href="<?= e($base) ?>/about" class="font-medium">About</a>
+                <span class="text-brand-muted">— what this rebuild is and how it differs from the legacy site.</span></li>
+            <li><a href="<?= e($base) ?>/contact" class="font-medium">Contact</a>
+                <span class="text-brand-muted">— email for bug reports, feature requests, and access seeding.</span></li>
         </ul>
-    </div>
-<?php endif; ?>
+    </section>
 
-<div class="card">
-    <h2>Where to go next</h2>
-    <ul>
-        <li><a href="<?= e($base) ?>/health">/health</a> &mdash; runtime, environment and database probe.</li>
-        <li><a href="<?= e($base) ?>/health.json">/health.json</a> &mdash; same probe, machine-readable.</li>
-    </ul>
-    <p class="muted">
-        QA testers: the browser-based walkthrough lives in
-        <code>docs/qa/test_plan.md</code> in the repository.
-    </p>
-</div>
+<?php else: ?>
+    <section class="card">
+        <h1 class="m-0">PayTracker
+            <span class="pill <?= $isProduction ? 'pill-ok' : 'pill-warn' ?> ml-2 align-middle text-base">
+                <?= e($env) ?>
+            </span>
+        </h1>
+        <p class="text-brand-muted text-lg mt-3">
+            Pay tracking for fleet drivers.
+            <?php if (! $isProduction): ?>
+                You're on the <strong>isolated preview channel</strong> — production data is untouched.
+            <?php endif; ?>
+        </p>
+        <div class="flex flex-col sm:flex-row gap-3 mt-5">
+            <a href="<?= e($base) ?>/login" class="btn-primary">Sign in</a>
+            <a href="<?= e($base) ?>/register" class="btn-secondary">Have an invite code?</a>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2 class="m-0">What is this?</h2>
+        <p class="text-brand-muted mt-2">
+            A modern rewrite of the long-running PayTracker app — a tool that lets
+            drivers log their loads, see their pay add up in real time, and reconcile
+            against actual payroll. Same data, friendlier interface.
+        </p>
+        <ul class="mt-4 space-y-2 list-none p-0">
+            <li><a href="<?= e($base) ?>/tutorial">Tutorial</a></li>
+            <li><a href="<?= e($base) ?>/faq">FAQ</a></li>
+            <li><a href="<?= e($base) ?>/about">About</a></li>
+            <li><a href="<?= e($base) ?>/contact">Contact</a></li>
+        </ul>
+    </section>
+<?php endif; ?>

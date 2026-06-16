@@ -11,84 +11,211 @@ $__csrfForModal       = $__activeAnnouncement !== null
 $__appPath     = (string) (parse_url((string) (config('app.url') ?? ''), PHP_URL_PATH) ?? '');
 $__appPath     = rtrim($__appPath, '/');
 $__currentPath = $_SERVER['REQUEST_URI'] ?? ($__appPath . '/');
+
+// Resolve the signed-in account so the nav can role-gate sections.
+// We deliberately accept null here -- pre-auth pages (/, /login,
+// /register) ship the same layout but with a slimmer nav.
+$__authService = \PayTracker\Foundation\Application::instance()->make(\PayTracker\Auth\AuthService::class);
+$__account     = $__authService->currentAccount();
+$__role        = is_array($__account) ? (string) ($__account['role'] ?? '') : '';
+$__isAdmin     = in_array($__role, ['admin', 'super_admin'], true);
+$__isSuper     = $__role === 'super_admin';
+
+// CSRF for the inline logout form in the nav.
+$__csrfForLogout = is_array($__account)
+    ? \PayTracker\Foundation\Application::instance()->make(\PayTracker\Security\Csrf::class)->token()
+    : '';
+
+// Resolve the compiled stylesheet path relative to the current
+// channel. The build pipeline writes it to public/assets/app.css;
+// at runtime PHP sees that under $__appPath/assets/app.css.
+$__cssUrl = $__appPath . '/assets/app.css';
+$__logoUrl = $__appPath . '/assets/logo-mark.svg';
+
+// Nav items. Each entry is [href, label, visible?]. The visible
+// flag lets us role-gate at the data layer rather than scattering
+// if-blocks through the markup, which makes it easy to spot when
+// a new section is missing a gate.
+$__nav = [
+    ['href' => $__appPath . '/dashboard',         'label' => 'Dashboard',  'visible' => is_array($__account)],
+    ['href' => $__appPath . '/loads/new',         'label' => 'Add load',   'visible' => is_array($__account)],
+    ['href' => $__appPath . '/reconcile',         'label' => 'Reconcile',  'visible' => is_array($__account)],
+    ['href' => $__appPath . '/locations',         'label' => 'Locations',  'visible' => is_array($__account)],
+    ['href' => $__appPath . '/distances',         'label' => 'Distances',  'visible' => $__isAdmin],
+    ['href' => $__appPath . '/pay-admin',         'label' => 'Pay admin',  'visible' => $__isAdmin],
+    ['href' => $__appPath . '/admin',             'label' => 'Admin',      'visible' => $__isAdmin],
+];
 ?>
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#1E293B">
     <title><?= e((string) (config('app.name'))) ?></title>
-    <style>
-        :root { --fg:#101418; --muted:#5a6470; --accent:#1f6feb; --bg:#f5f7fa; --card:#fff; }
-        * { box-sizing: border-box; }
-        body { font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); margin: 0; }
-        main { max-width: 760px; margin: 3rem auto; padding: 0 1.25rem; }
-        .card { background: var(--card); border: 1px solid #e4e8ee; border-radius: 12px; padding: 1.5rem 1.75rem; margin-bottom: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,.03); }
-        h1 { margin-top: 0; }
-        .muted { color: var(--muted); }
-        .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
-        .pill.ok { background: #dcfce7; color: #166534; }
-        .pill.warn { background: #fef9c3; color: #854d0e; }
-        .pill.err { background: #fee2e2; color: #991b1b; }
-        a { color: var(--accent); }
-        code { background: #eef2f7; padding: 1px 6px; border-radius: 4px; }
-        footer { color: var(--muted); font-size: 13px; margin-top: 2rem; text-align: center; }
-        /* --- Announcement modal -------------------------------------- */
-        .announce-backdrop {
-            position: fixed; inset: 0;
-            background: rgba(16, 20, 24, 0.65);
-            display: flex; align-items: center; justify-content: center;
-            padding: 1rem; z-index: 1000;
-        }
-        .announce-modal {
-            background: var(--card); border-radius: 12px;
-            max-width: 560px; width: 100%; padding: 1.75rem;
-            box-shadow: 0 12px 48px rgba(0,0,0,.35);
-            max-height: 80vh; overflow-y: auto;
-        }
-        .announce-modal h2 { margin-top: 0; }
-        .announce-modal .body { white-space: pre-wrap; line-height: 1.55; }
-        .announce-modal form { margin-top: 1.5rem; display: flex; flex-direction: column; gap: .8rem; }
-        .announce-modal .actions { display: flex; gap: .6rem; align-items: center; }
-        .announce-modal .ok-btn {
-            background: var(--accent); color: #fff; border: 0;
-            padding: .55rem 1.4rem; border-radius: 6px; font: inherit; cursor: pointer;
-        }
-    </style>
+    <link rel="icon" type="image/svg+xml" href="<?= e($__logoUrl) ?>">
+    <link rel="stylesheet" href="<?= e($__cssUrl) ?>">
 </head>
-<body>
-<?php if ($__activeAnnouncement !== null): ?>
-    <div class="announce-backdrop" role="dialog" aria-modal="true"
-         aria-labelledby="announce-subject">
-        <div class="announce-modal">
-            <h2 id="announce-subject"><?= e((string) ($__activeAnnouncement['subject'] ?? '')) ?></h2>
-            <div class="body"><?= e((string) ($__activeAnnouncement['body'] ?? '')) ?></div>
-            <form method="post"
-                  action="<?= e($__appPath) ?>/announcements/<?= (int) $__activeAnnouncement['id'] ?>/dismiss">
-                <input type="hidden" name="_csrf" value="<?= e($__csrfForModal) ?>">
-                <input type="hidden" name="redirect" value="<?= e($__currentPath) ?>">
-                <label>
-                    <input type="checkbox" name="suppress" value="1">
-                    <strong>Don't show this again</strong>
-                </label>
-                <div class="actions">
-                    <button type="submit" class="ok-btn">Okay</button>
-                    <span class="muted" style="font-size:13px;">
-                        Ticking the box hides this message for you permanently.
-                        Leaving it unticked just dismisses for this session.
-                    </span>
-                </div>
-            </form>
+<body class="min-h-screen flex flex-col">
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <header class="bg-brand-surface text-white sticky top-0 z-40 shadow-card-elev">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14 sm:h-16">
+            <a href="<?= e($__appPath) ?>/" class="flex items-center gap-2.5 text-white hover:text-white no-underline group">
+                <img src="<?= e($__logoUrl) ?>" alt="" class="h-8 w-8 sm:h-9 sm:w-9" width="32" height="32">
+                <span class="font-bold text-lg sm:text-xl tracking-tight">PayTracker</span>
+            </a>
+
+            <?php if (is_array($__account)): ?>
+                <!-- Desktop nav -->
+                <nav class="hidden md:flex items-center gap-1" aria-label="Primary">
+                    <?php foreach ($__nav as $item): ?>
+                        <?php if (! $item['visible']) continue; ?>
+                        <a href="<?= e($item['href']) ?>"
+                           class="text-white/90 hover:text-white hover:bg-brand-surface-hover px-3 py-2 rounded-md text-sm font-medium no-underline transition-colors">
+                            <?= e($item['label']) ?>
+                        </a>
+                    <?php endforeach; ?>
+                    <form method="post" action="<?= e($__appPath) ?>/logout" class="ml-2">
+                        <input type="hidden" name="_csrf" value="<?= e($__csrfForLogout) ?>">
+                        <button type="submit"
+                                class="text-white/90 hover:text-white hover:bg-brand-surface-hover px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                            Sign out
+                        </button>
+                    </form>
+                </nav>
+
+                <!-- Mobile hamburger -->
+                <button type="button"
+                        class="md:hidden inline-flex items-center justify-center w-11 h-11 -mr-2 rounded-md text-white hover:bg-brand-surface-hover"
+                        aria-controls="mobile-drawer"
+                        aria-expanded="false"
+                        aria-label="Open navigation"
+                        data-drawer-toggle>
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+            <?php else: ?>
+                <nav class="flex items-center gap-2" aria-label="Primary">
+                    <a href="<?= e($__appPath) ?>/login"
+                       class="text-white/90 hover:text-white hover:bg-brand-surface-hover px-3 py-2 rounded-md text-sm font-medium no-underline transition-colors">
+                        Sign in
+                    </a>
+                </nav>
+            <?php endif; ?>
         </div>
-    </div>
-<?php endif; ?>
-<main>
-    <?= $slot ?>
-    <footer>
-        PayTracker <code><?= e(\PayTracker\Support\Version::string()) ?></code> &middot;
-        env <code><?= e((string) (config('app.env'))) ?></code> &middot;
-        php <code><?= e(PHP_VERSION) ?></code>
+    </header>
+
+    <?php if (is_array($__account)): ?>
+        <!-- Mobile drawer (off-canvas). Hidden by default; toggled via tiny JS at the bottom of the page. -->
+        <div id="mobile-drawer"
+             class="md:hidden fixed inset-0 z-50 hidden"
+             role="dialog"
+             aria-modal="true"
+             aria-label="Mobile navigation"
+             data-drawer>
+            <div class="absolute inset-0 bg-slate-900/60" data-drawer-backdrop></div>
+            <nav class="absolute top-0 right-0 h-full w-4/5 max-w-xs bg-white shadow-card-elev flex flex-col"
+                 aria-label="Primary mobile">
+                <div class="flex items-center justify-between px-4 h-14 border-b border-brand-line">
+                    <span class="font-bold text-brand-ink">Menu</span>
+                    <button type="button"
+                            class="inline-flex items-center justify-center w-11 h-11 rounded-md text-brand-ink hover:bg-slate-100"
+                            aria-label="Close navigation"
+                            data-drawer-close>
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex-1 overflow-y-auto py-2">
+                    <?php foreach ($__nav as $item): ?>
+                        <?php if (! $item['visible']) continue; ?>
+                        <a href="<?= e($item['href']) ?>"
+                           class="flex items-center min-h-[56px] px-5 text-base font-medium text-brand-ink hover:bg-slate-50 no-underline border-b border-brand-line/50">
+                            <?= e($item['label']) ?>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+                <form method="post" action="<?= e($__appPath) ?>/logout" class="px-4 py-4 border-t border-brand-line">
+                    <input type="hidden" name="_csrf" value="<?= e($__csrfForLogout) ?>">
+                    <button type="submit" class="btn-secondary w-full">Sign out</button>
+                </form>
+            </nav>
+        </div>
+    <?php endif; ?>
+
+    <?php if ($__activeAnnouncement !== null): ?>
+        <div class="fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4"
+             role="dialog" aria-modal="true" aria-labelledby="announce-subject">
+            <div class="bg-white rounded-xl2 shadow-card-elev max-w-xl w-full p-6 sm:p-8 max-h-[85vh] overflow-y-auto">
+                <h2 id="announce-subject" class="mt-0"><?= e((string) ($__activeAnnouncement['subject'] ?? '')) ?></h2>
+                <div class="whitespace-pre-wrap text-brand-ink leading-relaxed mt-3">
+                    <?= e((string) ($__activeAnnouncement['body'] ?? '')) ?>
+                </div>
+                <form method="post"
+                      action="<?= e($__appPath) ?>/announcements/<?= (int) $__activeAnnouncement['id'] ?>/dismiss"
+                      class="mt-6 flex flex-col gap-3">
+                    <input type="hidden" name="_csrf" value="<?= e($__csrfForModal) ?>">
+                    <input type="hidden" name="redirect" value="<?= e($__currentPath) ?>">
+                    <label class="inline-flex items-center gap-2">
+                        <input type="checkbox" name="suppress" value="1" class="field-checkbox">
+                        <span><strong>Don't show this again</strong></span>
+                    </label>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button type="submit" class="btn-primary">Okay</button>
+                        <span class="text-sm text-brand-muted">
+                            Ticking the box hides this message for you permanently.
+                        </span>
+                    </div>
+                </form>
+            </div>
+        </div>
+    <?php endif; ?>
+
+    <main id="main-content" class="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+        <?= $slot ?>
+    </main>
+
+    <footer class="text-center text-xs text-brand-muted py-6 px-4 border-t border-brand-line bg-white">
+        PayTracker <code><?= e(\PayTracker\Support\Version::string()) ?></code>
+        &middot; env <code><?= e((string) (config('app.env'))) ?></code>
+        &middot; php <code><?= e(PHP_VERSION) ?></code>
     </footer>
-</main>
+
+    <?php if (is_array($__account)): ?>
+        <script>
+            // Mobile drawer toggle. Tiny vanilla JS — no framework
+            // needed for an open/close interaction, and we want zero
+            // runtime cost on desktop.
+            (function () {
+                var drawer  = document.getElementById('mobile-drawer');
+                var toggle  = document.querySelector('[data-drawer-toggle]');
+                var close   = document.querySelector('[data-drawer-close]');
+                var backdrop= document.querySelector('[data-drawer-backdrop]');
+                if (!drawer || !toggle) return;
+                var open = function () {
+                    drawer.classList.remove('hidden');
+                    toggle.setAttribute('aria-expanded', 'true');
+                    // Trap scroll on the underlying page while the
+                    // drawer is open so iOS doesn't bleed scroll
+                    // momentum into the body.
+                    document.body.style.overflow = 'hidden';
+                };
+                var shut = function () {
+                    drawer.classList.add('hidden');
+                    toggle.setAttribute('aria-expanded', 'false');
+                    document.body.style.overflow = '';
+                };
+                toggle.addEventListener('click', open);
+                if (close)   close.addEventListener('click',   shut);
+                if (backdrop) backdrop.addEventListener('click', shut);
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape' && !drawer.classList.contains('hidden')) shut();
+                });
+            })();
+        </script>
+    <?php endif; ?>
 </body>
 </html>

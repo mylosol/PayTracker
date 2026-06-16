@@ -108,6 +108,24 @@ jobs:
       - name: Re-install without dev dependencies (for deploy)
         run: composer install --no-dev --prefer-dist --no-interaction --no-progress --optimize-autoloader
 
+      # Compile the Tailwind stylesheet into public/assets/app.css
+      # before rsync. DreamHost shared hosting has no Node runtime;
+      # the build has to happen here. We set up Node briefly (the
+      # later Playwright step does its own setup), install the
+      # tooling subset npm needs (no Playwright browsers yet), and
+      # emit the minified CSS. The compiled file is then rsynced as
+      # part of the public/ tree.
+      - name: Set up Node.js for CSS build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm dependencies for CSS build
+        run: npm install --no-audit --no-fund
+
+      - name: Build Tailwind CSS (minified)
+        run: npm run css:build
+
       - name: Install SSH key
         run: |
           set -euo pipefail
