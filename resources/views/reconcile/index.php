@@ -34,7 +34,7 @@ $statePill = static function (?string $state): string {
     };
 };
 
-/** Decode the pay_breakdown JSON column into an array (or null). */
+/** Decode pay_breakdown JSON column → array | null. */
 $decodeBreakdown = static function (?string $json): ?array {
     if ($json === null || $json === '') return null;
     try {
@@ -63,14 +63,12 @@ $componentLabels = [
 ];
 ?>
 <?php if ($flash !== null): ?>
-    <div class="card" style="background:#dcfce7;color:#166534;word-break:break-word;">
-        <?= e($flash) ?>
-    </div>
+    <div class="flash-ok" role="status"><?= e($flash) ?></div>
 <?php endif; ?>
 
 <div class="card">
-    <h1>Reconcile your pay</h1>
-    <p class="muted">
+    <h1 class="m-0">Reconcile your pay</h1>
+    <p class="text-brand-muted mt-2">
         Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong>
         (driver id <?= (int) ($driver['id'] ?? 0) ?>).
         Walk through each load as your paystubs arrive and mark whether you got the
@@ -78,61 +76,57 @@ $componentLabels = [
         <strong>Dispute</strong> if there's a problem worth flagging &mdash;
         being short on any line item counts as a dispute.
     </p>
-    <p>
-        <a href="<?= e($base) ?>/dashboard">&larr; Dashboard</a>
-        &nbsp;<a href="<?= e($base) ?>/profile">Profile</a>
+    <p class="text-sm mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <a href="<?= e($base) ?>/dashboard">← Dashboard</a>
+        <a href="<?= e($base) ?>/profile">Profile</a>
     </p>
 </div>
 
-<div class="card" style="background:#fffbeb;border:1px solid #fde68a;">
-    <h2 style="margin-top:0;">Pending payroll batch
-        <span class="pill <?= $pendingCount > 0 ? 'warn' : '' ?>"><?= (int) $pendingCount ?></span>
+<div class="card bg-amber-50 border border-amber-200">
+    <h2 class="m-0">Pending payroll batch
+        <span class="pill <?= $pendingCount > 0 ? 'warn' : '' ?> align-middle ml-1 text-xs"><?= (int) $pendingCount ?></span>
     </h2>
     <?php if ($pendingCount === 0): ?>
-        <p class="muted" style="margin:0;">
+        <p class="text-brand-muted mt-2 mb-0">
             No disputes are flagged for batch notification.
             Tick the <em>Include in next payroll batch</em> box when you dispute a
             load and it'll queue up here.
         </p>
     <?php else: ?>
-        <p class="muted" style="margin:0 0 .8rem 0;">
+        <p class="text-brand-muted mt-2 mb-3">
             <strong><?= (int) $pendingCount ?></strong> disputed load(s) are waiting to be sent in a
             single email
             <?php if ($payrollEmail !== null): ?>
                 to <code><?= e($payrollEmail) ?></code>.
             <?php else: ?>
-                &mdash; but no payroll contact email is set yet.
+                — but no payroll contact email is set yet.
             <?php endif; ?>
         </p>
         <?php if ($payrollEmail === null): ?>
-            <p>
-                <a href="<?= e($base) ?>/profile"
-                   style="display:inline-block;background:var(--accent);color:#fff;padding:.4rem 1rem;border-radius:6px;text-decoration:none;">
-                    Set a payroll contact email &rarr;
-                </a>
-            </p>
+            <a href="<?= e($base) ?>/profile" class="btn-primary inline-block">
+                Set a payroll contact email →
+            </a>
         <?php else: ?>
-            <form id="send-batch-form" method="post" action="<?= e($base) ?>/reconcile/send-batch">
+            <form id="send-batch-form" method="post" action="<?= e($base) ?>/reconcile/send-batch" class="space-y-3">
                 <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
                 <input type="hidden" name="cc_self" id="send-batch-cc-self" value="0">
-                <label style="display:block;font-size:13px;margin-bottom:.5rem;">
-                    <input type="checkbox" id="cc-self-batch" data-cc-self-toggle>
+                <label class="inline-flex items-center gap-2 text-sm min-h-[44px]">
+                    <input type="checkbox" id="cc-self-batch" data-cc-self-toggle class="field-checkbox">
                     Send me a copy of this batch
                 </label>
                 <?php if (! $mailConfigured): ?>
-                    <p class="muted" style="background:#fef3c7;color:#854d0e;border-radius:6px;padding:.5rem .7rem;font-size:13px;">
+                    <div class="flash-info text-sm">
                         <strong>Heads up:</strong> email delivery is not configured on the
                         server yet (waiting on Resend / DNS verification). The batch is
                         queued and will go out on your next click once delivery is live.
-                    </p>
-                    <button type="submit" disabled
-                            style="background:#e5e7eb;color:#6b7280;border:0;padding:.5rem 1.2rem;border-radius:6px;font:inherit;cursor:not-allowed;">
+                    </div>
+                    <button type="submit" disabled class="btn-secondary opacity-60 cursor-not-allowed">
                         Send batch (delivery pending)
                     </button>
                 <?php else: ?>
                     <button type="submit"
                             onclick="return confirm('Send <?= (int) $pendingCount ?> disputed load(s) to <?= e($payrollEmail) ?>?');"
-                            style="background:#16a34a;color:#fff;border:0;padding:.5rem 1.2rem;border-radius:6px;font:inherit;cursor:pointer;">
+                            class="btn-primary">
                         Send batch to <?= e($payrollEmail) ?>
                     </button>
                 <?php endif; ?>
@@ -167,83 +161,77 @@ $renderRow = static function (array $row, ?array $reconRow) use (
             }
         }
     }
-    $rowStyle = match ($state) {
-        'paid'     => 'background:#f0fdf4;',
-        'short'    => 'background:#fffbeb;',
-        'disputed' => 'background:#fef2f2;',
+    $rowClass = match ($state) {
+        'paid'     => 'bg-emerald-50/60',
+        'short'    => 'bg-amber-50/60',
+        'disputed' => 'bg-rose-50/60',
         default    => '',
     };
     $bd = $decodeBreakdown(isset($row['pay_breakdown']) ? (string) $row['pay_breakdown'] : null);
     ?>
-    <tr style="border-bottom:1px solid #f0f2f6;vertical-align:top;<?= $rowStyle ?>">
-        <td style="padding:.4rem .25rem;text-align:center;width:1.5rem;">
+    <tr class="align-top <?= $rowClass ?>">
+        <td class="text-center w-6">
             <?php if ($bd !== null): ?>
-                <span style="color:var(--accent);font-weight:600;" title="See pay breakdown below">&#x25B8;</span>
+                <span class="text-brand-primary font-semibold" title="See pay breakdown below">▸</span>
             <?php endif; ?>
         </td>
-        <td style="padding:.4rem .5rem;"><code><?= $frtl ?></code></td>
-        <td style="padding:.4rem .5rem;"><?= e(substr((string) ($row['date'] ?? ''), 0, 10)) ?></td>
-        <td style="padding:.4rem .5rem;"><?= e($loadTypeLabel($row['load_type'] ?? null)) ?></td>
-        <td style="padding:.4rem .5rem;">
+        <td><code><?= $frtl ?></code></td>
+        <td><?= e(substr((string) ($row['date'] ?? ''), 0, 10)) ?></td>
+        <td><?= e($loadTypeLabel($row['load_type'] ?? null)) ?></td>
+        <td>
             <?= e((string) ($row['pickup_city']   ?? '?')) ?>
-            &nbsp;&rarr;&nbsp;
+            &nbsp;→&nbsp;
             <?= e((string) ($row['delivery_city'] ?? '?')) ?>
         </td>
-        <td style="padding:.4rem .5rem;text-align:right;"><code><?= e($money($np)) ?></code></td>
+        <td class="text-right"><code><?= e($money($np)) ?></code></td>
         <?php
-        // "Was this a resolved dispute?" — when state=paid AND any
-        // dispute artefact is present (note, items, or other amount),
-        // the row was originally disputed and has since been closed
-        // out. Surface a sub-label so it reads differently from a
-        // row paid in a single click.
+        // "Was this a resolved dispute?" — paid state + any dispute
+        // artefact (note, items, or other amount) → row was originally
+        // disputed and has since been closed out. Surface a sub-label
+        // so it reads differently from a row paid in a single click.
         $resolvedFromDispute = ($state === 'paid')
             && ($note !== '' || $disputedItems !== [] || $disputedOther !== null);
         ?>
-        <td style="padding:.4rem .5rem;">
+        <td>
             <?= $statePill($state) ?>
             <?php if ($resolvedFromDispute): ?>
-                <br><small class="muted">resolved dispute</small>
+                <br><small class="text-brand-muted">resolved dispute</small>
             <?php elseif ($state === 'short' && $shortfall !== null): ?>
-                <br><small class="muted">&minus;<?= e($money($shortfall)) ?></small>
+                <br><small class="text-brand-muted">−<?= e($money($shortfall)) ?></small>
             <?php elseif ($state === 'disputed' && $shortfall !== null): ?>
-                <br><small class="muted">gap <?= e($money($shortfall)) ?></small>
+                <br><small class="text-brand-muted">gap <?= e($money($shortfall)) ?></small>
             <?php endif; ?>
             <?php if ($state === 'disputed' && $notify): ?>
-                <br><small class="muted">
+                <br><small class="text-brand-muted">
                     <?php if ($emailedAt !== ''): ?>
-                        <span class="pill ok" style="font-size:10px;">batched</span>
+                        <span class="pill ok text-[10px]">batched</span>
                     <?php else: ?>
-                        <span class="pill warn" style="font-size:10px;">in next batch</span>
+                        <span class="pill warn text-[10px]">in next batch</span>
                     <?php endif; ?>
                 </small>
             <?php endif; ?>
         </td>
-        <td style="padding:.4rem .5rem;text-align:right;white-space:nowrap;">
+        <td class="text-right whitespace-nowrap">
             <?php if ($state === null): ?>
-                <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/paid" style="display:inline;">
+                <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/paid" class="inline-block m-0">
                     <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                    <button type="submit"
-                            style="background:#16a34a;color:#fff;border:0;padding:.25rem .7rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
-                        Paid
-                    </button>
+                    <button type="submit" class="btn-primary btn-sm">Paid</button>
                 </form>
-                <details style="display:inline-block;">
-                    <summary class="dispute-summary"
-                             style="display:inline-block;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;padding:.25rem .7rem;border-radius:4px;cursor:pointer;font-size:12px;list-style:none;">Dispute&hellip;</summary>
+                <details class="inline-block relative">
+                    <summary class="dispute-summary btn-danger btn-sm inline-block cursor-pointer list-none">Dispute…</summary>
                     <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/dispute" data-dispute-form
-                          style="position:absolute;z-index:10;background:#fff;border:1px solid #cbd2da;border-radius:6px;padding:.7rem;margin-top:.3rem;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:22rem;max-width:26rem;text-align:left;">
+                          class="absolute z-10 bg-white border border-brand-line rounded-lg p-3 mt-1 shadow-lg min-w-[22rem] max-w-md text-left right-0">
                         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                        <p style="margin:0 0 .4rem 0;font-size:12px;color:#475569;">
+                        <p class="m-0 mb-2 text-xs text-brand-muted">
                             Expected pay: <strong><?= e($money($np)) ?></strong>
                         </p>
-                        <label style="display:block;font-size:12px;margin-bottom:.4rem;">
-                            <strong>Actual paid ($)</strong> &mdash; required<br>
-                            <input type="number" name="actual_np" step="0.01" min="0" required
-                                   style="width:8rem;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;">
+                        <label class="block text-xs mb-2">
+                            <strong>Actual paid ($)</strong> — required<br>
+                            <input type="number" name="actual_np" step="0.01" min="0" required class="field w-32">
                         </label>
                         <?php if ($bd !== null): ?>
-                            <fieldset style="border:1px solid #e4e8ee;border-radius:6px;padding:.4rem .6rem;margin:0 0 .5rem 0;">
-                                <legend style="font-size:12px;color:#475569;padding:0 .3rem;">Which items are wrong?</legend>
+                            <fieldset class="border border-brand-line rounded-md p-2 mb-2">
+                                <legend class="text-xs text-brand-muted px-1">Which items are wrong?</legend>
                                 <?php
                                 $anyComp = false;
                                 foreach ($componentLabels as $key => $label):
@@ -251,62 +239,56 @@ $renderRow = static function (array $row, ?array $reconRow) use (
                                     if ($val === 0.0) continue;
                                     $anyComp = true;
                                     ?>
-                                    <label style="display:block;font-size:12px;margin:.15rem 0;">
-                                        <input type="checkbox" name="disputed_components[]" value="<?= e($key) ?>">
+                                    <label class="block text-xs my-0.5">
+                                        <input type="checkbox" name="disputed_components[]" value="<?= e($key) ?>" class="field-checkbox">
                                         <?= e($label) ?>
-                                        <span class="muted">(<?= e($money($val)) ?> expected)</span>
+                                        <span class="text-brand-muted">(<?= e($money($val)) ?> expected)</span>
                                     </label>
                                 <?php endforeach; ?>
                                 <?php if (! $anyComp): ?>
-                                    <p class="muted" style="margin:.2rem 0;font-size:11px;">
+                                    <p class="text-brand-muted text-[11px] m-0">
                                         No itemised components for this load.
                                     </p>
                                 <?php endif; ?>
                             </fieldset>
                         <?php endif; ?>
-                        <label style="display:block;font-size:12px;margin-bottom:.4rem;">
-                            Other shortfall ($) <span class="muted">(optional)</span><br>
-                            <input type="number" name="disputed_other_amount" step="0.01" min="0"
-                                   style="width:8rem;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;"
-                                   placeholder="0.00">
+                        <label class="block text-xs mb-2">
+                            Other shortfall ($) <span class="text-brand-muted">(optional)</span><br>
+                            <input type="number" name="disputed_other_amount" step="0.01" min="0" placeholder="0.00" class="field w-32">
                         </label>
-                        <label style="display:block;font-size:12px;margin-bottom:.4rem;">
-                            <strong>Note</strong> &mdash; required<br>
-                            <textarea name="note" rows="3" maxlength="4000" required
-                                      style="width:100%;padding:.3rem;border:1px solid #cbd2da;border-radius:4px;font:inherit;"
+                        <label class="block text-xs mb-2">
+                            <strong>Note</strong> — required<br>
+                            <textarea name="note" rows="3" maxlength="4000" required class="field w-full"
                                       placeholder="What should payroll know?"></textarea>
                         </label>
-                        <label style="display:block;font-size:12px;margin:.4rem 0;">
-                            <input type="checkbox" name="notify_email" value="1" data-notify-toggle>
+                        <label class="block text-xs my-2">
+                            <input type="checkbox" name="notify_email" value="1" data-notify-toggle class="field-checkbox">
                             Include in next payroll batch email
                         </label>
-                        <label style="display:block;font-size:12px;margin:.4rem 0;">
-                            <input type="checkbox" data-cc-self-toggle>
+                        <label class="block text-xs my-2">
+                            <input type="checkbox" data-cc-self-toggle class="field-checkbox">
                             Send me a copy when this batch goes out
                         </label>
-                        <button type="submit"
-                                style="background:#991b1b;color:#fff;border:0;padding:.35rem .9rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
-                            Flag dispute
-                        </button>
+                        <button type="submit" class="btn-danger btn-sm">Flag dispute</button>
                     </form>
                 </details>
             <?php else: ?>
                 <?php if ($state === 'disputed'): ?>
-                    <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/resolve" style="display:inline;">
+                    <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/resolve" class="inline-block m-0">
                         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
                         <button type="submit"
                                 onclick="return confirm('Mark load <?= $frtl ?> as resolved? This closes out the dispute and flips it to paid (the note + items stay as history).');"
                                 title="Payroll paid the gap — close out this dispute"
-                                style="background:#16a34a;color:#fff;border:0;padding:.25rem .7rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
+                                class="btn-primary btn-sm">
                             Resolved
                         </button>
                     </form>
                 <?php endif; ?>
-                <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/undo" style="display:inline;">
+                <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/undo" class="inline-block m-0">
                     <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
                     <button type="submit"
                             onclick="return confirm('Reset load <?= $frtl ?> back to pending? This deletes the current reconcile record.');"
-                            style="background:#fff;color:#101418;border:1px solid #cbd2da;padding:.25rem .7rem;border-radius:4px;font:inherit;cursor:pointer;font-size:12px;">
+                            class="btn-secondary btn-sm">
                         Undo
                     </button>
                 </form>
@@ -320,20 +302,20 @@ $renderRow = static function (array $row, ?array $reconRow) use (
     // main row's first cell, or directly the "Pay breakdown" summary).
     if ($bd !== null):
         ?>
-        <tr style="background:#f8fafc;border-bottom:1px solid #f0f2f6;">
-            <td colspan="8" style="padding:.6rem 1.4rem;">
+        <tr class="bg-slate-50">
+            <td colspan="8" class="px-5 py-2">
                 <details>
-                    <summary style="cursor:pointer;color:var(--accent);font-weight:600;font-size:13px;">
-                        Pay breakdown &mdash; <?= e((string) ($bd['trip_label']  ?? '?')) ?>
+                    <summary class="cursor-pointer text-brand-primary font-semibold text-[13px]">
+                        Pay breakdown — <?= e((string) ($bd['trip_label']  ?? '?')) ?>
                         (<?= e((string) ($bd['tenure_band'] ?? '?')) ?>&nbsp;M&nbsp;|&nbsp;<?= e(ucfirst((string) ($bd['shift'] ?? '?'))) ?>)
                     </summary>
                     <?php if (! empty($row['notes'])): ?>
-                        <div style="margin-top:.5rem;padding:.5rem .7rem;background:#fffbeb;border-left:3px solid #f59e0b;color:#475569;font-size:13px;white-space:pre-wrap;word-break:break-word;">
-                            <strong style="color:#92400e;">Notes:</strong>
+                        <div class="mt-2 p-2 bg-amber-50 border-l-4 border-amber-500 text-brand-muted text-[13px] whitespace-pre-wrap break-words">
+                            <strong class="text-amber-900">Notes:</strong>
                             <?= e((string) $row['notes']) ?>
                         </div>
                     <?php endif; ?>
-                    <table style="border-collapse:collapse;font-size:13px;margin-top:.4rem;">
+                    <table class="text-[13px] mt-2 border-collapse">
                         <tbody>
                             <?php foreach ($componentLabels as $key => $label):
                                 $val = (float) ($bd[$key] ?? 0);
@@ -346,29 +328,29 @@ $renderRow = static function (array $row, ?array $reconRow) use (
                                     $countLabel = sprintf('Empty Pay: %d Miles', (int) $bd['empty_miles']);
                                     $rate = isset($bd['empty_rate']) ? (float) $bd['empty_rate'] : null;
                                 } elseif ($key === 'shift_pay'     && isset($bd['shift_pct'])) {
-                                    $countLabel = 'Shift Pay <span style="color:#ec4899;">(' . $pct($bd['shift_pct']) . ')</span>';
+                                    $countLabel = 'Shift Pay <span class="text-pink-600">(' . $pct($bd['shift_pct']) . ')</span>';
                                 } elseif ($key === 'seniority_pay' && isset($bd['seniority_pct'])) {
-                                    $countLabel = 'Seniority Pay <span style="color:#a855f7;">(' . $pct($bd['seniority_pct']) . ')</span>';
+                                    $countLabel = 'Seniority Pay <span class="text-purple-600">(' . $pct($bd['seniority_pct']) . ')</span>';
                                 } elseif ($key === 'weekend_pay'   && isset($bd['weekend_pct'])) {
-                                    $countLabel = 'Weekend <span style="color:#f59e0b;">(' . $pct($bd['weekend_pct']) . ')</span>';
+                                    $countLabel = 'Weekend <span class="text-amber-600">(' . $pct($bd['weekend_pct']) . ')</span>';
                                 }
                                 if ($countLabel === null) $countLabel = $label;
                                 ?>
                                 <tr>
-                                    <td style="padding:.2rem .8rem;color:#475569;">
+                                    <td class="px-3 py-0.5 text-brand-muted">
                                         <?= $countLabel ?>
                                         <?php if ($rate !== null): ?>
-                                            <span class="muted">@ $<?= number_format($rate, 4) ?></span>
+                                            <span class="text-brand-muted">@ $<?= number_format($rate, 4) ?></span>
                                         <?php endif; ?>
                                     </td>
-                                    <td style="padding:.2rem .8rem;text-align:right;color:#16a34a;font-weight:600;">
+                                    <td class="px-3 py-0.5 text-right text-emerald-700 font-semibold">
                                         <?= e($money($val)) ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
-                            <tr style="border-top:1px solid #cbd5e1;">
-                                <td style="padding:.3rem .8rem;font-weight:700;">Total Load Pay</td>
-                                <td style="padding:.3rem .8rem;text-align:right;font-weight:700;color:#f59e0b;">
+                            <tr class="border-t border-slate-300">
+                                <td class="px-3 py-1 font-bold">Total Load Pay</td>
+                                <td class="px-3 py-1 text-right font-bold text-brand-primary">
                                     <?= e($money((float) ($bd['np'] ?? 0))) ?>
                                 </td>
                             </tr>
@@ -383,25 +365,23 @@ $renderRow = static function (array $row, ?array $reconRow) use (
     // Acted-row detail strip: actual / shortfall / disputed items / note.
     // Shown whenever any historical artefact is present — disputed
     // rows AND paid rows that were originally disputed (resolved).
-    // Direct-paid rows have no artefacts so the strip stays hidden
-    // for them (note=null, items=[], other=null on a clean Paid click).
     $showStrip = $reconRow !== null
         && ($note !== '' || $disputedItems !== [] || $disputedOther !== null);
     if ($showStrip):
         ?>
-        <tr style="<?= $rowStyle ?>border-bottom:1px solid #e4e8ee;">
-            <td colspan="8" style="padding:.5rem 1.4rem;font-size:13px;color:#475569;">
+        <tr class="<?= $rowClass ?>">
+            <td colspan="8" class="px-5 py-2 text-[13px] text-brand-muted">
                 <?php if ($resolvedFromDispute): ?>
-                    <em class="muted">Originally disputed, now resolved.</em><br>
+                    <em class="text-brand-muted">Originally disputed, now resolved.</em><br>
                 <?php endif; ?>
                 <?php if ($actual !== null): ?>
                     <strong>Actual paid:</strong> <?= e($money($actual)) ?>
                 <?php endif; ?>
                 <?php if ($disputedItems !== []): ?>
-                    &middot; <strong>Items:</strong> <?= e(implode(', ', $disputedItems)) ?>
+                    · <strong>Items:</strong> <?= e(implode(', ', $disputedItems)) ?>
                 <?php endif; ?>
                 <?php if ($disputedOther !== null && $disputedOther > 0): ?>
-                    &middot; <strong>Other:</strong> <?= e($money($disputedOther)) ?>
+                    · <strong>Other:</strong> <?= e($money($disputedOther)) ?>
                 <?php endif; ?>
                 <?php if ($note !== ''): ?>
                     <br><strong>Note:</strong> <?= e($note) ?>
@@ -418,49 +398,50 @@ $renderRow = static function (array $row, ?array $reconRow) use (
     $headerText = $i === 0 ? 'This week' : 'Week of ' . $week['label'];
     $countLabel = count($rows) === 1 ? '1 load' : count($rows) . ' loads';
 ?>
+<div class="card">
 <?php if ($i === 0): ?>
-    <div class="card">
-        <h2 style="margin-top:0;">
-            <?= e($headerText) ?>
-            <span class="muted" style="font-weight:400;font-size:14px;">(<?= e($week['label']) ?> &middot; <?= e($countLabel) ?>)</span>
-        </h2>
+    <h2 class="m-0">
+        <?= e($headerText) ?>
+        <span class="text-brand-muted font-normal text-sm">(<?= e($week['label']) ?> · <?= e($countLabel) ?>)</span>
+    </h2>
 <?php else: ?>
-    <div class="card">
-        <details<?= count($rows) > 0 ? '' : ' open' ?>>
-            <summary style="cursor:pointer;font-weight:600;font-size:18px;">
-                <?= e($headerText) ?>
-                <span class="muted" style="font-weight:400;font-size:14px;">(<?= e($countLabel) ?>)</span>
-            </summary>
+    <details<?= count($rows) > 0 ? '' : ' open' ?>>
+        <summary class="cursor-pointer font-semibold text-lg">
+            <?= e($headerText) ?>
+            <span class="text-brand-muted font-normal text-sm">(<?= e($countLabel) ?>)</span>
+        </summary>
 <?php endif; ?>
         <?php if ($rows === []): ?>
-            <p class="muted" style="margin:.6rem 0 0 0;">No loads for this week.</p>
+            <p class="text-brand-muted mt-3 mb-0">No loads for this week.</p>
         <?php else: ?>
-            <table style="border-collapse:collapse;width:100%;font-size:14px;margin-top:.4rem;">
-                <thead>
-                    <tr style="text-align:left;border-bottom:1px solid #e4e8ee;background:#f1f5f9;">
-                        <th style="padding:.4rem .25rem;width:1.5rem;"></th>
-                        <th style="padding:.4rem .5rem;">FRTL</th>
-                        <th style="padding:.4rem .5rem;">Date</th>
-                        <th style="padding:.4rem .5rem;">Type</th>
-                        <th style="padding:.4rem .5rem;">Pickup &rarr; Delivery</th>
-                        <th style="padding:.4rem .5rem;text-align:right;">Expected</th>
-                        <th style="padding:.4rem .5rem;">State</th>
-                        <th style="padding:.4rem .5rem;text-align:right;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($rows as $row):
-                        $frtl     = (int) ($row['frtl'] ?? 0);
-                        $reconRow = $reconByFrtl[$frtl] ?? null;
-                        $renderRow($row, $reconRow);
-                    endforeach; ?>
-                </tbody>
-            </table>
+            <div class="table-wrap mt-3">
+                <table class="data-table text-[14px]">
+                    <thead>
+                        <tr>
+                            <th class="w-6"></th>
+                            <th>FRTL</th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Pickup → Delivery</th>
+                            <th class="text-right">Expected</th>
+                            <th>State</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $row):
+                            $frtl     = (int) ($row['frtl'] ?? 0);
+                            $reconRow = $reconByFrtl[$frtl] ?? null;
+                            $renderRow($row, $reconRow);
+                        endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         <?php endif; ?>
 <?php if ($i !== 0): ?>
-        </details>
+    </details>
 <?php endif; ?>
-    </div>
+</div>
 <?php endforeach; ?>
 
 <script>
@@ -480,9 +461,6 @@ $renderRow = static function (array $row, ?array $reconRow) use (
     //     "Include in next payroll batch email". Appears on every
     //     dispute form. Persisted so a driver who batches every
     //     dispute doesn't have to re-tick the box for each load.
-    //
-    // Both use the same bind helper; mirroring keeps each toggle in
-    // sync on the page without a reload.
     // -------------------------------------------------------------------
     (function () {
         const bindPersistentToggles = (selector, storageKey, onChange) => {

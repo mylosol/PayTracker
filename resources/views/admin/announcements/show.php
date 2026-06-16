@@ -7,24 +7,26 @@
  * @var ?string                                                                      $flash
  */
 layout('layouts/app');
+
+$id = (int) ($row['id'] ?? 0);
 ?>
 <div class="card">
-    <h1>Announcement #<?= (int) ($row['id'] ?? 0) ?></h1>
-    <p>
-        <a href="<?= e($base) ?>/admin/announcements">&larr; Back to list</a>
-        &middot;
-        <a href="<?= e($base) ?>/admin/announcements/<?= (int) ($row['id'] ?? 0) ?>/edit">Edit</a>
+    <h1 class="m-0">Announcement #<?= $id ?></h1>
+    <p class="text-sm mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <a href="<?= e($base) ?>/admin/announcements">← Back to list</a>
+        <span class="text-brand-muted">·</span>
+        <a href="<?= e($base) ?>/admin/announcements/<?= $id ?>/edit">Edit</a>
     </p>
 </div>
 
 <?php if ($flash !== null): ?>
-    <div class="card" style="background:#dcfce7;color:#166534;"><?= e($flash) ?></div>
+    <div class="flash-ok" role="status"><?= e($flash) ?></div>
 <?php endif; ?>
 
 <div class="card">
-    <h2><?= e((string) ($row['subject'] ?? '')) ?></h2>
-    <p class="muted">
-        State:
+    <h2 class="m-0"><?= e((string) ($row['subject'] ?? '')) ?></h2>
+    <p class="text-brand-muted text-sm mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span>State:</span>
         <?php if ((int) ($row['is_template'] ?? 0) === 1): ?>
             <span class="pill warn">template</span>
         <?php elseif ((int) ($row['is_active'] ?? 0) === 1): ?>
@@ -32,50 +34,54 @@ layout('layouts/app');
         <?php else: ?>
             <span class="pill">inactive</span>
         <?php endif; ?>
-        &middot; Created by <code><?= e((string) ($row['created_by_user'] ?? '—')) ?></code>
-        on <?= e(utc_to_local_display(is_string($row['created_at'] ?? null) ? (string) $row['created_at'] : null)) ?>
+        <span class="text-brand-muted">·</span>
+        <span>Created by <code><?= e((string) ($row['created_by_user'] ?? '—')) ?></code>
+            on <?= e(utc_to_local_display(is_string($row['created_at'] ?? null) ? (string) $row['created_at'] : null)) ?></span>
         <?php if (is_string($row['expires_at'] ?? null) && $row['expires_at'] !== ''): ?>
-            &middot; Expires <strong><?= e(utc_to_local_display((string) $row['expires_at'])) ?></strong>
+            <span class="text-brand-muted">·</span>
+            <span>Expires <strong><?= e(utc_to_local_display((string) $row['expires_at'])) ?></strong></span>
         <?php endif; ?>
     </p>
-    <hr>
-    <div style="white-space:pre-wrap;line-height:1.55;">
+    <hr class="border-brand-line my-4">
+    <div class="whitespace-pre-wrap leading-relaxed">
         <?= e((string) ($row['body'] ?? '')) ?>
     </div>
 </div>
 
 <div class="card">
-    <h2>Seen by <span class="muted" style="font-size:14px;">(<?= count($viewers) ?> users)</span></h2>
+    <h2 class="m-0">Seen by <span class="text-brand-muted text-sm font-normal">(<?= count($viewers) ?> users)</span></h2>
     <?php if ($viewers === []): ?>
-        <p class="muted">No users have dismissed this announcement yet.</p>
+        <p class="text-brand-muted mt-3">No users have dismissed this announcement yet.</p>
     <?php else: ?>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <thead>
-                <tr style="text-align:left;border-bottom:1px solid #cbd2da;">
-                    <th style="padding:.3rem .25rem;">Account ID</th>
-                    <th style="padding:.3rem .25rem;">User</th>
-                    <th style="padding:.3rem .25rem;">Email</th>
-                    <th style="padding:.3rem .25rem;">Dismissed at</th>
-                    <th style="padding:.3rem .25rem;">Don't show again?</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($viewers as $v): ?>
-                    <tr style="border-bottom:1px solid #e4e8ee;">
-                        <td style="padding:.3rem .25rem;"><code><?= (int) ($v['account_id'] ?? 0) ?></code></td>
-                        <td style="padding:.3rem .25rem;"><?= e((string) ($v['user'] ?? '(deleted)')) ?></td>
-                        <td style="padding:.3rem .25rem;"><?= e((string) ($v['email'] ?? '—')) ?></td>
-                        <td style="padding:.3rem .25rem;"><?= e(utc_to_local_display(is_string($v['dismissed_at'] ?? null) ? (string) $v['dismissed_at'] : null)) ?></td>
-                        <td style="padding:.3rem .25rem;">
-                            <?php if ((int) ($v['suppressed'] ?? 0) === 1): ?>
-                                <span class="pill ok">yes — permanent</span>
-                            <?php else: ?>
-                                <span class="pill">no — will see again</span>
-                            <?php endif; ?>
-                        </td>
+        <div class="table-wrap mt-4">
+            <table class="data-table text-[13px]">
+                <thead>
+                    <tr>
+                        <th>Account ID</th>
+                        <th>User</th>
+                        <th>Email</th>
+                        <th>Dismissed at</th>
+                        <th>Don't show again?</th>
                     </tr>
-                <?php endforeach; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    <?php foreach ($viewers as $v): ?>
+                        <tr>
+                            <td><code><?= (int) ($v['account_id'] ?? 0) ?></code></td>
+                            <td><?= e((string) ($v['user'] ?? '(deleted)')) ?></td>
+                            <td><?= e((string) ($v['email'] ?? '—')) ?></td>
+                            <td><?= e(utc_to_local_display(is_string($v['dismissed_at'] ?? null) ? (string) $v['dismissed_at'] : null)) ?></td>
+                            <td>
+                                <?php if ((int) ($v['suppressed'] ?? 0) === 1): ?>
+                                    <span class="pill ok">yes — permanent</span>
+                                <?php else: ?>
+                                    <span class="pill">no — will see again</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     <?php endif; ?>
 </div>
