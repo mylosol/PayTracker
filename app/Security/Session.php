@@ -29,6 +29,24 @@ final class Session
         $secure   = (bool) config('session.secure_cookie', true);
         $samesite = (string) config('session.samesite', 'Lax');
 
+        // Pin session storage to a directory we control. cPanel hosts
+        // sometimes inherit session.save_path from the primary domain's
+        // tmp directory, which doesn't exist on subdomains; PHP then
+        // emits a `No such file or directory` warning at session_start()
+        // BEFORE the layout has a chance to render, breaking the page
+        // load. Storing under storage/sessions/ keeps the path stable
+        // across hosts, ensures it's writable (we mkdir at boot), and
+        // matches the rest of the framework guts already living in
+        // storage/.
+        $sessionDir = base_path('storage/sessions');
+        if (! is_dir($sessionDir)) {
+            @mkdir($sessionDir, 0700, true);
+        }
+        if (is_dir($sessionDir) && is_writable($sessionDir)) {
+            session_save_path($sessionDir);
+            ini_set('session.gc_maxlifetime', (string) $lifetime);
+        }
+
         session_name($name);
         session_set_cookie_params([
             'lifetime' => $lifetime,

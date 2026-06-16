@@ -19,8 +19,10 @@ include/googleMapsAPI.php
 # --- Build / runtime artefacts ----------------------------------------------
 storage/logs/*.log
 storage/cache/*
+storage/sessions/sess_*
 !storage/logs/.gitkeep
 !storage/cache/.gitkeep
+!storage/sessions/.gitkeep
 # Tailwind CSS is compiled in CI before rsync; never committed.
 public/assets/app.css
 
