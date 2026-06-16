@@ -79,6 +79,9 @@
     }
 
     /* --- Buttons --------------------------------------------------- */
+    /* Variants inline the base utilities (instead of @apply btn) so
+       Tailwind v3's "no chained component classes inside @apply"
+       check doesn't fail at build time. */
     .btn {
         @apply inline-flex items-center justify-center gap-2
                min-h-[44px] px-5 py-2.5 rounded-lg font-semibold text-base
@@ -87,18 +90,40 @@
                focus:outline-none;
     }
     .btn-primary {
-        @apply btn bg-brand-primary text-white hover:bg-brand-primary-hover;
+        @apply inline-flex items-center justify-center gap-2
+               min-h-[44px] px-5 py-2.5 rounded-lg font-semibold text-base
+               transition-colors cursor-pointer
+               disabled:opacity-50 disabled:cursor-not-allowed
+               focus:outline-none
+               bg-brand-primary text-white no-underline
+               hover:bg-brand-primary-hover hover:text-white;
     }
     .btn-secondary {
-        @apply btn bg-white text-brand-ink border border-brand-line
-               hover:bg-slate-50;
+        @apply inline-flex items-center justify-center gap-2
+               min-h-[44px] px-5 py-2.5 rounded-lg font-semibold text-base
+               transition-colors cursor-pointer
+               disabled:opacity-50 disabled:cursor-not-allowed
+               focus:outline-none
+               bg-white text-brand-ink no-underline border border-brand-line
+               hover:bg-slate-50 hover:text-brand-ink;
     }
     .btn-danger {
-        @apply btn bg-rose-50 text-rose-800 border border-rose-200
+        @apply inline-flex items-center justify-center gap-2
+               min-h-[44px] px-5 py-2.5 rounded-lg font-semibold text-base
+               transition-colors cursor-pointer
+               disabled:opacity-50 disabled:cursor-not-allowed
+               focus:outline-none
+               bg-rose-50 text-rose-800 no-underline border border-rose-200
                hover:bg-rose-100;
     }
     .btn-ghost {
-        @apply btn bg-transparent text-brand-ink hover:bg-slate-100;
+        @apply inline-flex items-center justify-center gap-2
+               min-h-[44px] px-5 py-2.5 rounded-lg font-semibold text-base
+               transition-colors cursor-pointer
+               disabled:opacity-50 disabled:cursor-not-allowed
+               focus:outline-none
+               bg-transparent text-brand-ink no-underline
+               hover:bg-slate-100;
     }
     .btn-sm {
         @apply min-h-[36px] px-3 py-1.5 text-sm rounded-md;
@@ -136,41 +161,51 @@
 
     /* --- Status pills ---------------------------------------------- */
     /* The legacy views referenced .pill .pill.ok .pill.warn .pill.err
-       so we keep both syntaxes available. */
-    .pill,
-    .pill-base {
+       so we keep both syntaxes available. `.pill` carries only the
+       shape; the colour variants apply the shape utilities again to
+       avoid the v3 "@apply circular dependency" restriction on
+       chained component classes. */
+    .pill {
         @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
                text-xs font-semibold uppercase tracking-wide;
     }
     .pill-ok,
     .pill.ok {
-        @apply pill bg-emerald-100 text-emerald-800;
+        @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
+               text-xs font-semibold uppercase tracking-wide
+               bg-emerald-100 text-emerald-800;
     }
     .pill-warn,
     .pill.warn {
-        @apply pill bg-amber-100 text-amber-800;
+        @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
+               text-xs font-semibold uppercase tracking-wide
+               bg-amber-100 text-amber-800;
     }
     .pill-err,
     .pill.err {
-        @apply pill bg-rose-100 text-rose-800;
+        @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
+               text-xs font-semibold uppercase tracking-wide
+               bg-rose-100 text-rose-800;
     }
     .pill-muted,
     .pill.muted {
-        @apply pill bg-slate-100 text-slate-600;
+        @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full
+               text-xs font-semibold uppercase tracking-wide
+               bg-slate-100 text-slate-600;
     }
 
     /* --- Flash banners --------------------------------------------- */
-    .flash {
-        @apply rounded-lg px-4 py-3 mb-4 border;
-    }
     .flash-ok {
-        @apply flash bg-emerald-50 text-emerald-900 border-emerald-200;
+        @apply rounded-lg px-4 py-3 mb-4 border
+               bg-emerald-50 text-emerald-900 border-emerald-200;
     }
     .flash-err {
-        @apply flash bg-rose-50 text-rose-900 border-rose-200;
+        @apply rounded-lg px-4 py-3 mb-4 border
+               bg-rose-50 text-rose-900 border-rose-200;
     }
     .flash-info {
-        @apply flash bg-sky-50 text-sky-900 border-sky-200;
+        @apply rounded-lg px-4 py-3 mb-4 border
+               bg-sky-50 text-sky-900 border-sky-200;
     }
 
     /* --- Tables ---------------------------------------------------- */
