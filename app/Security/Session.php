@@ -35,17 +35,23 @@ final class Session
         // emits a `No such file or directory` warning at session_start()
         // BEFORE the layout has a chance to render, breaking the page
         // load. Storing under storage/sessions/ keeps the path stable
-        // across hosts, ensures it's writable (we mkdir at boot), and
-        // matches the rest of the framework guts already living in
-        // storage/.
-        $sessionDir = base_path('storage/sessions');
+        // across hosts.
+        //
+        // Path is resolved against THIS file's location (rather than
+        // base_path()) so the override fires before the app's bootstrap
+        // is fully wired and survives subcommand contexts where helpers
+        // haven't been loaded yet.
+        $sessionDir = dirname(__DIR__, 2) . '/storage/sessions';
         if (! is_dir($sessionDir)) {
             @mkdir($sessionDir, 0700, true);
         }
-        if (is_dir($sessionDir) && is_writable($sessionDir)) {
-            session_save_path($sessionDir);
-            ini_set('session.gc_maxlifetime', (string) $lifetime);
-        }
+        // Always override, even if the directory check failed -- the
+        // alternative is letting PHP fall back to a path that doesn't
+        // exist and warning before every page render. A failed
+        // session_save_path() at worst leaves the host default in
+        // place; the visible regression is identical.
+        session_save_path($sessionDir);
+        ini_set('session.gc_maxlifetime', (string) $lifetime);
 
         session_name($name);
         session_set_cookie_params([
