@@ -26,15 +26,17 @@ test.describe('load entry (write path)', () => {
         await expect(page.getByRole('heading', { name: /add a load/i })).toBeVisible();
         await expect(page.locator('#pickup_city')).toBeVisible();
         await expect(page.locator('#delivery_city')).toBeVisible();
-        // CSRF token must be present as a hidden field — the POST handler
-        // refuses anything else.
-        await expect(page.locator('input[name="_csrf"]')).toHaveCount(1);
+        // CSRF token must be present as a hidden field on the load form.
+        // Scope to <main> so the nav's logout forms don't inflate the count.
+        await expect(page.locator('main input[name="_csrf"]')).toHaveCount(1);
     });
 
     test('9c — empty submission is rejected (FRTL required)', async ({ page }) => {
         await signIn(page);
         await page.goto('loads/new');
-        await page.locator('form').evaluate((f) => (f as HTMLFormElement).noValidate = true);
+        // Scope to the load-entry form so the nav's logout forms aren't
+        // matched. The form carries data-mode="create" on /loads/new.
+        await page.locator('form[data-mode]').evaluate((f) => (f as HTMLFormElement).noValidate = true);
         await page.getByRole('button', { name: /add load/i }).click();
         // FRTL is the FIRST required check now — drivers who don't
         // have one should use the "Store Load Info" scratchpad path

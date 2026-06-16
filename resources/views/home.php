@@ -20,7 +20,9 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
     <section class="card">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div>
-                <h1 class="m-0">Welcome, <?= e((string) $account['user']) ?></h1>
+                <h1 class="m-0">Welcome, <?= e((string) $account['user']) ?>
+                    <span class="pill-ok align-middle ml-1 text-xs">signed in</span>
+                </h1>
                 <p class="text-brand-muted mt-2 flex flex-wrap items-center gap-2">
                     <span class="pill-muted">role: <?= e((string) $account['role']) ?></span>
                     <?php if (! empty($account['last_login_at'])): ?>
@@ -93,6 +95,15 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
             <?php if (! $isProduction): ?>
                 You're on the <strong>isolated preview channel</strong> — production data is untouched.
             <?php endif; ?>
+        </p>
+    </section>
+
+    <section class="card">
+        <h2 class="m-0">Sign in to continue</h2>
+        <p class="text-brand-muted mt-2">
+            Modern PayTracker requires a per-account login — the shared
+            password is retired. If you don't have an account yet, ask an
+            administrator for an invite code.
         </p>
         <div class="flex flex-col sm:flex-row gap-3 mt-5">
             <a href="<?= e($base) ?>/login" class="btn-primary">Sign in</a>
