@@ -12,28 +12,26 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Block direct browser access to the application source tree. Only the
-    # `public/` directory is meant to be web-reachable; everything else is
-    # framework guts.
-    #
-    # NB: <Directory> / <DirectoryMatch> blocks are server-config-only in
-    # Apache and produce `<DirectoryMatch not allowed here` 500s when used
-    # in .htaccess. We achieve the same effect with a RewriteRule that
-    # returns 403 (the `[F]` flag) for any URL whose first path segment
-    # names one of the protected directories.
+    # Block direct browser access to the application source tree. Only
+    # the `public/` directory is meant to be web-reachable; everything
+    # else is framework guts.
     RewriteRule ^(app|bootstrap|config|routes|resources|storage|tests|vendor|deploy|docs|scripts)(/|$) - [F,L]
 
-    # Static-asset passthrough — anything that maps to a real file or
-    # directory under the docroot serves directly (e.g. public/assets/
-    # CSS, the logo SVG, robots.txt if/when we add one). The legacy
-    # `^/.+/public/` URI scoping is gone now that the deploy lives on
-    # its own subdomain rather than sharing a docroot with the legacy
-    # PHP tree.
+    # Static-asset passthrough — ONLY serve real files under public/
+    # directly. The URI-scope condition is what isolates the modern
+    # app from any legacy code or directories that might still live
+    # at the docroot (Robert's host migration left a few of those
+    # around). A request for /admin/ that happens to resolve to a
+    # legacy admin/ directory on disk does NOT get served by Apache;
+    # it falls through to the modern front controller below.
+    RewriteCond %{REQUEST_URI} ^/public/
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Everything else goes through the modern front controller.
+    # Everything else — including any URL that happens to share a name
+    # with a legacy directory like /admin/, /include/, or a stray
+    # /index.php — goes through the modern front controller.
     RewriteRule ^ public/index.php [L,QSA]
 </IfModule>
 
