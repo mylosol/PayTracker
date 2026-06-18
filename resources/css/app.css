@@ -6,7 +6,16 @@
  * minified file via `npm run css:build` during the deploy workflow.
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/*
+ * Web fonts (Inter + JetBrains Mono) are loaded from the layout's
+ * <head> via <link rel="preconnect"> + a parallel <link rel="stylesheet">
+ * rather than @import here. An @import in app.css would chain the
+ * font CSS fetch BEHIND the stylesheet download, blocking first
+ * paint until 4 serial network hops complete on mobile (~450ms
+ * Lighthouse FCP penalty). The head links parallelise the fetches
+ * and warm the connection to fonts.gstatic.com before the woff2
+ * downloads start.
+ */
 
 @tailwind base;
 @tailwind components;
