@@ -110,14 +110,13 @@ $fmt = static function ($value): string {
     </form>
 
     <div class="table-wrap mt-5">
-        <table class="data-table">
+        <table class="data-table stack-on-mobile">
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th class="hidden 2xl:table-cell">ID</th>
                     <th>User</th>
-                    <th>Email</th>
                     <th>Role</th>
-                    <th>Last login</th>
+                    <th class="hidden xl:table-cell">Last login</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -132,23 +131,35 @@ $fmt = static function ($value): string {
                     $banned   = is_string($u['banned_at'] ?? null) && $u['banned_at'] !== '';
                     $locked   = is_string($u['locked_until'] ?? null) && $u['locked_until'] !== ''
                                 && strtotime((string) $u['locked_until']) > time();
+                    $userEmail    = (string) ($u['email'] ?? '—');
+                    $lastLoginUtc = $fmt($u['last_login_at'] ?? null);
                     ?>
                     <tr>
-                        <td><code><?= $uId ?></code></td>
-                        <td>
-                            <?= e((string) $u['user']) ?>
-                            <?php if ($isSelf): ?>
-                                <span class="pill ok ml-1">you</span>
-                            <?php endif; ?>
+                        <td class="hidden 2xl:table-cell"><code><?= $uId ?></code></td>
+                        <td class="break-words max-w-xs">
+                            <div class="font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span><?= e((string) $u['user']) ?></span>
+                                <?php if ($isSelf): ?>
+                                    <span class="pill ok">you</span>
+                                <?php endif; ?>
+                                <span class="2xl:hidden text-brand-muted text-xs font-normal">
+                                    <code>#<?= $uId ?></code>
+                                </span>
+                            </div>
+                            <div class="text-brand-muted text-xs mt-1 break-all">
+                                <?= e($userEmail) ?>
+                            </div>
+                            <div class="xl:hidden text-brand-muted text-xs mt-1">
+                                <span class="md:hidden">Last login: </span><?= e($lastLoginUtc) ?>
+                            </div>
                         </td>
-                        <td><?= e((string) ($u['email'] ?? '—')) ?></td>
                         <td>
                             <?php $currentRole = is_string($u['role'] ?? null) ? (string) $u['role'] : 'user'; ?>
                             <?php if ($isSuperAdmin && $canChangeRole): ?>
                                 <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/role"
-                                      class="flex items-center gap-2">
+                                      class="flex flex-wrap items-center gap-1.5">
                                     <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                                    <select name="role" class="field-select text-sm h-10 py-1 px-2 min-h-0">
+                                    <select name="role" class="field-select text-sm h-9 py-1 px-2 min-h-0 w-auto max-w-[8.5rem]">
                                         <?php foreach (Account::ROLES as $r): ?>
                                             <option value="<?= e($r) ?>" <?= $currentRole === $r ? 'selected' : '' ?>>
                                                 <?= e($r) ?>
@@ -161,7 +172,9 @@ $fmt = static function ($value): string {
                                 <code><?= e($currentRole) ?></code>
                             <?php endif; ?>
                         </td>
-                        <td class="text-brand-muted text-sm"><?= e($fmt($u['last_login_at'] ?? null)) ?></td>
+                        <td class="hidden xl:table-cell text-brand-muted text-sm whitespace-nowrap">
+                            <?= e($lastLoginUtc) ?>
+                        </td>
                         <td>
                             <div class="flex flex-wrap items-center gap-1">
                                 <?php if ($banned): ?>
@@ -181,11 +194,11 @@ $fmt = static function ($value): string {
                             <?php elseif (! $canMutate): ?>
                                 <span class="text-brand-muted text-xs">Outranks you</span>
                             <?php else: ?>
-                                <div class="flex flex-wrap items-center gap-2">
+                                <div class="flex flex-wrap items-center gap-1.5 max-w-[13rem]">
                                     <a href="<?= e($base) ?>/admin/users/<?= $uId ?>/edit" class="btn-secondary btn-sm">Edit</a>
                                     <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/reset-password" class="inline">
                                         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
-                                        <button type="submit" class="btn-secondary btn-sm">Reset PW</button>
+                                        <button type="submit" class="btn-secondary btn-sm whitespace-nowrap">Reset PW</button>
                                     </form>
                                     <?php if ($banned): ?>
                                         <form method="post" action="<?= e($base) ?>/admin/users/<?= $uId ?>/unban" class="inline">
