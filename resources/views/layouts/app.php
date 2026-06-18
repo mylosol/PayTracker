@@ -32,8 +32,14 @@ $__csrfForLogout = is_array($__account)
 // literally contain "/public/" so requests stay isolated from
 // the legacy code tree -- hence the /public/assets/... shape here
 // rather than a "cleaner" /assets/... URL.
-$__cssUrl  = $__appPath . '/public/assets/app.css';
-$__logoUrl = $__appPath . '/public/assets/logo-mark.svg';
+$__cssUrl       = $__appPath . '/public/assets/app.css';
+$__logoUrl      = $__appPath . '/public/assets/logo-mark.svg';
+// Preload the body weight only. Other Inter weights and JetBrains
+// Mono can lazy-load via @font-face — they're either above the
+// fold but used sparingly (semibold/bold headings render fine with
+// system-font fallback for the ~50ms before the woff2 arrives) or
+// below the fold entirely (mono <code> in audit/diagnostics).
+$__fontPreload  = $__appPath . '/public/assets/fonts/inter-400.woff2';
 
 // Nav items. Each entry is [href, label, visible?]. The visible
 // flag lets us role-gate at the data layer rather than scattering
@@ -59,16 +65,14 @@ $__nav = [
     <link rel="icon" type="image/svg+xml" href="<?= e($__logoUrl) ?>">
 
     <!--
-        Google Fonts loaded here (not via @import in app.css) so the
-        fonts CSS fetch parallelises with app.css instead of chaining
-        after it. The two preconnects warm the connection to
-        fonts.gstatic.com before the woff2 downloads kick off; the
-        combo trims ~450ms off mobile FCP per Lighthouse.
+        Self-hosted fonts. The body weight (Inter 400) is preloaded
+        so it's in flight in parallel with the HTML parse, arriving
+        before paint. The remaining weights are declared in app.css
+        via @font-face with `font-display: optional` and pulled
+        from /public/assets/fonts/ on first reference.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href="<?= e($__fontPreload) ?>">
 
     <link rel="stylesheet" href="<?= e($__cssUrl) ?>">
 </head>
