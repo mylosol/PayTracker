@@ -25,6 +25,9 @@ storage/sessions/sess_*
 !storage/sessions/.gitkeep
 # Tailwind CSS is compiled in CI before rsync; never committed.
 public/assets/app.css
+# Self-hosted woff2s are copied from @fontsource at deploy time
+# by scripts/copy-fonts.mjs; the originals live in node_modules.
+public/assets/fonts/
 
 # --- Playwright artefacts ---------------------------------------------------
 /playwright-report/

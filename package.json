@@ -7,9 +7,13 @@
         "test:headed": "playwright test --headed",
         "test:debug": "playwright test --debug",
         "css:build": "tailwindcss -i ./resources/css/app.css -o ./public/assets/app.css --minify",
-        "css:watch": "tailwindcss -i ./resources/css/app.css -o ./public/assets/app.css --watch"
+        "css:watch": "tailwindcss -i ./resources/css/app.css -o ./public/assets/app.css --watch",
+        "fonts:copy": "node scripts/copy-fonts.mjs",
+        "assets:build": "npm run fonts:copy && npm run css:build"
     },
     "devDependencies": {
+        "@fontsource/inter": "^5.1.0",
+        "@fontsource/jetbrains-mono": "^5.1.0",
         "@playwright/test": "^1.49.0",
         "@tailwindcss/forms": "^0.5.10",
         "@types/node": "^22.0.0",

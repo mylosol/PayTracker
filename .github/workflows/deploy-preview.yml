@@ -100,8 +100,8 @@ jobs:
       - name: Install npm dependencies for CSS build
         run: npm install --no-audit --no-fund
 
-      - name: Build Tailwind CSS (minified)
-        run: npm run css:build
+      - name: Build assets (self-hosted woff2 copy + minified Tailwind CSS)
+        run: npm run assets:build
 
       # ----- Prepare SSH ---------------------------------------------------
       # WHM/cPanel hosts often use a non-standard SSH port. We pin the
