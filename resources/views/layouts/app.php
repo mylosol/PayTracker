@@ -32,14 +32,25 @@ $__csrfForLogout = is_array($__account)
 // literally contain "/public/" so requests stay isolated from
 // the legacy code tree -- hence the /public/assets/... shape here
 // rather than a "cleaner" /assets/... URL.
-$__cssUrl       = $__appPath . '/public/assets/app.css';
-$__logoUrl      = $__appPath . '/public/assets/logo-mark.svg';
+//
+// Each asset URL gets a `?v=<file mtime>` cache buster. Cloudflare's
+// edge cache (max-age=604800) was happily serving a stale app.css
+// for ~44h after the self-host-fonts deploy went out — old CSS
+// still had @import url(fonts.googleapis...) at the top, so the
+// browser kept fetching Google's fonts CSS even though our HTML no
+// longer referenced it. Mtime changes on every rsync, so the URL
+// changes every deploy and the edge treats it as a new asset.
+$__publicAssetsDir = dirname(__DIR__, 3) . '/public/assets';
+$__bust = static fn (string $diskPath): string =>
+    ($m = @filemtime($diskPath)) ? '?v=' . $m : '';
+$__cssUrl       = $__appPath . '/public/assets/app.css'             . $__bust($__publicAssetsDir . '/app.css');
+$__logoUrl      = $__appPath . '/public/assets/logo-mark.svg'       . $__bust($__publicAssetsDir . '/logo-mark.svg');
 // Preload the body weight only. Other Inter weights and JetBrains
 // Mono can lazy-load via @font-face — they're either above the
 // fold but used sparingly (semibold/bold headings render fine with
 // system-font fallback for the ~50ms before the woff2 arrives) or
 // below the fold entirely (mono <code> in audit/diagnostics).
-$__fontPreload  = $__appPath . '/public/assets/fonts/inter-400.woff2';
+$__fontPreload  = $__appPath . '/public/assets/fonts/inter-400.woff2' . $__bust($__publicAssetsDir . '/fonts/inter-400.woff2');
 
 // Nav items. Each entry is [href, label, visible?]. The visible
 // flag lets us role-gate at the data layer rather than scattering
