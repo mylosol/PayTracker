@@ -69,6 +69,43 @@
     font-display: optional;
 }
 
+/*
+ * Matched-metrics fallback faces.
+ *
+ * Even with `font-display: optional`, our preloaded Inter-400 arrives
+ * INSIDE the block period, so the browser uses it the moment app.css
+ * parses. That swap from the system fallback to Inter changes h1 line
+ * height by ~3px, which pushes the "Jump in" card down 0.22 CLS worth
+ * — costing us 25 points of the mobile Lighthouse score.
+ *
+ * The fix is a fallback face that uses a locally-installed font
+ * (Arial / Courier New — present on every OS we care about) but
+ * overrides its layout metrics to match the real web font byte-for-
+ * byte. With these in the font stack BETWEEN the real font and the
+ * generic system stack, the first paint already has Inter-matching
+ * metrics, and when the real Inter swaps in the layout doesn't move.
+ *
+ * Override values generated from the woff2 metrics tables with
+ * https://github.com/khempenius/fontpie — if either font is bumped,
+ * regenerate and update.
+ */
+@font-face {
+    font-family: 'Inter Fallback';
+    src: local('Arial');
+    size-adjust: 107.40%;
+    ascent-override: 90.20%;
+    descent-override: 22.48%;
+    line-gap-override: 0%;
+}
+@font-face {
+    font-family: 'JetBrains Mono Fallback';
+    src: local('Courier New');
+    size-adjust: 134.32%;
+    ascent-override: 78.16%;
+    descent-override: 20.45%;
+    line-gap-override: 0%;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

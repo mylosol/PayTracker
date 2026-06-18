@@ -51,6 +51,13 @@ module.exports = {
                 // while it streams in.
                 sans: [
                     'Inter',
+                    // Matched-metrics fallback face — see the
+                    // @font-face block in resources/css/app.css for
+                    // why this sits between the real font and the
+                    // generic system stack. It prevents the layout
+                    // shift that happens when the real Inter woff2
+                    // arrives mid-render and changes h1 line height.
+                    'Inter Fallback',
                     'ui-sans-serif',
                     'system-ui',
                     '-apple-system',
@@ -65,6 +72,7 @@ module.exports = {
                 // system mono stack.
                 mono: [
                     'JetBrains Mono',
+                    'JetBrains Mono Fallback',
                     'ui-monospace',
                     'SFMono-Regular',
                     'Menlo',
