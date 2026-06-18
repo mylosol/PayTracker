@@ -46,14 +46,26 @@ $fmt = static function ($value): string {
             from this surface for you.
         <?php endif; ?>
     </p>
-    <div class="flex flex-wrap gap-2 mt-5">
-        <a href="<?= e($base) ?>/admin/audit" class="btn-secondary btn-sm">Audit log →</a>
-        <a href="<?= e($base) ?>/admin/diagnostics" class="btn-secondary btn-sm">System diagnostics →</a>
-        <a href="<?= e($base) ?>/admin/invites" class="btn-secondary btn-sm">Invite codes →</a>
-        <a href="<?= e($base) ?>/admin/terminals" class="btn-secondary btn-sm">Begin Empty Locations →</a>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5">
+        <a href="<?= e($base) ?>/admin/audit" class="admin-tile">
+            <span>Audit log</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+        </a>
+        <a href="<?= e($base) ?>/admin/diagnostics" class="admin-tile">
+            <span>System diagnostics</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+        </a>
+        <a href="<?= e($base) ?>/admin/invites" class="admin-tile">
+            <span>Invite codes</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+        </a>
+        <a href="<?= e($base) ?>/admin/terminals" class="admin-tile">
+            <span>Begin Empty Locations</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+        </a>
         <?php if ($isSuperAdmin): ?>
-            <a href="<?= e($base) ?>/admin/announcements" class="btn-secondary btn-sm">Announcements →</a>
-            <a href="<?= e($base) ?>/admin/reconcile" class="btn-secondary btn-sm">Reconcile queue →</a>
+            <a href="<?= e($base) ?>/admin/announcements" class="admin-tile">
+                <span>Announcements</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+            </a>
+            <a href="<?= e($base) ?>/admin/reconcile" class="admin-tile">
+                <span>Reconcile queue</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+            </a>
         <?php endif; ?>
     </div>
 </div>
