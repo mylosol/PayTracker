@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace PayTracker\Tests\Unit\Services;
 
-use PayTracker\Models\PayRate;
+use PayTracker\Models\PayRateVersion;
 use PayTracker\Models\PayVariable;
 use PayTracker\Services\Pay\LoadInputs;
 use PayTracker\Services\PayCalculator;
@@ -55,11 +55,11 @@ final class PayCalculatorTest extends TestCase
 
     private function makeCalculator(): PayCalculator
     {
-        // PayRate and PayVariable both extend Model and need a Connection
-        // — we never call into them at the SQL level because the
-        // test-seams (setRateTiersForTest / useVariableMap) bypass the
-        // model code. createMock is enough.
-        $rates = $this->createMock(PayRate::class);
+        // PayRateVersion and PayVariable both extend Model and need a
+        // Connection — we never call into them at the SQL level because
+        // the test-seams (setRateTiersForTest / useVariableMap) bypass
+        // the model code. createMock is enough.
+        $rates = $this->createMock(PayRateVersion::class);
         $vars  = $this->createMock(PayVariable::class);
         $vars->method('allByStage')->willReturn([]);  // suppresses real DB call in ctor
 

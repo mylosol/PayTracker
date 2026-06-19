@@ -9,6 +9,7 @@ use PayTracker\Http\Request;
 use PayTracker\Http\Response;
 use PayTracker\Models\Account;
 use PayTracker\Models\PayRate;
+use PayTracker\Models\PayRateVersion;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 use PayTracker\Services\Pay\PayRecomputer;
@@ -45,6 +46,7 @@ final class PayAdminController extends Controller
         private readonly Csrf $csrf,
         private readonly Session $session,
         private readonly PayRate $rates,
+        private readonly PayRateVersion $rateVersions,
         private readonly PayRecomputer $recomputer,
     ) {
     }
@@ -128,13 +130,57 @@ final class PayAdminController extends Controller
     }
 
     /**
-     * POST /pay-admin/draft/promote — atomic draft → current.
+     * POST /pay-admin/draft/promote — atomic draft → current AND
+     * snapshot the new tier set into pay_rate_versions so historical
+     * loads keep billing at the rate that was active when the work
+     * was done.
+     *
+     * Effective date input is optional; an empty value defaults to
+     * today. Backdating is allowed (e.g. raise went into effect Aug
+     * 1, admin clicked Promote on Aug 5 with effective_date=Aug 1).
      */
     public function promoteDraft(Request $request): Response
     {
-        return $this->guard($request, function (string $tripType): string {
+        return $this->guard($request, function (string $tripType) use ($request): string {
+            $effectiveRaw = trim((string) $request->input('effective_date', ''));
+            if ($effectiveRaw === '') {
+                $effectiveDate = date('Y-m-d');
+            } else {
+                if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $effectiveRaw) !== 1) {
+                    throw new \InvalidArgumentException('Effective date must be YYYY-MM-DD.');
+                }
+                $parsed = \DateTimeImmutable::createFromFormat('Y-m-d', $effectiveRaw);
+                if ($parsed === false || $parsed->format('Y-m-d') !== $effectiveRaw) {
+                    throw new \InvalidArgumentException('Effective date is not a valid calendar date.');
+                }
+                $effectiveDate = $effectiveRaw;
+            }
+
+            // Read the draft tiers BEFORE promote — promoteDraftToCurrent
+            // clears them as part of the atomic transaction, so a later
+            // read would see an empty draft.
+            $draftTiers = $this->rates->tiers($tripType, 'draft');
+            if ($draftTiers === []) {
+                throw new \InvalidArgumentException(
+                    "No draft exists for {$tripType} — nothing to promote.",
+                );
+            }
+
             $this->rates->promoteDraftToCurrent($tripType);
-            return sprintf('Promoted draft to current for %s.', $tripType);
+            $this->rateVersions->createVersionFromTiers(
+                $tripType,
+                $effectiveDate,
+                array_map(
+                    static fn (array $t): array => ['miles' => (int) $t['miles'], 'rate' => (string) $t['rate']],
+                    $draftTiers,
+                ),
+            );
+            return sprintf(
+                'Promoted %s draft → current, effective %s. Historical loads pre-%s keep their previous rate.',
+                $tripType,
+                $effectiveDate,
+                $effectiveDate,
+            );
         });
     }
 
