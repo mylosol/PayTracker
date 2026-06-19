@@ -526,3 +526,57 @@
 .dark :where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
     box-shadow: 0 0 0 2px theme('colors.slate.900'), 0 0 0 4px theme('colors.brand.primary');
 }
+
+/* Tinted card surfaces. A handful of cards in the app paint their
+   own light-tinted background (emerald gradient on the "This Week"
+   summary, amber on the pending-batch and warning callouts). Those
+   classes win over .card's bg-white but stay opaque in dark mode
+   and render the text invisible. Reset the gradient and re-tint
+   with a dark-friendly chip. */
+.dark .card.from-emerald-50,
+.dark .card.bg-emerald-50 {
+    background-image: none;
+    @apply bg-emerald-950/40 border-emerald-800 text-slate-100;
+}
+.dark .card.bg-amber-50 {
+    @apply bg-amber-950/40 border-amber-800 text-slate-100;
+}
+/* Inline amber callouts (notes strips inside the dashboard / loads /
+   reconcile breakdowns). Same idea — flip the tint, keep the
+   amber identity for "heads up" semantics. */
+.dark .bg-amber-50 {
+    @apply bg-amber-950/40 text-amber-100;
+}
+.dark .text-amber-900 {
+    @apply text-amber-100;
+}
+.dark .border-amber-200,
+.dark .border-amber-400,
+.dark .border-amber-500 {
+    @apply border-amber-700;
+}
+/* Reconcile row tints (paid / short / disputed). */
+.dark .bg-emerald-50\/60 {
+    background-color: theme('colors.emerald.900 / 30%');
+}
+.dark .bg-amber-50\/60 {
+    background-color: theme('colors.amber.900 / 30%');
+}
+.dark .bg-rose-50\/60 {
+    background-color: theme('colors.rose.900 / 30%');
+}
+/* Misc inline emerald accents (week totals badge etc.). */
+.dark .bg-emerald-100 {
+    @apply bg-emerald-900/50 text-emerald-100;
+}
+.dark .text-emerald-800,
+.dark .text-emerald-900 {
+    @apply text-emerald-200;
+}
+.dark .text-emerald-700 {
+    @apply text-emerald-300;
+}
+.dark .text-slate-700,
+.dark .text-slate-800 {
+    @apply text-slate-200;
+}
