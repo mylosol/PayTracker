@@ -38,7 +38,9 @@ test.describe.serial('pay-rate admin (write path)', () => {
         await signIn(page);
         await page.goto('pay-admin');
         await expect(page.getByRole('heading', { name: /pay-rate admin/i })).toBeVisible();
-        await expect(page.locator('div.card', { hasText: /summary/i })).toContainText(/Total rate rows/i);
+        // Jump-to nav card (replaced the old Summary stats list)
+        await expect(page.getByRole('heading', { name: /^Jump to$/ })).toBeVisible();
+        await expect(page.getByRole('link', { name: /round-trip rates/i })).toBeVisible();
         // Both editor cards present
         await expect(page.getByRole('heading', { name: /^Round-trip$/ })).toBeVisible();
         await expect(page.getByRole('heading', { name: /^Long-haul$/ })).toBeVisible();
