@@ -378,6 +378,18 @@
         .data-table.stack-on-mobile tbody td + td {
             @apply border-t border-brand-line/70 mt-2 pt-2;
         }
+        /* Render data-label="X" as a small uppercase tag above the
+           cell value so the stacked card stays scannable without
+           the thead. Reset text alignment so right-aligned columns
+           (Expected, Actions) stay left-aligned in card form. */
+        .data-table.stack-on-mobile tbody td[data-label] {
+            @apply text-left;
+        }
+        .data-table.stack-on-mobile tbody td[data-label]::before {
+            content: attr(data-label);
+            @apply block text-[11px] font-semibold uppercase tracking-wide
+                   text-brand-muted mb-0.5;
+        }
     }
 
     /* --- Static prose pages --------------------------------------- */

@@ -177,20 +177,20 @@ $renderRow = static function (array $row, ?array $reconRow) use (
     $bd = $decodeBreakdown(isset($row['pay_breakdown']) ? (string) $row['pay_breakdown'] : null);
     ?>
     <tr class="align-top <?= $rowClass ?>">
-        <td class="text-center w-6">
+        <td class="text-center w-6 hidden md:table-cell">
             <?php if ($bd !== null): ?>
                 <span class="text-brand-primary font-semibold" title="See pay breakdown below">▸</span>
             <?php endif; ?>
         </td>
-        <td><code><?= $frtl ?></code></td>
-        <td><?= e(substr((string) ($row['date'] ?? ''), 0, 10)) ?></td>
-        <td><?= e($loadTypeLabel($row['load_type'] ?? null)) ?></td>
-        <td>
+        <td data-label="FRTL"><code><?= $frtl ?></code></td>
+        <td data-label="Date"><?= e(substr((string) ($row['date'] ?? ''), 0, 10)) ?></td>
+        <td data-label="Type"><?= e($loadTypeLabel($row['load_type'] ?? null)) ?></td>
+        <td data-label="Pickup → Delivery">
             <?= e((string) ($row['pickup_city']   ?? '?')) ?>
             &nbsp;→&nbsp;
             <?= e((string) ($row['delivery_city'] ?? '?')) ?>
         </td>
-        <td class="text-right"><code><?= e($money($np)) ?></code></td>
+        <td data-label="Expected" class="text-right md:text-right"><code><?= e($money($np)) ?></code></td>
         <?php
         // "Was this a resolved dispute?" — paid state + any dispute
         // artefact (note, items, or other amount) → row was originally
@@ -199,7 +199,7 @@ $renderRow = static function (array $row, ?array $reconRow) use (
         $resolvedFromDispute = ($state === 'paid')
             && ($note !== '' || $disputedItems !== [] || $disputedOther !== null);
         ?>
-        <td>
+        <td data-label="State">
             <?= $statePill($state) ?>
             <?php if ($resolvedFromDispute): ?>
                 <br><small class="text-brand-muted">resolved dispute</small>
@@ -218,7 +218,7 @@ $renderRow = static function (array $row, ?array $reconRow) use (
                 </small>
             <?php endif; ?>
         </td>
-        <td class="text-right whitespace-nowrap">
+        <td data-label="Actions" class="text-right md:whitespace-nowrap">
             <?php if ($state === null): ?>
                 <form method="post" action="<?= e($base) ?>/reconcile/<?= $frtl ?>/paid" class="inline-block m-0">
                     <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
@@ -422,7 +422,7 @@ $renderRow = static function (array $row, ?array $reconRow) use (
             <p class="text-brand-muted mt-3 mb-0">No loads for this week.</p>
         <?php else: ?>
             <div class="table-wrap mt-3">
-                <table class="data-table text-[14px]">
+                <table class="data-table stack-on-mobile text-[14px]">
                     <thead>
                         <tr>
                             <th class="w-6"></th>
