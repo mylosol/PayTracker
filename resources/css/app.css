@@ -425,3 +425,104 @@
         @apply text-brand-muted;
     }
 }
+
+/* ===================================================================
+   Dark mode.
+
+   Class-strategy (Tailwind `darkMode: 'class'`). Activated by the
+   layout adding `class="dark"` to <html> when the signed-in user has
+   `account.dark_mode = 1`. Logged-out pages never get the class, so
+   the marketing/login surface stays light by design.
+
+   We override the painted surfaces explicitly rather than swapping
+   the whole brand palette via CSS vars, because the brand orange
+   action color needs to keep its identity across modes. Backgrounds,
+   text, borders, and the few light-mode helpers (code spans, slate-
+   fills) flip; brand-primary / brand-surface chrome do not.
+   =================================================================== */
+.dark body {
+    @apply bg-slate-900 text-slate-100;
+}
+.dark h1,
+.dark h2,
+.dark h3 {
+    @apply text-slate-50;
+}
+.dark .card {
+    @apply bg-slate-800 border-slate-700;
+}
+.dark code {
+    @apply bg-slate-700 text-slate-100;
+}
+.dark .text-brand-muted {
+    @apply text-slate-400;
+}
+.dark .text-brand-ink {
+    @apply text-slate-100;
+}
+.dark .border-brand-line {
+    border-color: theme('colors.slate.700');
+}
+.dark .bg-brand-surfaceBg {
+    @apply bg-slate-900;
+}
+/* Inputs: dark surface so the focus ring still pops. */
+.dark .field,
+.dark .field-select,
+.dark .field-checkbox,
+.dark textarea.field {
+    @apply bg-slate-800 text-slate-100 border-slate-600;
+}
+.dark .field::placeholder,
+.dark textarea.field::placeholder {
+    color: theme('colors.slate.500');
+}
+/* Secondary / ghost / danger buttons + admin tiles need their light
+   fills swapped so they don't blow out against the dark surface. */
+.dark .btn-secondary,
+.dark .admin-tile {
+    @apply bg-slate-800 text-slate-100 border-slate-700
+           hover:bg-slate-700 hover:text-slate-50;
+}
+.dark .btn-ghost {
+    @apply text-slate-100 hover:bg-slate-700;
+}
+.dark .btn-danger {
+    @apply bg-rose-900/40 text-rose-100 border-rose-800
+           hover:bg-rose-900/60;
+}
+/* Tables. The stack-on-mobile card variant uses bg-white; flip it
+   so the per-row cards don't punch holes in the dark surface. */
+.dark .data-table thead {
+    @apply bg-slate-800/60 text-slate-300;
+}
+.dark .data-table tbody tr:nth-child(even) {
+    @apply bg-slate-800/40;
+}
+.dark .data-table.stack-on-mobile tbody tr {
+    @apply bg-slate-800 border-slate-700;
+}
+.dark .data-table.stack-on-mobile tbody td + td {
+    border-color: theme('colors.slate.700');
+}
+/* Pills: lift the tinted backgrounds so they stay legible. The
+   semantic colors (ok / warn / err) read fine on a dark surface
+   already; only the neutral pill needs a darker chip. */
+.dark .pill {
+    @apply bg-slate-700 text-slate-100;
+}
+/* Flash banners. */
+.dark .flash-ok {
+    @apply bg-emerald-900/40 text-emerald-100 border-emerald-800;
+}
+.dark .flash-err {
+    @apply bg-rose-900/40 text-rose-100 border-rose-800;
+}
+.dark .flash-info {
+    @apply bg-sky-900/40 text-sky-100 border-sky-800;
+}
+/* Focus ring backdrop swap — the white halo around the orange ring
+   would flash on a dark page. */
+.dark :where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
+    box-shadow: 0 0 0 2px theme('colors.slate.900'), 0 0 0 4px theme('colors.brand.primary');
+}

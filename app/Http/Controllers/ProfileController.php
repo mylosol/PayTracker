@@ -60,6 +60,7 @@ final class ProfileController extends Controller
             'hireDate'         => is_string($account['hire_date'] ?? null) ? (string) $account['hire_date'] : '',
             'shift'            => is_string($account['shift'] ?? null) ? (string) $account['shift'] : 'day',
             'payWeekStartDay'  => is_string($account['pay_week_start_day'] ?? null) ? (string) $account['pay_week_start_day'] : 'sun',
+            'darkMode'         => (int) ($account['dark_mode'] ?? 0) === 1,
             'flash'            => $this->popFlash(),
         ]);
     }
@@ -124,6 +125,8 @@ final class ProfileController extends Controller
             return $this->failBack($request, 'Pay week start day must be a valid weekday.');
         }
 
+        $darkMode = (string) $request->input('dark_mode', '') === '1';
+
         try {
             $this->accounts->updateProfile((int) $account['id'], $hireDate, $shiftRaw, $payWeekRaw);
             // Payroll email is optional; empty means "clear it". The
@@ -133,6 +136,7 @@ final class ProfileController extends Controller
                 (int) $account['id'],
                 $payrollEmailRaw === '' ? null : $payrollEmailRaw
             );
+            $this->accounts->updateDarkMode((int) $account['id'], $darkMode);
         } catch (\Throwable $e) {
             return $this->failBack($request, 'Could not save profile: ' . $e->getMessage());
         }

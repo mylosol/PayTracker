@@ -251,6 +251,20 @@ final class Account extends Model
         $this->prepared($sql, [$value, $accountId]);
     }
 
+    /**
+     * Update the driver's dark-mode preference. Per-user, persisted in
+     * the account row so the choice survives logout/login + device
+     * changes (vs. a localStorage flag). The layout reads this when
+     * rendering the <html> tag and toggles the `dark` class on/off.
+     */
+    public function updateDarkMode(int $accountId, bool $darkMode): void
+    {
+        $sql = 'UPDATE ' . self::ident(self::$table) . '
+                SET dark_mode = ?
+                WHERE id = ?';
+        $this->prepared($sql, [$darkMode ? 1 : 0, $accountId]);
+    }
+
     // ====================================================================
     // Admin-panel surface
     // ====================================================================

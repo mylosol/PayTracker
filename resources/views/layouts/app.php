@@ -20,6 +20,7 @@ $__account     = $__authService->currentAccount();
 $__role        = is_array($__account) ? (string) ($__account['role'] ?? '') : '';
 $__isAdmin     = in_array($__role, ['admin', 'super_admin'], true);
 $__isSuper     = $__role === 'super_admin';
+$__darkMode    = is_array($__account) && (int) ($__account['dark_mode'] ?? 0) === 1;
 
 // CSRF for the inline logout form in the nav.
 $__csrfForLogout = is_array($__account)
@@ -67,7 +68,7 @@ $__nav = [
 ];
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="en"<?= $__darkMode ? ' class="dark"' : '' ?>>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
