@@ -76,10 +76,17 @@ $componentLabels = [
         <strong>Dispute</strong> if there's a problem worth flagging &mdash;
         being short on any line item counts as a dispute.
     </p>
-    <p class="text-sm mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <a href="<?= e($base) ?>/dashboard">← Dashboard</a>
-        <a href="<?= e($base) ?>/profile">Profile</a>
-    </p>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5">
+        <a href="<?= e($base) ?>/dashboard" class="admin-tile">
+            <span>← Dashboard</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+        </a>
+        <a href="<?= e($base) ?>/loads/new" class="admin-tile">
+            <span>Add load</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+        </a>
+        <a href="<?= e($base) ?>/profile" class="admin-tile">
+            <span>Profile</span><span aria-hidden="true" class="admin-tile-arrow">→</span>
+        </a>
+    </div>
 </div>
 
 <div class="card bg-amber-50 border border-amber-200">
