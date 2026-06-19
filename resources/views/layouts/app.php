@@ -210,7 +210,7 @@ $__nav = [
         <?= $slot ?>
     </main>
 
-    <footer class="text-center text-xs text-brand-muted py-6 px-4 border-t border-brand-line bg-white">
+    <footer class="text-center text-xs text-brand-muted py-6 px-4 border-t border-brand-line bg-white dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
         PayTracker <code><?= e(\PayTracker\Support\Version::string()) ?></code>
         &middot; env <code><?= e((string) (config('app.env'))) ?></code>
         &middot; php <code><?= e(PHP_VERSION) ?></code>
