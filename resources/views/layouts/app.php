@@ -60,7 +60,7 @@ $__nav = [
     ['href' => $__appPath . '/dashboard',         'label' => 'Dashboard',  'visible' => is_array($__account)],
     ['href' => $__appPath . '/loads/new',         'label' => 'Add load',   'visible' => is_array($__account)],
     ['href' => $__appPath . '/reconcile',         'label' => 'Reconcile',  'visible' => is_array($__account)],
-    ['href' => $__appPath . '/locations',         'label' => 'Locations',  'visible' => is_array($__account)],
+    ['href' => $__appPath . '/locations',         'label' => 'Locations',  'visible' => $__isAdmin],
     ['href' => $__appPath . '/distances',         'label' => 'Distances',  'visible' => $__isAdmin],
     ['href' => $__appPath . '/pay-admin',         'label' => 'Pay admin',  'visible' => $__isAdmin],
     ['href' => $__appPath . '/admin',             'label' => 'Admin',      'visible' => $__isAdmin],
