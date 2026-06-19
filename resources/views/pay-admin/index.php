@@ -38,16 +38,18 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 </div>
 
 <div class="card">
-    <h2 class="m-0">Summary</h2>
-    <ul class="mt-3 space-y-1 list-none p-0">
-        <li>Total rate rows: <code><?= e((string) $summary['total_rows']) ?></code></li>
-        <?php foreach (['default', 'current', 'draft'] as $stage): ?>
-            <li>
-                stage=<code><?= e($stage) ?></code>:
-                <code><?= e((string) ($summary['by_stage'][$stage] ?? 0)) ?></code>
-            </li>
-        <?php endforeach; ?>
-    </ul>
+    <h2 class="m-0">Jump to</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+        <a href="#bucket-round_trip" class="admin-tile">
+            <span>Round-trip rates</span><span aria-hidden="true" class="admin-tile-arrow">↓</span>
+        </a>
+        <a href="#bucket-long_haul" class="admin-tile">
+            <span>Long-haul rates</span><span aria-hidden="true" class="admin-tile-arrow">↓</span>
+        </a>
+        <a href="#recompute-pay" class="admin-tile">
+            <span>Recompute pay</span><span aria-hidden="true" class="admin-tile-arrow">↓</span>
+        </a>
+    </div>
     <?php if ($summary['total_rows'] === 0): ?>
         <div class="flash-err mt-4" role="alert">
             No pay-rate rows. The backfill migration may not have run yet —
@@ -57,7 +59,7 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 </div>
 
 <?php foreach ($buckets as $bucket): ?>
-<div class="card">
+<div class="card scroll-mt-4" id="bucket-<?= e((string) $bucket['trip_type']) ?>">
     <h2 class="m-0"><?= e($bucket['label']) ?></h2>
 
     <p class="text-brand-muted mt-2">
@@ -180,7 +182,7 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 </div>
 <?php endforeach; ?>
 
-<div class="card">
+<div class="card scroll-mt-4" id="recompute-pay">
     <h2 class="m-0">Recompute pay</h2>
     <p class="text-brand-muted mt-2 mb-5">
         Walks <code>driver_loads</code> with PayCalculator using the current
