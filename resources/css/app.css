@@ -565,9 +565,25 @@
 .dark .bg-rose-50\/60 {
     background-color: theme('colors.rose.900 / 30%');
 }
-/* Misc inline emerald accents (week totals badge etc.). */
+/* Misc inline emerald accents (week totals badge etc., Unban button
+   on /admin). */
 .dark .bg-emerald-100 {
     @apply bg-emerald-900/50 text-emerald-100;
+}
+.dark .hover\:bg-emerald-200:hover {
+    @apply bg-emerald-800/70;
+}
+.dark .border-emerald-200 {
+    @apply border-emerald-700;
+}
+/* Amber button surface (Ban on /admin). The amber-100 ground is
+   invisible on a slate-900 page; flip to a dark amber chip with
+   high-contrast text. Border + hover follow the same shift. */
+.dark .bg-amber-100 {
+    @apply bg-amber-900/50 text-amber-100;
+}
+.dark .hover\:bg-amber-200:hover {
+    @apply bg-amber-800/70;
 }
 .dark .text-emerald-800,
 .dark .text-emerald-900 {
