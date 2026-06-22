@@ -204,27 +204,62 @@ jobs:
             exit 0
           fi
 
-          # Fall back to tar over ssh. We can't easily replicate --delete
-          # semantics in a tar-only pipeline, so before unpacking we wipe
-          # everything in the docroot EXCEPT the .htaccess and .env (those
-          # are placed by separate workflow steps). This keeps the deploy
-          # tree identical to a fresh rsync.
-          echo "rsync failed; falling back to tar over ssh."
+          # Fall back to tar over ssh. The WHM preview host doesn't ship
+          # rsync, so this is the path the deploy actually takes on every
+          # run — make it atomic. The old "wipe then untar in place"
+          # version left the docroot half-deployed when the SSH stream
+          # dropped mid-untar, which manifested as scripts/migrate.php
+          # failing because bootstrap/app.php hadn't landed yet.
+          #
+          # New flow:
+          #   1. untar into a sibling staging dir
+          #   2. sanity-check a few key files exist
+          #   3. carry .htaccess + .env across from the live tree
+          #   4. atomic swap (rename live → backup, staging → live, rm backup)
+          # A failure between steps 1-3 leaves the live tree untouched.
+          echo "rsync failed; falling back to atomic tar over ssh."
           cat rsync-stderr.log
 
-          # 1. Clear out the destination, preserving .htaccess + .env.
-          $SSH "$REMOTE" "set -euo pipefail; cd '$DEST' && \
-            find . -mindepth 1 -maxdepth 1 \
-              ! -name '.htaccess' \
-              ! -name '.env' \
-              -exec rm -rf {} +"
+          STAGING="${DEST}.staging"
+          BACKUP="${DEST}.previous"
 
-          # 2. Stream a tar of the local tree (the rsync excludes
-          # transfer cleanly because tar uses the same --exclude=PATTERN
-          # syntax) and unpack it on the remote.
+          # Reset the staging dir to a clean slate so a half-extracted tree
+          # from a previously-failed run doesn't leak into this deploy.
+          $SSH "$REMOTE" "set -euo pipefail; rm -rf '$STAGING' && mkdir -p '$STAGING'"
+
+          # Stream the local tree into staging. Tar reuses the rsync
+          # --exclude flags verbatim.
           tar -czf - "${EXCLUDES[@]}" . \
-            | $SSH "$REMOTE" "tar -xzf - -C '$DEST'"
-          echo "Deployed via tar over ssh."
+            | $SSH "$REMOTE" "tar -xzf - -C '$STAGING'"
+
+          # Sanity check — bail out BEFORE swapping if the tar landed
+          # incomplete. The earlier failure mode was bootstrap/app.php
+          # missing post-extract, which is exactly what we want to
+          # detect here.
+          $SSH "$REMOTE" "set -euo pipefail; \
+            for f in bootstrap/app.php public/index.php scripts/migrate.php; do \
+              test -f '$STAGING/'\$f || { echo \"missing in staging: \$f\"; exit 1; }; \
+            done"
+
+          # Carry .htaccess + .env across so the swap doesn't lose
+          # the host-specific config the workflow's later steps don't
+          # rewrite. Both are optional on a fresh deploy.
+          $SSH "$REMOTE" "set -euo pipefail; \
+            [ -f '$DEST/.htaccess' ] && cp '$DEST/.htaccess' '$STAGING/.htaccess' || true; \
+            [ -f '$DEST/.env'      ] && cp '$DEST/.env'      '$STAGING/.env'      || true"
+
+          # Atomic-ish swap: rename live → previous, staging → live,
+          # then drop previous. The two renames each run in a single
+          # syscall on the same filesystem so the window where the
+          # docroot doesn't exist is microseconds. If the first rename
+          # succeeds but the second fails, $DEST is missing — restore
+          # from $BACKUP rather than leaving the site offline.
+          $SSH "$REMOTE" "set -euo pipefail; \
+            rm -rf '$BACKUP'; \
+            if [ -d '$DEST' ]; then mv '$DEST' '$BACKUP'; fi; \
+            mv '$STAGING' '$DEST' || { echo 'swap failed, restoring previous'; mv '$BACKUP' '$DEST'; exit 1; }; \
+            rm -rf '$BACKUP'"
+          echo "Deployed via atomic tar over ssh."
 
       # Promote the preview-specific root .htaccess into place. The repo
       # version is named differently so it stays inert during local
