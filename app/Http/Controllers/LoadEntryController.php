@@ -346,9 +346,6 @@ final class LoadEntryController extends Controller
         if ($pickup === '' || $delivery === '') {
             return $this->failBackEdit($request, $frtl, 'Pick-up and delivery cities are required.');
         }
-        if ($pickup === $delivery) {
-            return $this->failBackEdit($request, $frtl, 'Pick-up and delivery cannot be the same city.');
-        }
         if (! is_numeric($typeRaw) || ! in_array((int) $typeRaw, self::ALLOWED_LOAD_TYPES, true)) {
             return $this->failBackEdit($request, $frtl, 'Load type must be loaded one-way or round-trip.');
         }
@@ -759,9 +756,6 @@ final class LoadEntryController extends Controller
 
         if ($pickup === '' || $delivery === '') {
             return ['ok' => false, 'error' => 'Pick-up and delivery cities are required.'];
-        }
-        if ($pickup === $delivery) {
-            return ['ok' => false, 'error' => 'Pick-up and delivery cannot be the same city.'];
         }
         if (! is_numeric($typeRaw) || ! in_array((int) $typeRaw, self::ALLOWED_LOAD_TYPES, true)) {
             return ['ok' => false, 'error' => 'Load type must be loaded one-way or round-trip.'];

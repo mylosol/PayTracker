@@ -49,14 +49,22 @@ test.describe('load entry (write path)', () => {
     // every Playwright pass via the notes-prefix marker.
     const qaFrtl = () => 999_000_000 + Math.floor(Math.random() * 999_999);
 
-    test('9d — same pickup and delivery rejected', async ({ page }) => {
+    test('9d — same pickup and delivery is accepted (0-mile load)', async ({ page }) => {
+        // Drivers can load and deliver in the same town — pay falls
+        // into the lowest mileage tier. Earlier this was rejected;
+        // CityDistance::lookupOrFetch now short-circuits same-name
+        // pairs to 0 miles instead of blocking the submission.
         await signIn(page);
         await page.goto('loads/new');
-        await page.locator('#frtl').fill(String(qaFrtl()));
+        const frtl = qaFrtl();
+        await page.locator('#frtl').fill(String(frtl));
         await page.locator('#pickup_city').selectOption('Panama City, FL');
         await page.locator('#delivery_city').fill('Panama City, FL');
+        await page.locator('input[name="load_type"][value="0"]').check();
+        await page.locator('#notes').fill('QA TEST same-city zero-mile load — safe to clean up');
         await page.getByRole('button', { name: /add load/i }).click();
-        await expect(page.getByText(/cannot be the same city/i)).toBeVisible();
+        await expect(page).toHaveURL(/\/dashboard(\?|$)/);
+        await expect(page.getByText(new RegExp(`added load frtl=${frtl}\\b`, 'i'))).toBeVisible();
     });
 
     test('9e — unknown delivery city rejected', async ({ page }) => {
