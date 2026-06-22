@@ -117,7 +117,10 @@ test.describe.serial('pay-rate admin (write path)', () => {
         page.once('dialog', (d) => d.accept());
         await card.getByRole('button', { name: /promote draft/i }).click();
 
-        await expect(page.getByText(/promoted draft to current for round_trip/i)).toBeVisible();
+        // Flash includes the effective date from the new pay-rate
+        // versioning flow ("Promoted round_trip draft → current,
+        // effective YYYY-MM-DD. ..."). Match on the durable parts.
+        await expect(page.getByText(/promoted round_trip draft.*current.*effective/i)).toBeVisible();
         await expect(
             page.locator('div.card', { hasText: ROUND_TRIP })
                 .getByRole('button', { name: /start draft from current/i })
