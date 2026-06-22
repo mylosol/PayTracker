@@ -208,6 +208,44 @@ final class PayCalculatorTest extends TestCase
         $this->assertEqualsWithDelta(0.00,  $result['op'], 0.005);
     }
 
+    public function test_one_way_zero_loaded_miles_hits_lowest_tier(): void
+    {
+        // Same-city pickup→delivery (Panama City → Panama City). Drivers
+        // earn at least the lowest-tier flat amount on any one-way load
+        // — there's no scenario where loaded pay is zero with tiers
+        // configured. Empty leg here = 46 mi to Freeport.
+        $calc = $this->makeCalculator();
+        $calc->setRateTiersForTest('long_haul', [
+            ['miles' => 10,  'rate' => 6.50],
+            ['miles' => 100, 'rate' => 40.0],
+        ]);
+
+        $load = new LoadInputs(
+            load_type:         0,
+            load_miles:        0,
+            empty_miles:       46,
+            begin_empty_miles: 0,
+            is_split:          0,
+            is_weekend:        0,
+            extra_pay:         0.0,
+            dem_minutes:       0,
+            break_minutes:     0,
+            variables_blob:    '168-night--0',
+        );
+
+        // oneWay   = 6.50 * 1.10 = 7.15
+        // empty    = 46 * 0.50  = 23.00
+        // combined = 30.15
+        // np = round(7.15,2) + round(23.00,2)
+        //    + round(30.15*0.20,2) + round(30.15*0.15,2)
+        //    = 7.15 + 23.00 + 6.03 + 4.52 = 40.70
+        $result = $calc->computeFor($load);
+        $this->assertEqualsWithDelta(7.15,  $result['base_pay'],  0.005);
+        $this->assertSame(0, $result['base_miles']);
+        $this->assertEqualsWithDelta(23.00, $result['empty_pay'], 0.005);
+        $this->assertEqualsWithDelta(40.70, $result['np'],        0.005);
+    }
+
     public function test_one_way_empty_only_no_overlay(): void
     {
         $calc = $this->makeCalculator();
