@@ -175,6 +175,13 @@ return static function (Router $router): void {
     // use. The admin who minted the token sees the URL once in their
     // flash banner (and, in a follow-up branch, gets it emailed via
     // Resend automatically).
+    // Self-serve "Forgot password?" — public form that mints a token
+    // and emails it. Always responds the same way regardless of
+    // whether the address is on file (anti-enumeration). The
+    // {token} routes below are the claim side.
+    $router->get('/password-reset',          [PasswordResetController::class, 'requestForm']);
+    $router->post('/password-reset',         [PasswordResetController::class, 'requestSubmit']);
+
     $router->get('/password-reset/{token}',  [PasswordResetController::class, 'show']);
     $router->post('/password-reset/{token}', [PasswordResetController::class, 'submit']);
 

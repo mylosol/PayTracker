@@ -25,7 +25,10 @@ layout('layouts/app');
             </div>
 
             <div>
-                <label for="password" class="field-label">Password</label>
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <label for="password" class="field-label">Password</label>
+                    <a href="<?= e($base) ?>/password-reset" class="text-sm">Forgot password?</a>
+                </div>
                 <input id="password" name="password" type="password" autocomplete="current-password" required
                        class="field">
             </div>

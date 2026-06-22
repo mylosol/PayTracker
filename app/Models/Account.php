@@ -52,6 +52,39 @@ final class Account extends Model
     }
 
     /**
+     * Email-keyed lookup for the self-serve "Forgot password?" flow.
+     * Case-insensitive — emails are normalised lowercase on insert,
+     * but a user pasting "Robert@example.com" should still resolve.
+     *
+     * Returns the minimal columns the reset flow needs: id, user, and
+     * email itself. NULL = no such address; the caller flashes a
+     * generic confirmation either way to avoid revealing which
+     * addresses are real.
+     *
+     * @return array{id:int, user:string, email:string}|null
+     */
+    public function findByEmail(string $email): ?array
+    {
+        $email = trim(strtolower($email));
+        if ($email === '') {
+            return null;
+        }
+        $sql = 'SELECT id, user, email
+                FROM ' . self::ident(self::$table) . '
+                WHERE LOWER(email) = ?
+                LIMIT 1';
+        $row = $this->prepared($sql, [$email])->fetch();
+        if (! is_array($row)) {
+            return null;
+        }
+        return [
+            'id'    => (int)    $row['id'],
+            'user'  => (string) $row['user'],
+            'email' => (string) $row['email'],
+        ];
+    }
+
+    /**
      * Count active accounts. Used by the health/admin dashboards. We keep it
      * here rather than inlining in a controller so a future schema change
      * (e.g. soft-delete column) only requires updating one place.

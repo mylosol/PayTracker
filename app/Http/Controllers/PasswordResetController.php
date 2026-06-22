@@ -8,10 +8,12 @@ use PayTracker\Auth\PasswordHasher;
 use PayTracker\Database\Connection;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
+use PayTracker\Models\Account;
 use PayTracker\Models\AuditLog;
 use PayTracker\Models\PasswordReset;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
+use PayTracker\Services\MailService;
 
 /**
  * PasswordResetController — public claim flow for a reset token
@@ -44,7 +46,150 @@ final class PasswordResetController extends Controller
         private readonly PasswordReset $resets,
         private readonly PasswordHasher $hasher,
         private readonly AuditLog $audit,
+        private readonly Account $accounts,
+        private readonly MailService $mail,
     ) {
+    }
+
+    /**
+     * GET /password-reset — show the self-serve "forgot password"
+     * form. Public; the whole point is that the user can't sign in.
+     */
+    public function requestForm(Request $request): Response
+    {
+        $this->session->start();
+        return $this->view('password-reset/request', [
+            'base'      => $request->basePath(),
+            'csrfToken' => $this->csrf->token(),
+            'flash'     => $this->popFlash(),
+        ]);
+    }
+
+    /**
+     * POST /password-reset — handle the form. Always renders the
+     * same generic confirmation regardless of whether the email
+     * matched a real account (anti-enumeration). When the email DOES
+     * match, mint a reset token and email it via Resend.
+     *
+     * Three deliberate non-features:
+     *   1. No rate-limiting here yet. The mint() side invalidates any
+     *      prior outstanding token for the same user, so spamming
+     *      this endpoint can't flood the user with usable links —
+     *      only the most-recent one will work.
+     *   2. No "email not configured" branch surfaced to the user.
+     *      Local dev / pre-prod just logs the would-be send; the user
+     *      sees the same generic confirmation.
+     *   3. No CAPTCHA. The 1-hour TTL + invalidate-on-reissue makes
+     *      mass abuse low-value; if abuse shows up, a rate-limiter
+     *      on the mail-send call is the right next step.
+     */
+    public function requestSubmit(Request $request): Response
+    {
+        $this->session->start();
+        if (! $this->csrf->verify($request->input('_csrf'))) {
+            $this->session->put('_flash', 'Your session expired. Please try again.');
+            return $this->redirect($request->basePath() . '/password-reset');
+        }
+
+        $emailRaw = trim((string) $request->input('email', ''));
+
+        // Validate format up-front so a typo gets a usable error
+        // rather than a silent "if your email is on file..." dead end.
+        if ($emailRaw === '' || ! filter_var($emailRaw, FILTER_VALIDATE_EMAIL)) {
+            $this->session->put('_flash', 'Enter a valid email address.');
+            return $this->redirect($request->basePath() . '/password-reset');
+        }
+
+        $account = $this->accounts->findByEmail($emailRaw);
+        if ($account !== null) {
+            $mint = $this->resets->mint((int) $account['id']);
+            $url  = rtrim($this->absoluteBase($request), '/')
+                  . $request->basePath()
+                  . '/password-reset/' . $mint['token'];
+
+            $emailStatus = 'mail-disabled';
+            if ($this->mail->isConfigured()) {
+                $messageId = $this->mail->send(
+                    (string) $account['email'],
+                    'Reset your PayTracker password',
+                    $this->buildResetEmailHtml((string) $account['user'], $url, $mint['expiresAt'])
+                );
+                $emailStatus = $messageId !== null
+                    ? sprintf('emailed (msg %s)', substr($messageId, 0, 12))
+                    : 'email-send-failed';
+            }
+
+            $this->audit->record(
+                AuditLog::ACTION_PASSWORD_RESET_SENT,
+                userId: (int) $account['id'],
+                ipAddress: $this->clientIp(),
+                metadata: [
+                    'origin'         => 'self-serve',
+                    'target_user_id' => (int) $account['id'],
+                    'expires_at'     => $mint['expiresAt'],
+                    'email_status'   => $emailStatus,
+                ],
+            );
+        }
+
+        // Always land on the "sent" page — branch above is intentionally
+        // a no-op when the email doesn't match, so an attacker can't
+        // probe which addresses exist by comparing response shapes.
+        return $this->view('password-reset/sent', [
+            'base'  => $request->basePath(),
+            'email' => $emailRaw,
+        ]);
+    }
+
+    /**
+     * Build the HTML body for the self-serve reset email. Mirrors
+     * AdminUsersController::buildResetEmailHtml but reads "you
+     * requested" rather than "an administrator issued".
+     */
+    private function buildResetEmailHtml(string $userName, string $url, string $expiresAt): string
+    {
+        $safeUser = htmlspecialchars($userName, ENT_QUOTES, 'UTF-8');
+        $safeUrl  = htmlspecialchars($url,      ENT_QUOTES, 'UTF-8');
+        $safeExp  = htmlspecialchars($expiresAt, ENT_QUOTES, 'UTF-8');
+        return <<<HTML
+<div style="font:16px/1.5 -apple-system,Segoe UI,sans-serif;color:#101418;max-width:560px;">
+    <p>Hi {$safeUser},</p>
+    <p>We received a request to reset the password on your PayTracker
+       account. Click the button below to choose a new password:</p>
+    <p style="margin:1.5rem 0;">
+        <a href="{$safeUrl}"
+           style="display:inline-block;background:#F97316;color:#fff;text-decoration:none;padding:.6rem 1.4rem;border-radius:6px;">
+            Set a new password
+        </a>
+    </p>
+    <p style="font-size:14px;color:#475569;">
+        Or paste this URL into your browser:<br>
+        <code style="word-break:break-all;">{$safeUrl}</code>
+    </p>
+    <p style="font-size:14px;color:#475569;">
+        The link expires at {$safeExp} UTC (1 hour from when you
+        clicked Forgot password).
+    </p>
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:1.5rem 0;">
+    <p style="font-size:13px;color:#64748b;">
+        Didn't request this? You can safely ignore this email —
+        your password will not change.
+    </p>
+</div>
+HTML;
+    }
+
+    /**
+     * Same scheme/host helper used by AdminUsersController. Duplicated
+     * rather than extracted because the surface is small and this
+     * controller already stands alone otherwise.
+     */
+    private function absoluteBase(Request $request): string
+    {
+        $https = ! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        $proto = $https ? 'https' : 'http';
+        $host  = is_string($_SERVER['HTTP_HOST'] ?? null) ? (string) $_SERVER['HTTP_HOST'] : 'paytracker.xyz';
+        return $proto . '://' . $host;
     }
 
     /**
