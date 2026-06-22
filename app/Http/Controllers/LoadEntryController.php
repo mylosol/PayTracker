@@ -457,6 +457,11 @@ final class LoadEntryController extends Controller
             variables_blob:     $variablesBlob,
             out_of_route_ind:   $outOfRouteInd,
             out_of_route_miles: $outOfRouteMiles,
+            // Edit path. $loadDate is "<YYYY-MM-DD> 00:00:00" by the
+            // time we get here (the form-driven validation block
+            // appends the time). Strip the time so the rate-version
+            // lookup matches on a DATE.
+            load_date:          substr((string) $loadDate, 0, 10),
         );
         $pay = $this->calculator->computeFor($payInput);
 
@@ -846,6 +851,10 @@ final class LoadEntryController extends Controller
             variables_blob:     $variablesBlob,
             out_of_route_ind:   $outOfRouteInd,
             out_of_route_miles: $outOfRouteMiles,
+            // Preview path. Same shape as the edit path: trim the
+            // appended " 00:00:00" so the rate-version lookup binds
+            // a DATE.
+            load_date:          substr((string) $loadDate, 0, 10),
         );
         $pay = $this->calculator->computeFor($payInput);
 
