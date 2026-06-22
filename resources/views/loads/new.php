@@ -219,42 +219,35 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
             </div>
         </fieldset>
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-                <label for="dem_minutes" class="field-label">Demurrage minutes</label>
-                <input id="dem_minutes" name="dem_minutes" type="number" min="0" max="1440" step="1"
-                       value="<?= e((string) $old['dem']) ?>"
-                       class="field">
-                <span class="field-hint">0 if none.</span>
+        <fieldset class="border border-brand-line rounded-lg p-4">
+            <legend class="px-2 text-sm font-semibold text-brand-muted">Adjustments <span class="font-normal">(0 if none)</span></legend>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label for="dem_minutes" class="field-label">Demurrage minutes</label>
+                    <input id="dem_minutes" name="dem_minutes" type="number" min="0" max="1440" step="1"
+                           value="<?= e((string) $old['dem']) ?>"
+                           class="field">
+                </div>
+                <div>
+                    <label for="break_minutes" class="field-label">Breakdown minutes</label>
+                    <input id="break_minutes" name="break_minutes" type="number" min="0" max="1440" step="1"
+                           value="<?= e((string) $old['break']) ?>"
+                           class="field">
+                </div>
+                <div>
+                    <label for="extra_pay" class="field-label">Extra pay ($)</label>
+                    <input id="extra_pay" name="extra_pay" type="number" min="0" max="999.99" step="0.01"
+                           value="<?= e((string) $old['extra']) ?>"
+                           class="field">
+                </div>
+                <div>
+                    <label for="out_of_route_miles" class="field-label">Out-of-route miles</label>
+                    <input id="out_of_route_miles" name="out_of_route_miles" type="number" min="0" max="9999" step="1"
+                           value="<?= e((string) ($old['out_of_route_miles'] ?? '0')) ?>"
+                           class="field">
+                </div>
             </div>
-
-            <div>
-                <label for="break_minutes" class="field-label">Breakdown minutes</label>
-                <input id="break_minutes" name="break_minutes" type="number" min="0" max="1440" step="1"
-                       value="<?= e((string) $old['break']) ?>"
-                       class="field">
-                <span class="field-hint">0 if none.</span>
-            </div>
-
-            <div>
-                <label for="extra_pay" class="field-label">Extra pay ($)</label>
-                <input id="extra_pay" name="extra_pay" type="number" min="0" max="999.99" step="0.01"
-                       value="<?= e((string) $old['extra']) ?>"
-                       class="field">
-            </div>
-        </div>
-
-        <div>
-            <label for="out_of_route_miles" class="field-label">Out-of-route miles</label>
-            <input id="out_of_route_miles" name="out_of_route_miles" type="number" min="0" max="9999" step="1"
-                   value="<?= e((string) ($old['out_of_route_miles'] ?? '0')) ?>"
-                   class="field max-w-[10rem]">
-            <span class="field-hint">
-                Total <em>actual</em> loaded miles when a detour added significant distance
-                (construction, road closure, etc.). Only used if it exceeds the
-                map distance by more than 3 miles; otherwise the map distance pays.
-            </span>
-        </div>
+        </fieldset>
 
         <div>
             <label for="notes" class="field-label">Notes (optional)</label>

@@ -68,14 +68,6 @@ layout('layouts/app');
         separate empty legs &mdash; the return is implicit in the
         round-trip rate table.</p>
 
-    <h2>When do "out-of-route miles" apply?</h2>
-    <p>
-        Only when a real-world detour added more than 3 miles beyond the
-        map distance (a construction reroute, a flagged road closure,
-        etc.). Type the <em>actual</em> miles you drove and PayTracker
-        pays the higher number; otherwise the map distance pays.
-    </p>
-
     <h2>My pay-week shows the wrong start day.</h2>
     <p>
         Visit <a href="<?= e($base) ?>/profile">/profile</a> and change

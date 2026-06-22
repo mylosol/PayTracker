@@ -30,6 +30,11 @@ layout('layouts/app');
                        class="field">
             </div>
 
+            <label class="inline-flex items-center gap-2 min-h-[44px]">
+                <input type="checkbox" name="remember" value="1" class="field-checkbox">
+                <span>Keep me logged in for 30 days</span>
+            </label>
+
             <button type="submit" class="btn-primary w-full sm:w-auto">
                 Sign in
             </button>

@@ -214,6 +214,21 @@
                bg-rose-50 text-rose-800 no-underline border border-rose-200
                hover:bg-rose-100;
     }
+    .admin-tile {
+        @apply flex items-center justify-between gap-3
+               min-h-[64px] px-4 py-3 rounded-lg font-semibold text-base
+               bg-white text-brand-ink no-underline border border-brand-line
+               shadow-card transition-all cursor-pointer
+               hover:bg-slate-50 hover:border-brand-primary hover:shadow-card-elev
+               hover:text-brand-ink
+               focus:outline-none focus:ring-2 focus:ring-brand-primary/40;
+    }
+    .admin-tile-arrow {
+        @apply text-brand-primary text-lg transition-transform;
+    }
+    .admin-tile:hover .admin-tile-arrow {
+        @apply translate-x-0.5;
+    }
     .btn-ghost {
         @apply inline-flex items-center justify-center gap-2
                min-h-[44px] px-5 py-2.5 rounded-lg font-semibold text-base
@@ -363,6 +378,18 @@
         .data-table.stack-on-mobile tbody td + td {
             @apply border-t border-brand-line/70 mt-2 pt-2;
         }
+        /* Render data-label="X" as a small uppercase tag above the
+           cell value so the stacked card stays scannable without
+           the thead. Reset text alignment so right-aligned columns
+           (Expected, Actions) stay left-aligned in card form. */
+        .data-table.stack-on-mobile tbody td[data-label] {
+            @apply text-left;
+        }
+        .data-table.stack-on-mobile tbody td[data-label]::before {
+            content: attr(data-label);
+            @apply block text-[11px] font-semibold uppercase tracking-wide
+                   text-brand-muted mb-0.5;
+        }
     }
 
     /* --- Static prose pages --------------------------------------- */
@@ -397,4 +424,175 @@
     .muted {
         @apply text-brand-muted;
     }
+}
+
+/* ===================================================================
+   Dark mode.
+
+   Class-strategy (Tailwind `darkMode: 'class'`). Activated by the
+   layout adding `class="dark"` to <html> when the signed-in user has
+   `account.dark_mode = 1`. Logged-out pages never get the class, so
+   the marketing/login surface stays light by design.
+
+   We override the painted surfaces explicitly rather than swapping
+   the whole brand palette via CSS vars, because the brand orange
+   action color needs to keep its identity across modes. Backgrounds,
+   text, borders, and the few light-mode helpers (code spans, slate-
+   fills) flip; brand-primary / brand-surface chrome do not.
+   =================================================================== */
+.dark body {
+    @apply bg-slate-900 text-slate-100;
+}
+.dark h1,
+.dark h2,
+.dark h3 {
+    @apply text-slate-50;
+}
+.dark .card {
+    @apply bg-slate-800 border-slate-700;
+}
+.dark code {
+    @apply bg-slate-700 text-slate-100;
+}
+.dark .text-brand-muted {
+    @apply text-slate-400;
+}
+.dark .text-brand-ink {
+    @apply text-slate-100;
+}
+.dark .border-brand-line {
+    border-color: theme('colors.slate.700');
+}
+.dark .bg-brand-surfaceBg {
+    @apply bg-slate-900;
+}
+/* Inputs: dark surface so the focus ring still pops. */
+.dark .field,
+.dark .field-select,
+.dark .field-checkbox,
+.dark textarea.field {
+    @apply bg-slate-800 text-slate-100 border-slate-600;
+}
+.dark .field::placeholder,
+.dark textarea.field::placeholder {
+    color: theme('colors.slate.500');
+}
+/* Secondary / ghost / danger buttons + admin tiles need their light
+   fills swapped so they don't blow out against the dark surface. */
+.dark .btn-secondary,
+.dark .admin-tile {
+    @apply bg-slate-800 text-slate-100 border-slate-700
+           hover:bg-slate-700 hover:text-slate-50;
+}
+.dark .btn-ghost {
+    @apply text-slate-100 hover:bg-slate-700;
+}
+.dark .btn-danger {
+    @apply bg-rose-900/40 text-rose-100 border-rose-800
+           hover:bg-rose-900/60;
+}
+/* Tables. The stack-on-mobile card variant uses bg-white; flip it
+   so the per-row cards don't punch holes in the dark surface. */
+.dark .data-table thead {
+    @apply bg-slate-800/60 text-slate-300;
+}
+.dark .data-table tbody tr:nth-child(even) {
+    @apply bg-slate-800/40;
+}
+.dark .data-table.stack-on-mobile tbody tr {
+    @apply bg-slate-800 border-slate-700;
+}
+.dark .data-table.stack-on-mobile tbody td + td {
+    border-color: theme('colors.slate.700');
+}
+/* Pills: lift the tinted backgrounds so they stay legible. The
+   semantic colors (ok / warn / err) read fine on a dark surface
+   already; only the neutral pill needs a darker chip. */
+.dark .pill {
+    @apply bg-slate-700 text-slate-100;
+}
+/* Flash banners. */
+.dark .flash-ok {
+    @apply bg-emerald-900/40 text-emerald-100 border-emerald-800;
+}
+.dark .flash-err {
+    @apply bg-rose-900/40 text-rose-100 border-rose-800;
+}
+.dark .flash-info {
+    @apply bg-sky-900/40 text-sky-100 border-sky-800;
+}
+/* Focus ring backdrop swap — the white halo around the orange ring
+   would flash on a dark page. */
+.dark :where(a, button, [role="button"], input, select, textarea, summary):focus-visible {
+    box-shadow: 0 0 0 2px theme('colors.slate.900'), 0 0 0 4px theme('colors.brand.primary');
+}
+
+/* Tinted card surfaces. A handful of cards in the app paint their
+   own light-tinted background (emerald gradient on the "This Week"
+   summary, amber on the pending-batch and warning callouts). Those
+   classes win over .card's bg-white but stay opaque in dark mode
+   and render the text invisible. Reset the gradient and re-tint
+   with a dark-friendly chip. */
+.dark .card.from-emerald-50,
+.dark .card.bg-emerald-50 {
+    background-image: none;
+    @apply bg-emerald-950/40 border-emerald-800 text-slate-100;
+}
+.dark .card.bg-amber-50 {
+    @apply bg-amber-950/40 border-amber-800 text-slate-100;
+}
+/* Inline amber callouts (notes strips inside the dashboard / loads /
+   reconcile breakdowns). Same idea — flip the tint, keep the
+   amber identity for "heads up" semantics. */
+.dark .bg-amber-50 {
+    @apply bg-amber-950/40 text-amber-100;
+}
+.dark .text-amber-900 {
+    @apply text-amber-100;
+}
+.dark .border-amber-200,
+.dark .border-amber-400,
+.dark .border-amber-500 {
+    @apply border-amber-700;
+}
+/* Reconcile row tints (paid / short / disputed). */
+.dark .bg-emerald-50\/60 {
+    background-color: theme('colors.emerald.900 / 30%');
+}
+.dark .bg-amber-50\/60 {
+    background-color: theme('colors.amber.900 / 30%');
+}
+.dark .bg-rose-50\/60 {
+    background-color: theme('colors.rose.900 / 30%');
+}
+/* Misc inline emerald accents (week totals badge etc., Unban button
+   on /admin). */
+.dark .bg-emerald-100 {
+    @apply bg-emerald-900/50 text-emerald-100;
+}
+.dark .hover\:bg-emerald-200:hover {
+    @apply bg-emerald-800/70;
+}
+.dark .border-emerald-200 {
+    @apply border-emerald-700;
+}
+/* Amber button surface (Ban on /admin). The amber-100 ground is
+   invisible on a slate-900 page; flip to a dark amber chip with
+   high-contrast text. Border + hover follow the same shift. */
+.dark .bg-amber-100 {
+    @apply bg-amber-900/50 text-amber-100;
+}
+.dark .hover\:bg-amber-200:hover {
+    @apply bg-amber-800/70;
+}
+.dark .text-emerald-800,
+.dark .text-emerald-900 {
+    @apply text-emerald-200;
+}
+.dark .text-emerald-700 {
+    @apply text-emerald-300;
+}
+.dark .text-slate-700,
+.dark .text-slate-800 {
+    @apply text-slate-200;
 }

@@ -38,16 +38,18 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 </div>
 
 <div class="card">
-    <h2 class="m-0">Summary</h2>
-    <ul class="mt-3 space-y-1 list-none p-0">
-        <li>Total rate rows: <code><?= e((string) $summary['total_rows']) ?></code></li>
-        <?php foreach (['default', 'current', 'draft'] as $stage): ?>
-            <li>
-                stage=<code><?= e($stage) ?></code>:
-                <code><?= e((string) ($summary['by_stage'][$stage] ?? 0)) ?></code>
-            </li>
-        <?php endforeach; ?>
-    </ul>
+    <h2 class="m-0">Jump to</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+        <a href="#bucket-round_trip" class="admin-tile">
+            <span>Round-trip rates</span><span aria-hidden="true" class="admin-tile-arrow">↓</span>
+        </a>
+        <a href="#bucket-long_haul" class="admin-tile">
+            <span>Long-haul rates</span><span aria-hidden="true" class="admin-tile-arrow">↓</span>
+        </a>
+        <a href="#recompute-pay" class="admin-tile">
+            <span>Recompute pay</span><span aria-hidden="true" class="admin-tile-arrow">↓</span>
+        </a>
+    </div>
     <?php if ($summary['total_rows'] === 0): ?>
         <div class="flash-err mt-4" role="alert">
             No pay-rate rows. The backfill migration may not have run yet —
@@ -57,7 +59,7 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 </div>
 
 <?php foreach ($buckets as $bucket): ?>
-<div class="card">
+<div class="card scroll-mt-4" id="bucket-<?= e((string) $bucket['trip_type']) ?>">
     <h2 class="m-0"><?= e($bucket['label']) ?></h2>
 
     <p class="text-brand-muted mt-2">
@@ -100,7 +102,7 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
     </div>
 
     <div class="table-wrap">
-        <table class="data-table text-[14px]">
+        <table class="data-table stack-on-mobile text-[14px]">
             <thead>
                 <tr>
                     <th class="text-right">Miles</th>
@@ -109,6 +111,8 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                     <th>Save / delete draft tier</th>
                 </tr>
             </thead>
+            <?php /* stack-on-mobile + data-label collapses each row to a card below md;
+                     desktop layout is unchanged. */ ?>
             <tbody>
                 <?php
                 $combined = [];
@@ -124,38 +128,40 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                     $milesInt = (int) $miles;
                 ?>
                     <tr>
-                        <td class="text-right"><code><?= $milesInt ?></code></td>
-                        <td class="text-right">
+                        <td data-label="Miles" class="md:text-right"><code><?= $milesInt ?></code></td>
+                        <td data-label="Current rate" class="md:text-right">
                             <?php if ($vals['current'] === null): ?>
                                 <em class="text-brand-muted">(dropped)</em>
                             <?php else: ?>
                                 <code><?= e((string) $vals['current']) ?></code>
                             <?php endif; ?>
                         </td>
-                        <td class="text-right">
+                        <td data-label="Draft rate" class="md:text-right">
                             <?php if ($vals['draft'] === null): ?>
                                 <span class="text-brand-muted">—</span>
                             <?php else: ?>
                                 <code><?= e((string) $vals['draft']) ?></code>
                             <?php endif; ?>
                         </td>
-                        <td>
-                            <form method="post" action="<?= e($base) ?>/pay-admin/draft/upsert"
-                                  class="inline-flex gap-2 items-center m-0">
-                                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-                                <input type="hidden" name="miles" value="<?= $milesInt ?>">
-                                <input type="text" name="rate" inputmode="decimal" required
-                                       value="<?= e((string) ($vals['draft'] ?? $vals['current'] ?? '')) ?>"
-                                       class="field w-24">
-                                <button type="submit" class="btn-primary btn-sm">Save</button>
-                            </form>
-                            <form method="post" action="<?= e($base) ?>/pay-admin/draft/delete"
-                                  class="inline-block m-0 ml-2"
-                                  onsubmit="return confirm('Delete tier <?= $milesInt ?> from the <?= e($bucket['label']) ?> draft?');">
-                                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-                                <input type="hidden" name="miles" value="<?= $milesInt ?>">
-                                <button type="submit" class="btn-secondary btn-sm">Delete</button>
-                            </form>
+                        <td data-label="Save / delete">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <form method="post" action="<?= e($base) ?>/pay-admin/draft/upsert"
+                                      class="flex flex-wrap items-center gap-2 m-0">
+                                    <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                                    <input type="hidden" name="miles" value="<?= $milesInt ?>">
+                                    <input type="text" name="rate" inputmode="decimal" required
+                                           value="<?= e((string) ($vals['draft'] ?? $vals['current'] ?? '')) ?>"
+                                           class="field w-24">
+                                    <button type="submit" class="btn-primary btn-sm">Save</button>
+                                </form>
+                                <form method="post" action="<?= e($base) ?>/pay-admin/draft/delete"
+                                      class="m-0"
+                                      onsubmit="return confirm('Delete tier <?= $milesInt ?> from the <?= e($bucket['label']) ?> draft?');">
+                                    <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                                    <input type="hidden" name="miles" value="<?= $milesInt ?>">
+                                    <button type="submit" class="btn-secondary btn-sm">Delete</button>
+                                </form>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -180,7 +186,7 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 </div>
 <?php endforeach; ?>
 
-<div class="card">
+<div class="card scroll-mt-4" id="recompute-pay">
     <h2 class="m-0">Recompute pay</h2>
     <p class="text-brand-muted mt-2 mb-5">
         Walks <code>driver_loads</code> with PayCalculator using the current

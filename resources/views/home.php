@@ -113,16 +113,10 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
 
     <section class="card">
         <h2 class="m-0">What is this?</h2>
-        <p class="text-brand-muted mt-2">
+        <p class="text-brand-muted mt-2 mb-0">
             A modern rewrite of the long-running PayTracker app — a tool that lets
             drivers log their loads, see their pay add up in real time, and reconcile
             against actual payroll. Same data, friendlier interface.
         </p>
-        <ul class="mt-4 space-y-2 list-none p-0">
-            <li><a href="<?= e($base) ?>/tutorial">Tutorial</a></li>
-            <li><a href="<?= e($base) ?>/faq">FAQ</a></li>
-            <li><a href="<?= e($base) ?>/about">About</a></li>
-            <li><a href="<?= e($base) ?>/contact">Contact</a></li>
-        </ul>
     </section>
 <?php endif; ?>

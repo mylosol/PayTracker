@@ -80,4 +80,33 @@ final class Session
             session_regenerate_id(true);
         }
     }
+
+    /**
+     * Extend the session cookie lifetime in place. Called from
+     * LoginController when the user ticks "Keep me logged in" so the
+     * cookie max-age jumps from the default 12h to the configured
+     * remember window (30 days by default) without rotating the
+     * session id — the user is already authenticated, and rotation
+     * happens once on login via regenerate().
+     */
+    public function extendCookie(int $lifetimeSeconds): void
+    {
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            return;
+        }
+        $name     = session_name();
+        $sid      = session_id();
+        if ($name === false || $sid === '') {
+            return;
+        }
+        $secure   = (bool) config('session.secure_cookie', true);
+        $samesite = (string) config('session.samesite', 'Lax');
+        setcookie($name, $sid, [
+            'expires'  => time() + $lifetimeSeconds,
+            'path'     => '/',
+            'secure'   => $secure,
+            'httponly' => true,
+            'samesite' => $samesite,
+        ]);
+    }
 }
