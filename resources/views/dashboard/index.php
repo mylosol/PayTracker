@@ -240,13 +240,26 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                                         <?php endif; ?>
                                         <table class="mt-2 text-[13px]">
                                             <tbody>
-                                                <?php if ((float) ($bd['base_pay'] ?? 0) !== 0.0): ?>
+                                                <?php
+                                                    // Always render the loaded leg for one-way and round-trip,
+                                                    // even at 0 miles/$0 — a same-city load (Panama → Panama)
+                                                    // is a real load with zero loaded miles, and hiding the
+                                                    // row reads as "loaded miles missing" to the driver.
+                                                    $tripLabel = (string) ($bd['trip_label'] ?? '');
+                                                    $showLoaded = $tripLabel === 'One-way' || $tripLabel === 'Round-trip'
+                                                        || (float) ($bd['base_pay'] ?? 0) !== 0.0;
+                                                ?>
+                                                <?php if ($showLoaded): ?>
                                                     <tr>
                                                         <td class="py-1 px-3 text-slate-600">
-                                                            <?= (int) ($bd['base_miles'] ?? 0) ?> Miles Base
+                                                            Loaded Pay:
+                                                            <?= (int) ($bd['base_miles'] ?? 0) ?> Miles
+                                                            <?php if ((int) ($bd['base_miles'] ?? 0) > 0): ?>
+                                                                <span class="text-brand-muted">@ $<?= number_format((float) ($bd['base_rate'] ?? 0), 4) ?></span>
+                                                            <?php endif; ?>
                                                         </td>
                                                         <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
-                                                            <?= e($money((float) $bd['base_pay'])) ?>
+                                                            <?= e($money((float) ($bd['base_pay'] ?? 0))) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
@@ -424,7 +437,20 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                     <td class="py-1 px-3 text-slate-600">${label}</td>
                     <td class="py-1 px-3 text-right text-emerald-600 font-semibold">${money(val)}</td>
                 </tr>`;
-            if (Number(bd.base_pay)      || 0) rows.push(row(`${Number(bd.base_miles) || 0} Miles Base`, bd.base_pay));
+            // Always show Loaded Pay for one-way / round-trip — a same-city
+            // 0-mile load is a real load and hiding the row reads as
+            // "loaded miles missing" to the driver.
+            const tripLabel = String(bd.trip_label || '');
+            const showLoaded = tripLabel === 'One-way' || tripLabel === 'Round-trip'
+                || (Number(bd.base_pay) || 0) !== 0;
+            if (showLoaded) {
+                const bm = Number(bd.base_miles) || 0;
+                const br = Number(bd.base_rate) || 0;
+                const lbl = bm > 0
+                    ? `Loaded Pay: ${bm} Miles <span class="text-brand-muted">@ $${br.toFixed(4)}</span>`
+                    : `Loaded Pay: ${bm} Miles`;
+                rows.push(row(lbl, bd.base_pay || 0));
+            }
             if (Number(bd.empty_pay)     || 0) {
                 const em = Number(bd.empty_miles) || 0;
                 const rate = Number(bd.empty_rate) || 0;

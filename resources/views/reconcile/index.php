@@ -324,13 +324,25 @@ $renderRow = static function (array $row, ?array $reconRow) use (
                     <?php endif; ?>
                     <table class="text-[13px] mt-2 border-collapse">
                         <tbody>
+                            <?php
+                            // For one-way / round-trip loads we always render
+                            // the Loaded Pay row, even at $0 — a same-city
+                            // load with 0 loaded miles is real, and hiding
+                            // the row reads as "loaded miles missing."
+                            $tripLabel = (string) ($bd['trip_label'] ?? '');
+                            $forceShowLoaded = $tripLabel === 'One-way' || $tripLabel === 'Round-trip';
+                            ?>
                             <?php foreach ($componentLabels as $key => $label):
                                 $val = (float) ($bd[$key] ?? 0);
-                                if ($val === 0.0) continue;
+                                if ($val === 0.0 && ! ($key === 'base_pay' && $forceShowLoaded)) continue;
                                 $rate = null;
                                 $countLabel = null;
                                 if ($key === 'base_pay' && isset($bd['base_miles'])) {
-                                    $countLabel = (int) $bd['base_miles'] . ' Miles Base';
+                                    $bm = (int) $bd['base_miles'];
+                                    $countLabel = 'Loaded Pay: ' . $bm . ' Miles';
+                                    if ($bm > 0 && isset($bd['base_rate'])) {
+                                        $rate = (float) $bd['base_rate'];
+                                    }
                                 } elseif ($key === 'empty_pay' && isset($bd['empty_miles']) && (int) $bd['empty_miles'] > 0) {
                                     $countLabel = sprintf('Empty Pay: %d Miles', (int) $bd['empty_miles']);
                                     $rate = isset($bd['empty_rate']) ? (float) $bd['empty_rate'] : null;
