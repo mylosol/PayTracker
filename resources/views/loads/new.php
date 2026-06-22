@@ -189,11 +189,17 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
         </fieldset>
 
         <div id="end-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
-            <label for="end_empty_city" class="field-label">End Empty location</label>
-            <input list="city-options" id="end_empty_city" name="end_empty_city" type="text"
-                   value="<?= e((string) ($old['end_empty'] ?? '')) ?>" class="field">
+            <label for="end_empty_city" class="field-label">End Empty terminal</label>
+            <select id="end_empty_city" name="end_empty_city" class="field-select">
+                <option value="" <?= ($old['end_empty'] ?? '') === '' ? 'selected' : '' ?>>— I didn't go anywhere empty —</option>
+                <?php foreach ($terminals as $t): ?>
+                    <option value="<?= e($t) ?>" <?= ($old['end_empty'] ?? '') === $t ? 'selected' : '' ?>>
+                        <?= e($t) ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
             <span class="field-hint">
-                Where you ended after the delivery (typically the terminal you returned to).
+                Pick the terminal you returned to after the delivery.
                 Empty leg = delivery → here. Leave blank if you didn't go anywhere empty.
             </span>
         </div>
