@@ -542,12 +542,14 @@ spec exercises.
 load." FRTL is the first server-side check now; pickup/delivery
 errors only surface after FRTL is supplied.
 
-### 9d. Same pickup and delivery rejected
+### 9d. Same pickup and delivery is accepted (0-mile load)
 1. FRTL = a fresh 9-digit number (e.g. `999100001`).
 2. Select Pick-up = `Panama City, FL`.
 3. Type Delivery = `Panama City, FL`. Submit.
 
-**Expected:** flash banner "Pick-up and delivery cannot be the same city."
+**Expected:** redirect to `/dashboard` with the "added load FRTL=…"
+flash. Drivers can legitimately load and deliver in the same town
+(pay falls into the lowest mileage tier); the form must not block it.
 
 ### 9e. Unknown delivery city rejected
 1. FRTL = a fresh number (e.g. `999100002`).

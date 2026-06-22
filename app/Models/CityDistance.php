@@ -204,6 +204,13 @@ final class CityDistance extends Model
      */
     public function lookupOrFetch(string $fromName, string $toName): ?int
     {
+        // Same-city pickup→delivery is legitimate (pickup and drop are
+        // in the same town; pay falls into the lowest mileage tier).
+        // Short-circuit to 0 rather than burning a Google Maps call —
+        // the API would return ~0 anyway and we'd cache a noise row.
+        if (strcasecmp(trim($fromName), trim($toName)) === 0) {
+            return 0;
+        }
         $rows = $this->between($fromName, $toName);
         if (count($rows) > 0) {
             return (int) $rows[0]['miles'];
