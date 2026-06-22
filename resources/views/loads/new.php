@@ -265,7 +265,7 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
             <button type="submit" class="btn-primary">
                 <?= $isEdit ? 'Save changes' : 'Add load' ?>
             </button>
-            <a href="<?= e($base) ?>/<?= $isEdit ? 'dashboard' : 'loads' ?>" class="text-sm">Cancel</a>
+            <a href="<?= e($base) ?>/dashboard" class="text-sm">Cancel</a>
         </div>
     </form>
 </div>
