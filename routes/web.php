@@ -22,6 +22,7 @@ use PayTracker\Http\Controllers\AdminTerminalsController;
 use PayTracker\Http\Controllers\PayAdminController;
 use PayTracker\Http\Controllers\ProfileController;
 use PayTracker\Http\Controllers\ReconcileController;
+use PayTracker\Http\Controllers\PwaController;
 use PayTracker\Http\Controllers\StaticPagesController;
 use PayTracker\Http\Router;
 
@@ -37,6 +38,10 @@ return static function (Router $router): void {
     $router->get('/',            [HomeController::class,   'index']);
     $router->get('/health',      [HealthController::class, 'index']);
     $router->get('/health.json', [HealthController::class, 'jsonResponse']);
+
+    // --- PWA -----------------------------------------------------------
+    $router->get('/sw.js',       [PwaController::class, 'serviceWorker']);
+    $router->get('/manifest.json', [PwaController::class, 'manifest']);
 
     // --- Static housekeeping pages (public, no DB) --------------------
     // These exist outside the auth boundary so a brand-new driver can
