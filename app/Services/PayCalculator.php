@@ -221,15 +221,18 @@ final class PayCalculator
             // One-way: split into a loaded leg (rate-table) and an empty
             // leg (mt × miles). Overlays scale off the COMBINED total so
             // a long deadhead lifts seniority/shift/weekend pay too.
+            //
+            // A 0-mile loaded leg (same-city pickup→delivery) still pays
+            // the lowest mileage tier — drivers earn at least the
+            // 10-mile-tier flat amount for any same-city load. The lookup
+            // returns the first tier whose miles ≥ load_miles, so 0
+            // resolves to the smallest tier on file. The per-mile rate
+            // is zero-guarded so the breakdown doesn't divide by zero.
             $oneWay = 0.0;
-            if ($effectiveMiles > 0) {
-                $base = $this->rates->lookup('long_haul', $effectiveMiles, $loadDate);
-                if ($base !== null) {
-                    $oneWay   = $base * (1 + $raise);
-                    // $effectiveMiles is already > 0 from the outer guard;
-                    // the per-mile rate is safe to compute unconditionally.
-                    $baseRate = $oneWay / $effectiveMiles;
-                }
+            $base = $this->rates->lookup('long_haul', $effectiveMiles, $loadDate);
+            if ($base !== null) {
+                $oneWay   = $base * (1 + $raise);
+                $baseRate = $effectiveMiles > 0 ? $oneWay / $effectiveMiles : 0.0;
             }
             $empty           = $emptyMiles * $mt;
 

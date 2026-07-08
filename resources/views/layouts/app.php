@@ -75,6 +75,8 @@ $__nav = [
     <meta name="theme-color" content="#1E293B">
     <title><?= e((string) (config('app.name'))) ?></title>
     <link rel="icon" type="image/svg+xml" href="<?= e($__logoUrl) ?>">
+    <link rel="apple-touch-icon" href="<?= e($__appPath) ?>/public/images/appicons/apple-touch-icon.png">
+    <link rel="manifest" href="<?= e($__appPath) ?>/manifest.json">
 
     <!--
         Self-hosted fonts. The body weight (Inter 400) is preloaded
@@ -215,6 +217,16 @@ $__nav = [
         &middot; env <code><?= e((string) (config('app.env'))) ?></code>
         &middot; php <code><?= e(PHP_VERSION) ?></code>
     </footer>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker
+                    .register('<?= e($__appPath) ?>/sw.js')
+                    .catch(function () {});
+            });
+        }
+    </script>
 
     <?php if (is_array($__account)): ?>
         <script>
