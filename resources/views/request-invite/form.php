@@ -2,10 +2,8 @@
 /**
  * @var string      $csrfToken
  * @var string      $base
- * @var list<string> $terminals
  * @var string|null $flash
  * @var array{name?:string,email?:string,terminal?:string,referral?:string} $old
- * @var string      $otherLabel
  */
 layout('layouts/app');
 ?>
@@ -49,22 +47,13 @@ layout('layouts/app');
 
             <div>
                 <label for="ri-terminal" class="field-label">Your terminal</label>
-                <select id="ri-terminal" name="terminal" required class="field-select">
-                    <option value="" <?= ($old['terminal'] ?? '') === '' ? 'selected' : '' ?> disabled>
-                        — Pick a terminal —
-                    </option>
-                    <?php foreach ($terminals as $t): ?>
-                        <option value="<?= e($t) ?>" <?= ($old['terminal'] ?? '') === $t ? 'selected' : '' ?>>
-                            <?= e($t) ?>
-                        </option>
-                    <?php endforeach; ?>
-                    <option value="<?= e($otherLabel) ?>" <?= ($old['terminal'] ?? '') === $otherLabel ? 'selected' : '' ?>>
-                        <?= e($otherLabel) ?>
-                    </option>
-                </select>
+                <input id="ri-terminal" name="terminal" type="text" required maxlength="120"
+                       value="<?= e((string) ($old['terminal'] ?? '')) ?>"
+                       autocomplete="off" spellcheck="true"
+                       class="field">
                 <span class="field-hint">
-                    If your terminal isn't listed, pick <em>Other</em>
-                    and mention it in the note below.
+                    Which terminal do you drive out of? Type the city
+                    name (e.g. Pensacola, Panama City).
                 </span>
             </div>
 

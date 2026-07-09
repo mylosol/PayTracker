@@ -7,7 +7,6 @@ namespace PayTracker\Http\Controllers;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
 use PayTracker\Models\AuditLog;
-use PayTracker\Models\Terminal;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 use PayTracker\Services\MailService;
@@ -41,13 +40,9 @@ use PayTracker\Support\Config;
  */
 final class InviteRequestController extends Controller
 {
-    /** Terminal option we render when the driver's terminal isn't listed. */
-    private const OTHER_TERMINAL = 'Other / Not listed';
-
     public function __construct(
         private readonly Csrf $csrf,
         private readonly Session $session,
-        private readonly Terminal $terminals,
         private readonly AuditLog $audit,
         private readonly MailService $mail,
         private readonly Config $config,
@@ -59,12 +54,10 @@ final class InviteRequestController extends Controller
     {
         $this->session->start();
         return $this->view('request-invite/form', [
-            'base'       => $request->basePath(),
-            'csrfToken'  => $this->csrf->token(),
-            'terminals'  => $this->terminals->all(),
-            'flash'      => $this->popFlash(),
-            'old'        => (array) ($this->session->get('_ri_old') ?? []),
-            'otherLabel' => self::OTHER_TERMINAL,
+            'base'      => $request->basePath(),
+            'csrfToken' => $this->csrf->token(),
+            'flash'     => $this->popFlash(),
+            'old'       => (array) ($this->session->get('_ri_old') ?? []),
         ]);
     }
 
@@ -127,13 +120,12 @@ final class InviteRequestController extends Controller
             return $this->redirect($request->basePath() . '/request-invite');
         }
 
-        // Terminal whitelist: accept anything in the current active
-        // list OR the "Other" sentinel. Reject invented values so a
-        // scripted POST can't slip HTML through the terminal field.
-        $known = $this->terminals->all();
-        if ($terminal !== self::OTHER_TERMINAL && ! in_array($terminal, $known, true)) {
-            $terminal = self::OTHER_TERMINAL;
-        }
+        // Terminal is free-text on purpose: a request that can't
+        // name Pensacola or Panama City (however loosely spelled) is
+        // very likely not a real driver. Admin makes the call from the
+        // review email; we don't try to normalise here. HTML injection
+        // in the value is defanged by htmlspecialchars in the email
+        // builder, and in the audit view by the standard escape.
 
         // Send to the admin inbox. If Resend is offline we still audit
         // the request so an admin can find it on-site tomorrow.
