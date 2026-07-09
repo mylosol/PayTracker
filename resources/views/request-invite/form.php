@@ -46,15 +46,11 @@ layout('layouts/app');
             </div>
 
             <div>
-                <label for="ri-terminal" class="field-label">Your terminal</label>
+                <label for="ri-terminal" class="field-label">Which terminal do you drive out of?</label>
                 <input id="ri-terminal" name="terminal" type="text" required maxlength="120"
                        value="<?= e((string) ($old['terminal'] ?? '')) ?>"
                        autocomplete="off" spellcheck="true"
                        class="field">
-                <span class="field-hint">
-                    Which terminal do you drive out of? Type the city
-                    name (e.g. Pensacola, Panama City).
-                </span>
             </div>
 
             <div>
