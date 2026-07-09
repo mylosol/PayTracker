@@ -62,6 +62,7 @@ final class AuditLog extends Model
     public const ACTION_INVITE_EMAILED          = 'INVITE_EMAILED';
     public const ACTION_INVITE_REVOKED          = 'INVITE_REVOKED';
     public const ACTION_INVITE_USED             = 'INVITE_USED';
+    public const ACTION_INVITE_REQUESTED        = 'INVITE_REQUESTED';
     public const ACTION_USER_REGISTERED         = 'USER_REGISTERED';
     public const ACTION_TERMINAL_CREATED        = 'TERMINAL_CREATED';
     public const ACTION_TERMINAL_UPDATED        = 'TERMINAL_UPDATED';

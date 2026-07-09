@@ -70,12 +70,31 @@ final class AdminInvitesController extends Controller
         if (($denied = $this->gate($request)) !== null) {
             return $denied;
         }
+
+        // Prefill precedence:
+        //   1. sticky old (a prior submit that failed validation),
+        //   2. ?invitee_email= query param (the "Mint an invite code"
+        //      button in the /request-invite email lands here — the
+        //      admin's already got the requester in mind, no reason
+        //      to make them retype the address).
+        //   3. empty.
+        $sticky      = $this->session->get('_old_invite_email');
+        $queryEmail  = trim((string) $request->input('invitee_email', ''));
+        if ($queryEmail !== '' && ! filter_var($queryEmail, FILTER_VALIDATE_EMAIL)) {
+            // Silently ignore junk in the URL — we don't want a
+            // hostile link with an XSS-shaped "email" to render into
+            // the value= attribute unfiltered. `e()` in the view
+            // would defang it, but not prefilling is cleaner.
+            $queryEmail = '';
+        }
+        $prefillEmail = is_string($sticky) && $sticky !== '' ? $sticky : $queryEmail;
+
         return $this->view('admin/invites/new', [
             'base'      => $request->basePath(),
             'csrfToken' => $this->csrf->token(),
             'flash'     => $this->popFlash(),
             'old'       => [
-                'invitee_email' => $this->session->get('_old_invite_email')       ?? '',
+                'invitee_email' => $prefillEmail,
                 'expires_at'    => $this->session->get('_old_invite_expires_at')  ?? '',
                 'auto_delete'   => $this->session->get('_old_invite_auto_delete') ?? '1',
             ],
