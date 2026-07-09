@@ -46,8 +46,8 @@ layout('layouts/app');
         <p class="text-sm text-brand-muted mt-6">
             Have an invite code?
             <a href="<?= e($base) ?>/register" class="font-semibold">Create an account →</a><br>
-            Otherwise, ask an administrator to send you one
-            (<a href="<?= e($base) ?>/contact">/contact</a>).
+            Don't have one?
+            <a href="<?= e($base) ?>/request-invite" class="font-semibold">Request an invite →</a>
         </p>
     </div>
 </div>

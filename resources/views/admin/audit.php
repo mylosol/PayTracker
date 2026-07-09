@@ -67,7 +67,7 @@ layout('layouts/app');
         <table class="data-table text-[13px]">
             <thead>
                 <tr>
-                    <th>Time (UTC)</th>
+                    <th>Time (local)</th>
                     <th>User</th>
                     <th>Action</th>
                     <th>Reason</th>
@@ -89,7 +89,20 @@ layout('layouts/app');
                     $actionBg = $isFail ? 'bg-rose-100' : ($isBan ? 'bg-amber-100' : 'bg-slate-100');
                     ?>
                     <tr class="<?= $isFail ? 'bg-rose-50/60' : '' ?>">
-                        <td class="whitespace-nowrap"><?= e((string) ($r['timestamp'] ?? '')) ?></td>
+                        <?php
+                            // Emit as ISO-8601 UTC so the JS convertor
+                            // can parse cleanly. DB column is a plain
+                            // MySQL DATETIME stored in UTC (see
+                            // AuditLog::record → UTC_TIMESTAMP()), so
+                            // we swap the space for a "T" and append "Z".
+                            $raw = (string) ($r['timestamp'] ?? '');
+                            $iso = $raw !== '' ? str_replace(' ', 'T', $raw) . 'Z' : '';
+                        ?>
+                        <td class="whitespace-nowrap">
+                            <time class="js-local-time"
+                                  datetime="<?= e($iso) ?>"
+                                  title="<?= e($raw) ?> UTC"><?= e($raw) ?></time>
+                        </td>
                         <td>
                             <?php if ($userId !== null): ?>
                                 <code><?= $userId ?></code>
@@ -120,3 +133,30 @@ layout('layouts/app');
         </table>
     </div>
 </div>
+
+<script>
+    // Convert every <time class="js-local-time" datetime="..."> element
+    // to the viewer's local timezone. Server stores UTC (fine for
+    // multi-driver correlation), viewer wants local (real humans
+    // don't reason in Zulu). If JS is off, the UTC value stays
+    // visible and the title attribute always shows UTC as ground truth.
+    (function () {
+        var els = document.querySelectorAll('time.js-local-time');
+        if (!els.length) return;
+        var fmt;
+        try {
+            fmt = new Intl.DateTimeFormat(undefined, {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit',  minute: '2-digit', second: '2-digit',
+                hour12: false,
+            });
+        } catch (e) { return; }
+        els.forEach(function (el) {
+            var iso = el.getAttribute('datetime');
+            if (!iso) return;
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return;
+            el.textContent = fmt.format(d);
+        });
+    })();
+</script>
