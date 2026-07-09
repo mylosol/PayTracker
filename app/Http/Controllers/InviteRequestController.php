@@ -179,7 +179,14 @@ final class InviteRequestController extends Controller
         $safeName     = $enc($name);
         $safeEmail    = $enc($email);
         $safeTerminal = $enc($terminal);
-        $safeUrl      = $enc('https://preview.paytracker.xyz' . $request->basePath() . '/admin/invites/new');
+        // Deep-link the "Mint an invite code" CTA straight to the
+        // /admin/invites/new form with the requester's email prefilled.
+        // Admin still sees the full form; only the email box is populated.
+        $mintUrl      = 'https://preview.paytracker.xyz'
+                      . $request->basePath()
+                      . '/admin/invites/new?invitee_email='
+                      . rawurlencode($email);
+        $safeUrl      = $enc($mintUrl);
         $referralBlock = $referral === ''
             ? '<p style="color:#64748b;font-style:italic;">(No referral note provided.)</p>'
             : '<p><strong>Referral / notes:</strong><br>' . nl2br($enc($referral)) . '</p>';
