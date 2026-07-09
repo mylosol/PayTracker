@@ -109,12 +109,22 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
             <a href="<?= e($base) ?>/login" class="btn-primary">Sign in</a>
             <a href="<?= e($base) ?>/register" class="btn-secondary">Have an invite code?</a>
         </div>
-        <div class="mt-5 rounded-lg px-4 py-3 bg-sky-50 border border-sky-200 text-sm text-slate-700 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-100">
-            <strong>Already had an account on the old PayTracker?</strong>
-            It carried over — sign in with the same login you used before.
-            If your password doesn't work, click
-            <a href="<?= e($base) ?>/password-reset" class="font-semibold underline">Forgot password?</a>
-            on the sign-in page and we'll email you a reset link.
+        <div class="mt-5 rounded-lg px-4 py-3 bg-sky-50 border border-sky-200 text-sm text-slate-700 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-100 space-y-2">
+            <p class="m-0">
+                <strong>Already had an account on the old PayTracker?</strong>
+                It carried over — sign in with the same login you used before.
+                If your password doesn't work, click
+                <a href="<?= e($base) ?>/password-reset" class="font-semibold underline">Forgot password?</a>
+                on the sign-in page and we'll email you a reset link.
+            </p>
+            <p class="m-0">
+                <strong>Used the old site without an account?</strong>
+                PayTracker is invite-only, but drivers with no prior
+                account can
+                <a href="<?= e($base) ?>/request-invite" class="font-semibold underline">request an invite</a>
+                — tell us your name, email, and terminal and an admin
+                will send you a code.
+            </p>
         </div>
     </section>
 

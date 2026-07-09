@@ -37,4 +37,15 @@ return [
         'from'    => env('MAIL_FROM', 'PayTracker <noreply@paytracker.xyz>'),
         'timeout' => (int) env('RESEND_TIMEOUT', 10),
     ],
+
+    /*
+     * Admin-facing notifications. Single recipient for the "please
+     * invite me" form (InviteRequestController). Kept as a plain env
+     * so rotation is a one-file change with no deploy — and so it
+     * isn't hardcoded in a public-visible view where a scraper might
+     * grep it out.
+     */
+    'admin_notifications' => [
+        'to' => env('ADMIN_NOTIFY_TO', 'admin@paytracker.xyz'),
+    ],
 ];

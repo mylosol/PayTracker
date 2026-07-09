@@ -6,6 +6,7 @@ use PayTracker\Http\Controllers\DashboardController;
 use PayTracker\Http\Controllers\DistancesController;
 use PayTracker\Http\Controllers\HealthController;
 use PayTracker\Http\Controllers\HomeController;
+use PayTracker\Http\Controllers\InviteRequestController;
 use PayTracker\Http\Controllers\LoadEntryController;
 use PayTracker\Http\Controllers\LoadsController;
 use PayTracker\Http\Controllers\LocationController;
@@ -60,6 +61,12 @@ return static function (Router $router): void {
     // --- Invite-only registration (public; gated by invite code) -------
     $router->get('/register',  [RegistrationController::class, 'show']);
     $router->post('/register', [RegistrationController::class, 'submit']);
+
+    // --- Invite request (public; drivers without a code ask for one) --
+    // Emails admin@ and audits the request. Rendered as a link from the
+    // logged-out home page's "already had an account" info card.
+    $router->get('/request-invite',  [InviteRequestController::class, 'show']);
+    $router->post('/request-invite', [InviteRequestController::class, 'submit']);
 
     // --- Driver dashboard (signed-in) ---------------------------------
     // "My pay" page: the signed-in driver's loads for a date window
