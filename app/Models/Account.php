@@ -393,12 +393,33 @@ final class Account extends Model
      *         total              = COUNT(*) on the table (unfiltered).
      *         totalAfterFilters  = matching rows after search/role/spam filters.
      */
+    /**
+     * Whitelist of sortable column keys the admin table exposes →
+     * ORDER BY fragment. Keys are what the URL / view use; values are
+     * the SQL. Keeping the mapping here means the controller/view can
+     * pass keys freely without any risk of injection.
+     */
+    public const ADMIN_SORT_COLUMNS = [
+        'id'         => 'id',
+        'user'       => 'user',
+        'role'       => 'role',
+        // Nulls-last for both directions — never-signed-in accounts
+        // shouldn't crowd the top when sorting either way.
+        'last_login' => '(last_login_at IS NULL), last_login_at',
+        // Status is a derived priority: banned (2) > locked (1) > active (0).
+        'status'     => "(CASE WHEN banned_at IS NOT NULL THEN 2
+                              WHEN locked_until IS NOT NULL AND locked_until > UTC_TIMESTAMP() THEN 1
+                              ELSE 0 END)",
+    ];
+
     public function pageForAdmin(
         int $limit = 50,
         int $offset = 0,
         string $search = '',
         ?string $roleFilter = null,
         bool $includeSpam = false,
+        string $sort = 'last_login',
+        string $dir = 'desc',
     ): array {
         $limit  = max(1, min(200, $limit));
         $offset = max(0, $offset);
@@ -422,6 +443,15 @@ final class Account extends Model
         }
         $whereSql = $where === [] ? '' : ' WHERE ' . implode(' AND ', $where);
 
+        // Whitelist sort + direction. Anything unrecognized falls back
+        // to the historical default (most-recent login first) so a
+        // bookmarked URL with a stale key can never break the page.
+        $sortSql = self::ADMIN_SORT_COLUMNS[$sort] ?? self::ADMIN_SORT_COLUMNS['last_login'];
+        $dirSql  = strtolower($dir) === 'asc' ? 'ASC' : 'DESC';
+        // Always tiebreak on id so pagination is stable when the sort
+        // key isn't unique (e.g. many rows share the same role).
+        $orderBy = ' ORDER BY ' . $sortSql . ' ' . $dirSql . ', id DESC';
+
         $total = (int) $this->prepared(
             'SELECT COUNT(*) FROM ' . self::ident(self::$table)
         )->fetchColumn();
@@ -435,10 +465,8 @@ final class Account extends Model
                            last_login_at, banned_at, locked_until
                       FROM ' . self::ident(self::$table)
                   . $whereSql
-                  . ' ORDER BY (last_login_at IS NULL) ASC,
-                              last_login_at DESC,
-                              id DESC
-                     LIMIT ' . $limit . ' OFFSET ' . $offset;
+                  . $orderBy
+                  . ' LIMIT ' . $limit . ' OFFSET ' . $offset;
         $rows = $this->prepared($rowsSql, $params)->fetchAll();
 
         return [

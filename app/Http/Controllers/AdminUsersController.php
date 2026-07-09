@@ -82,7 +82,21 @@ final class AdminUsersController extends Controller
         $page         = ctype_digit($pageRaw) && (int) $pageRaw > 0 ? (int) $pageRaw : 1;
         $offset       = ($page - 1) * $perPage;
 
-        $page_data = $this->accounts->pageForAdmin($perPage, $offset, $search, $roleFilter, $includeSpam);
+        // --- Sort (whitelisted; unknown keys fall back to the default) --
+        $sortRaw = (string) $request->input('sort', 'last_login');
+        $sort    = array_key_exists($sortRaw, Account::ADMIN_SORT_COLUMNS)
+            ? $sortRaw
+            : 'last_login';
+        $dirRaw  = strtolower((string) $request->input('dir', ''));
+        // Default direction depends on the column: text columns default
+        // asc, everything else desc (most-recent-first for last_login,
+        // banned-first for status).
+        $defaultDir = in_array($sort, ['user', 'role', 'id'], true) ? 'asc' : 'desc';
+        $dir     = in_array($dirRaw, ['asc', 'desc'], true) ? $dirRaw : $defaultDir;
+
+        $page_data = $this->accounts->pageForAdmin(
+            $perPage, $offset, $search, $roleFilter, $includeSpam, $sort, $dir
+        );
 
         return $this->view('admin/index', [
             'base'      => $request->basePath(),
@@ -97,6 +111,8 @@ final class AdminUsersController extends Controller
                 'include_spam'  => $includeSpam,
                 'per_page'      => $perPage,
                 'page'          => $page,
+                'sort'          => $sort,
+                'dir'           => $dir,
             ],
             'counts' => [
                 'total'        => $page_data['total'],
