@@ -6,7 +6,7 @@
  * @var list<array<string,mixed>>  $users
  * @var ?string                    $flash
  * @var bool                       $isSuperAdmin
- * @var array{search:string,role:string,include_spam:bool,per_page:int,page:int} $filters
+ * @var array{search:string,role:string,include_spam:bool,per_page:int,page:int,sort:string,dir:string} $filters
  * @var array{total:int,shown:int,matching:int,total_pages:int}                   $counts
  */
 use PayTracker\Models\Account;
@@ -20,12 +20,38 @@ $buildUrl = static function (array $overrides) use ($base, $filters): string {
         'include_spam' => $filters['include_spam'] ? '1' : '',
         'per_page'     => (int) $filters['per_page'],
         'page'         => (int) $filters['page'],
+        'sort'         => (string) $filters['sort'],
+        'dir'          => (string) $filters['dir'],
     ];
     foreach ($overrides as $k => $v) {
         $params[$k] = is_bool($v) ? ($v ? '1' : '') : (string) $v;
     }
     $params = array_filter($params, static fn ($v) => $v !== '' && $v !== 0);
     return $base . '/admin' . ($params === [] ? '' : '?' . http_build_query($params));
+};
+
+// Header-anchor helper. Clicking the active column toggles direction;
+// clicking a new column starts at its natural default (text asc,
+// dates/status desc). Any URL param the user picks resets page → 1 so
+// the sort applies to the whole result set, not just the current page.
+$sortHeader = static function (string $label, string $key) use ($buildUrl, $filters): string {
+    $activeSort = (string) $filters['sort'];
+    $activeDir  = (string) $filters['dir'];
+    $textCol    = in_array($key, ['user', 'role', 'id'], true);
+    $defaultDir = $textCol ? 'asc' : 'desc';
+    $nextDir    = $activeSort === $key
+        ? ($activeDir === 'asc' ? 'desc' : 'asc')
+        : $defaultDir;
+    $arrow = '';
+    if ($activeSort === $key) {
+        $arrow = $activeDir === 'asc' ? ' ▲' : ' ▼';
+    }
+    $url = $buildUrl(['sort' => $key, 'dir' => $nextDir, 'page' => 1]);
+    return '<a href="' . htmlspecialchars($url, ENT_QUOTES) . '" '
+         . 'class="text-inherit no-underline hover:underline whitespace-nowrap">'
+         . htmlspecialchars($label, ENT_QUOTES)
+         . '<span class="text-brand-primary" aria-hidden="true">' . $arrow . '</span>'
+         . '</a>';
 };
 
 $fmt = static function ($value): string {
@@ -84,6 +110,8 @@ $fmt = static function ($value): string {
 
     <form method="get" action="<?= e($base) ?>/admin"
           class="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-end gap-3 mt-4">
+        <input type="hidden" name="sort" value="<?= e((string) $filters['sort']) ?>">
+        <input type="hidden" name="dir"  value="<?= e((string) $filters['dir']) ?>">
         <div class="lg:flex-1 lg:max-w-xs">
             <label for="users-search" class="field-label">Search (user or email)</label>
             <input id="users-search" type="text" name="search" value="<?= e($filters['search']) ?>" maxlength="120"
@@ -125,11 +153,11 @@ $fmt = static function ($value): string {
         <table class="data-table stack-on-mobile">
             <thead>
                 <tr>
-                    <th class="hidden 2xl:table-cell">ID</th>
-                    <th>User</th>
-                    <th>Role</th>
-                    <th class="hidden xl:table-cell">Last login</th>
-                    <th>Status</th>
+                    <th class="hidden 2xl:table-cell"><?= $sortHeader('ID', 'id') ?></th>
+                    <th><?= $sortHeader('User', 'user') ?></th>
+                    <th><?= $sortHeader('Role', 'role') ?></th>
+                    <th class="hidden xl:table-cell"><?= $sortHeader('Last login', 'last_login') ?></th>
+                    <th><?= $sortHeader('Status', 'status') ?></th>
                     <th>Actions</th>
                 </tr>
             </thead>
