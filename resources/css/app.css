@@ -417,6 +417,22 @@
         @apply px-1 py-0.5 rounded bg-slate-100 text-[0.95em];
     }
 
+    /* --- Form section dividers (grouped form variant) -------------- */
+    .form-section {
+        @apply px-5 py-4 sm:px-7 sm:py-5 border-t border-brand-line;
+    }
+    .form-section:first-child {
+        @apply border-t-0;
+    }
+    .form-section-title {
+        @apply text-[11px] font-bold uppercase tracking-[0.08em] text-slate-400 mb-3;
+    }
+
+    /* --- Logged-out landing hero ----------------------------------- */
+    .landing-hero {
+        @apply flex flex-col items-center justify-center min-h-[60vh] py-4;
+    }
+
     /* --- Legacy compatibility -------------------------------------- */
     /* Old views still reference these utility classnames; aliasing
        them here keeps unconverted Phase-2/3 views readable until they
@@ -595,4 +611,11 @@
 .dark .text-slate-700,
 .dark .text-slate-800 {
     @apply text-slate-200;
+}
+/* Form section separators. */
+.dark .form-section {
+    border-color: theme('colors.slate.700');
+}
+.dark .form-section-title {
+    @apply text-slate-500;
 }

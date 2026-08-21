@@ -99,22 +99,20 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
     <h2 class="m-0">This Week
         <span class="text-brand-muted text-sm font-normal">(<?= e($weekRangeLabel) ?>)</span>
     </h2>
-    <table class="mt-3">
-        <tbody>
-            <tr>
-                <td class="py-1.5 pr-6"><strong>Loads</strong></td>
-                <td class="py-1.5"><code><?= (int) $weekTotals['count'] ?></code></td>
-            </tr>
-            <tr>
-                <td class="py-1.5 pr-6"><strong>Net Pay</strong></td>
-                <td class="py-1.5"><code class="bg-emerald-100 text-emerald-800 font-semibold">$<?= e($weekNpTotalF) ?></code></td>
-            </tr>
-            <tr>
-                <td class="py-1.5 pr-6"><strong>Miles</strong></td>
-                <td class="py-1.5"><code><?= e($weekMilesF) ?></code></td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="flex divide-x divide-emerald-200 mt-5">
+        <div class="flex-1 pr-4 text-center">
+            <div class="text-3xl sm:text-4xl font-bold text-brand-ink" data-stat="loads"><?= (int) $weekTotals['count'] ?></div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Loads</div>
+        </div>
+        <div class="flex-1 px-4 text-center">
+            <div class="text-3xl sm:text-4xl font-bold text-emerald-600" data-stat="net-pay">$<?= e($weekNpTotalF) ?></div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Net Pay</div>
+        </div>
+        <div class="flex-1 pl-4 text-center">
+            <div class="text-2xl sm:text-3xl font-bold text-brand-ink" data-stat="miles"><?= e($weekMilesF) ?></div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Miles</div>
+        </div>
+    </div>
     <p id="week-unconfirmed-note" hidden
        class="mt-3 rounded-md bg-amber-50 text-amber-900 border-l-4 border-amber-400 px-3 py-2 text-sm">
         <strong>Heads up:</strong> these weekly totals include
@@ -131,22 +129,20 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
 
 <div class="card">
     <h2 class="m-0">Today <span class="text-brand-muted text-sm font-normal">(<?= e($date) ?>)</span></h2>
-    <table class="mt-3">
-        <tbody>
-            <tr>
-                <td class="py-1.5 pr-6"><strong>Loads</strong></td>
-                <td class="py-1.5"><code><?= (int) $totals['count'] ?></code></td>
-            </tr>
-            <tr>
-                <td class="py-1.5 pr-6"><strong>Net Pay</strong></td>
-                <td class="py-1.5"><code>$<?= e($npTotalF) ?></code></td>
-            </tr>
-            <tr>
-                <td class="py-1.5 pr-6"><strong>Miles</strong></td>
-                <td class="py-1.5"><code><?= e($milesTotalF) ?></code></td>
-            </tr>
-        </tbody>
-    </table>
+    <div class="flex divide-x divide-brand-line mt-5">
+        <div class="flex-1 pr-4 text-center">
+            <div class="text-3xl sm:text-4xl font-bold text-brand-ink" data-stat="loads"><?= (int) $totals['count'] ?></div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Loads</div>
+        </div>
+        <div class="flex-1 px-4 text-center">
+            <div class="text-3xl sm:text-4xl font-bold text-emerald-600" data-stat="net-pay">$<?= e($npTotalF) ?></div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Net Pay</div>
+        </div>
+        <div class="flex-1 pl-4 text-center">
+            <div class="text-2xl sm:text-3xl font-bold text-brand-ink" data-stat="miles"><?= e($milesTotalF) ?></div>
+            <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Miles</div>
+        </div>
+    </div>
 
     <?php if ($totals['count'] > 0 && (float) $totals['np_total'] === 0.0): ?>
         <div class="mt-4 rounded-md bg-amber-50 text-amber-900 border-l-4 border-amber-400 px-3 py-2">
@@ -560,34 +556,33 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             });
         });
 
-        // Bump the Today + Week totals — walks .card whose h2 starts
-        // with "Today" or "This Week" and adds to displayed totals.
+        // Bump the Today + Week totals — finds KPI stat cells by
+        // data-stat attribute inside cards whose h2 starts with the
+        // relevant label.
         document.querySelectorAll('.card').forEach(c => {
             const h2 = c.querySelector('h2');
             if (!h2) return;
             const txt = h2.textContent.trim();
             if (!txt.startsWith('Today') && !txt.startsWith('This Week')) return;
-            c.querySelectorAll('tbody tr').forEach(tr => {
-                const label = tr.querySelector('td strong');
-                const cell  = tr.querySelectorAll('td code')[0];
-                if (!label || !cell || cell.dataset.scratchpadBumped === '1') return;
-                const t = label.textContent.trim();
-                if (t === 'Loads') {
-                    cell.textContent = String((parseInt(cell.textContent, 10) || 0) + todays.length);
-                } else if (t === 'Net Pay') {
-                    const cur = parseFloat(cell.textContent.replace(/[^0-9.\-]/g, '')) || 0;
-                    cell.textContent = '$' + (cur + injectedNp).toFixed(2)
-                        .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-                    cell.style.background = '#fef3c7';
-                    cell.style.color      = '#92400e';
-                    cell.title            = 'Includes ' + todays.length + ' unconfirmed load(s)';
-                } else if (t === 'Miles') {
-                    const cur = parseInt(cell.textContent.replace(/[^0-9]/g, ''), 10) || 0;
-                    cell.textContent = (cur + injectedMiles).toLocaleString('en-US');
-                } else {
-                    return;
-                }
-                cell.dataset.scratchpadBumped = '1';
+            const bump = (name, fn) => {
+                const el = c.querySelector(`[data-stat="${name}"]`);
+                if (!el || el.dataset.scratchpadBumped === '1') return;
+                fn(el);
+                el.dataset.scratchpadBumped = '1';
+            };
+            bump('loads', el => {
+                el.textContent = String((parseInt(el.textContent, 10) || 0) + todays.length);
+            });
+            bump('net-pay', el => {
+                const cur = parseFloat(el.textContent.replace(/[^0-9.\-]/g, '')) || 0;
+                el.textContent = '$' + (cur + injectedNp).toFixed(2)
+                    .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+                el.style.color = '#92400e';
+                el.title       = 'Includes ' + todays.length + ' unconfirmed load(s)';
+            });
+            bump('miles', el => {
+                const cur = parseInt(el.textContent.replace(/[^0-9]/g, ''), 10) || 0;
+                el.textContent = (cur + injectedMiles).toLocaleString('en-US');
             });
         });
 
