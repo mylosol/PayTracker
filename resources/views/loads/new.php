@@ -77,7 +77,7 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
     </div>
 <?php endif; ?>
 
-<div class="bg-white border border-brand-line rounded-xl2 shadow-card mb-4 overflow-hidden">
+<div class="card !p-0 overflow-hidden">
     <form method="post" action="<?= e($formAction) ?>" novalidate autocomplete="off"
           data-base-path="<?= e($base) ?>"
           data-mode="<?= $isEdit ? 'edit' : 'create' ?>">
