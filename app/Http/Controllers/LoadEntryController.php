@@ -422,9 +422,10 @@ final class LoadEntryController extends Controller
         // doesn't mysteriously vanish without explanation.
         $endEmptyMiles = 0;
         if ($loadType === 0 && $endEmpty !== '') {
-            if ($endEmpty === $delivery) {
-                return $this->failBackEdit($request, $frtl, 'End Empty must differ from the delivery city.');
-            }
+            // End Empty === delivery is legitimate — the driver ended
+            // exactly where they delivered, i.e. 0 empty miles.
+            // CityDistance::lookupOrFetch short-circuits same-name pairs
+            // to 0, so we don't need a special-case here.
             $resolved = $this->distances->lookupOrFetch($delivery, $endEmpty);
             if ($resolved === null) {
                 return $this->failBackEdit(
@@ -820,9 +821,10 @@ final class LoadEntryController extends Controller
         $endEmptyMiles = 0;
         $endEmptyResolved = null;
         if ($loadType === 0 && $endEmpty !== '') {
-            if ($endEmpty === $delivery) {
-                return ['ok' => false, 'error' => 'End Empty must differ from the delivery city.'];
-            }
+            // End Empty === delivery is legitimate — the driver
+            // ended right where they delivered (0 empty miles).
+            // CityDistance::lookupOrFetch short-circuits same-name
+            // pairs to 0, so we don't need a special-case here.
             $resolved = $this->distances->lookupOrFetch($delivery, $endEmpty);
             if ($resolved === null) {
                 return ['ok' => false, 'error' => sprintf('Could not find an empty-leg mileage for %s → %s.', $delivery, $endEmpty)];
