@@ -84,56 +84,38 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
     </section>
 
 <?php else: ?>
-    <section class="card">
-        <h1 class="m-0">PayTracker
-            <span class="pill <?= $isProduction ? 'ok' : 'warn' ?> ml-2 align-middle text-base">
-                <?= e($env) ?>
-            </span>
-        </h1>
-        <p class="text-brand-muted text-lg mt-3">
-            Pay tracking for fleet drivers.
-            <?php if (! $isProduction): ?>
+<div class="landing-hero">
+
+    <div class="text-center mb-7">
+        <div class="w-14 h-14 bg-brand-surface rounded-[14px] flex items-center justify-center mx-auto mb-3
+                    shadow-[0_4px_16px_rgba(15,23,42,0.15)]">
+            <div class="w-8 h-8 bg-brand-primary rounded-lg"></div>
+        </div>
+        <div class="text-2xl font-extrabold tracking-tight text-brand-ink">PayTracker</div>
+        <div class="text-sm font-medium text-brand-muted mt-1.5">Pay tracking for fleet drivers</div>
+    </div>
+
+    <div class="w-full max-w-sm">
+        <div class="card">
+            <div class="font-bold text-[15px] text-brand-ink">Sign in to continue</div>
+            <div class="text-sm text-brand-muted mt-1 mb-5">Modern PayTracker requires a per-account login.</div>
+            <div class="flex flex-col gap-2.5">
+                <a href="<?= e($base) ?>/login" class="btn-primary w-full">Sign in</a>
+                <a href="<?= e($base) ?>/register" class="btn-secondary w-full">Have an invite code?</a>
+            </div>
+            <div class="mt-5 pt-4 border-t border-brand-line text-[11px] text-slate-400 leading-relaxed space-y-1.5">
+                <p class="m-0"><strong class="text-brand-muted">Old PayTracker?</strong> Same login as before.
+                    Use <a href="<?= e($base) ?>/password-reset" class="font-semibold">Forgot password</a> if needed.</p>
+                <p class="m-0"><strong class="text-brand-muted">No account?</strong>
+                    <a href="<?= e($base) ?>/request-invite" class="font-semibold text-brand-primary">Request an invite →</a></p>
+            </div>
+        </div>
+        <?php if (! $isProduction): ?>
+            <p class="text-center text-xs text-brand-muted mt-3">
                 You're on the <strong>isolated preview channel</strong> — production data is untouched.
-            <?php endif; ?>
-        </p>
-    </section>
-
-    <section class="card">
-        <h2 class="m-0">Sign in to continue</h2>
-        <p class="text-brand-muted mt-2">
-            Modern PayTracker requires a per-account login — the shared
-            password is retired. If you don't have an account yet, ask an
-            administrator for an invite code.
-        </p>
-        <div class="flex flex-col sm:flex-row gap-3 mt-5">
-            <a href="<?= e($base) ?>/login" class="btn-primary">Sign in</a>
-            <a href="<?= e($base) ?>/register" class="btn-secondary">Have an invite code?</a>
-        </div>
-        <div class="mt-5 rounded-lg px-4 py-3 bg-sky-50 border border-sky-200 text-sm text-slate-700 dark:bg-sky-900/30 dark:border-sky-700 dark:text-sky-100 space-y-2">
-            <p class="m-0">
-                <strong>Already had an account on the old PayTracker?</strong>
-                It carried over — sign in with the same login you used before.
-                If your password doesn't work, click
-                <a href="<?= e($base) ?>/password-reset" class="font-semibold underline">Forgot password?</a>
-                on the sign-in page and we'll email you a reset link.
             </p>
-            <p class="m-0">
-                <strong>Used the old site without an account?</strong>
-                PayTracker is invite-only, but drivers with no prior
-                account can
-                <a href="<?= e($base) ?>/request-invite" class="font-semibold underline">request an invite</a>
-                — tell us your name, email, and terminal and an admin
-                will send you a code.
-            </p>
-        </div>
-    </section>
+        <?php endif; ?>
+    </div>
 
-    <section class="card">
-        <h2 class="m-0">What is this?</h2>
-        <p class="text-brand-muted mt-2 mb-0">
-            A modern rewrite of the long-running PayTracker app — a tool that lets
-            drivers log their loads, see their pay add up in real time, and reconcile
-            against actual payroll. Same data, friendlier interface.
-        </p>
-    </section>
+</div>
 <?php endif; ?>
