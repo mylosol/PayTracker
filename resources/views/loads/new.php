@@ -77,104 +77,105 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
     </div>
 <?php endif; ?>
 
-<div class="card">
+<div class="bg-white border border-brand-line rounded-xl2 shadow-card mb-4 overflow-hidden">
     <form method="post" action="<?= e($formAction) ?>" novalidate autocomplete="off"
           data-base-path="<?= e($base) ?>"
-          data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
-          class="space-y-5">
+          data-mode="<?= $isEdit ? 'edit' : 'create' ?>">
         <input type="hidden" name="_csrf" value="<?= e($csrfToken) ?>">
         <input type="hidden" name="unsaved_id" id="unsaved_id" value="">
 
-        <div id="frtl-block">
-            <label for="frtl" class="field-label">FRTL #</label>
-            <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]*"
-                   value="<?= e((string) $old['frtl']) ?>"
-                   <?= $isEdit ? 'readonly' : 'required' ?>
-                   class="field max-w-[14rem] <?= $isEdit ? 'bg-slate-100 text-slate-500' : '' ?>">
-            <span class="field-hint">
-                <?php if ($isEdit): ?>
-                    The FRTL number is locked. To change it, delete this load and re-add.
-                <?php else: ?>
-                    From your dispatch paperwork. Required to save the load to your account.
-                <?php endif; ?>
-            </span>
+        <!-- Trip basics -->
+        <div class="form-section">
+            <div class="form-section-title">Trip basics</div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div id="frtl-block">
+                    <label for="frtl" class="field-label">FRTL #</label>
+                    <input id="frtl" name="frtl" type="text" inputmode="numeric" pattern="[0-9]*"
+                           value="<?= e((string) $old['frtl']) ?>"
+                           <?= $isEdit ? 'readonly' : 'required' ?>
+                           class="field <?= $isEdit ? 'bg-slate-100 text-slate-500' : '' ?>">
+                    <span class="field-hint">
+                        <?php if ($isEdit): ?>
+                            Locked. Delete &amp; re-add to change.
+                        <?php else: ?>
+                            From your dispatch paperwork.
+                        <?php endif; ?>
+                    </span>
+                </div>
+                <div>
+                    <label for="load_date" class="field-label">Load date</label>
+                    <input id="load_date" name="load_date" type="date" required
+                           value="<?= e($dateValue) ?>" max="<?= e($today) ?>"
+                           class="field">
+                    <span class="field-hint">Defaults to today.</span>
+                </div>
+            </div>
+
+            <div id="begin-empty-wrapper"
+                 class="rounded-lg bg-slate-50 border border-brand-line px-4 py-4 mb-4"
+                 style="<?= $beVisible ? '' : 'display:none;' ?>">
+                <label for="begin_empty_terminal" class="field-label">Begin empty from</label>
+                <select id="begin_empty_terminal"
+                        data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
+                        class="field-select max-w-md">
+                    <?php if ($isEdit): ?>
+                        <option value="keep" selected>— Keep current miles —</option>
+                    <?php else: ?>
+                        <option value="" selected>— I started at the terminal (0 miles) —</option>
+                    <?php endif; ?>
+                    <?php foreach ($beTerminals as $t): ?>
+                        <option value="<?= (int) $t['id'] ?>"><?= e($t['name']) ?></option>
+                    <?php endforeach; ?>
+                    <option value="other">Other / I'll type my own miles…</option>
+                </select>
+                <span class="field-hint">
+                    Pick the terminal you started empty from. We'll fill in
+                    the miles to your pickup automatically.
+                </span>
+                <p id="begin-empty-status" class="text-sm mt-2 mb-0" style="display:none;"></p>
+                <label for="begin_empty_miles" class="field-label mt-3">Begin empty miles</label>
+                <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
+                       value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
+                       class="field max-w-[8rem]">
+                <span class="field-hint">
+                    Auto-filled by the terminal pick above. Pick
+                    <em>Other</em> to type the miles yourself.
+                </span>
+            </div>
+
+            <div class="mb-4">
+                <label for="pickup_city" class="field-label">Pick-up terminal</label>
+                <select id="pickup_city" name="pickup_city" required class="field-select">
+                    <option value="" disabled <?= $old['pickup'] === '' ? 'selected' : '' ?>>Choose a terminal…</option>
+                    <?php foreach ($terminals as $t): ?>
+                        <option value="<?= e($t) ?>" <?= $old['pickup'] === $t ? 'selected' : '' ?>>
+                            <?= e($t) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="field-hint">
+                    Drivers pick up loads at one of the dispatch terminals.
+                </span>
+            </div>
+
+            <div>
+                <label for="delivery_city" class="field-label">Delivery city</label>
+                <input list="city-options" id="delivery_city" name="delivery_city" type="text" required
+                       value="<?= e((string) $old['delivery']) ?>" class="field">
+                <datalist id="city-options">
+                    <?php foreach ($cities as $c): ?>
+                        <option value="<?= e((string) $c['city']) ?>"></option>
+                    <?php endforeach; ?>
+                </datalist>
+            </div>
         </div>
 
-        <div>
-            <label for="load_date" class="field-label">Load date</label>
-            <input id="load_date" name="load_date" type="date" required
-                   value="<?= e($dateValue) ?>" max="<?= e($today) ?>"
-                   class="field max-w-xs">
-            <span class="field-hint">
-                Defaults to today. Set to the actual delivery date if you're entering
-                paperwork after the fact — the dashboard groups by this date,
-                not entry time.
-            </span>
-        </div>
+        <!-- Load type & flags -->
+        <div class="form-section">
+            <div class="form-section-title">Load type &amp; flags</div>
 
-        <div id="begin-empty-wrapper"
-             class="rounded-lg bg-slate-50 border border-brand-line px-4 py-4"
-             style="<?= $beVisible ? '' : 'display:none;' ?>">
-            <label for="begin_empty_terminal" class="field-label">Begin empty from</label>
-            <select id="begin_empty_terminal"
-                    data-mode="<?= $isEdit ? 'edit' : 'create' ?>"
-                    class="field-select max-w-md">
-                <?php if ($isEdit): ?>
-                    <option value="keep" selected>— Keep current miles —</option>
-                <?php else: ?>
-                    <option value="" selected>— I started at the terminal (0 miles) —</option>
-                <?php endif; ?>
-                <?php foreach ($beTerminals as $t): ?>
-                    <option value="<?= (int) $t['id'] ?>"><?= e($t['name']) ?></option>
-                <?php endforeach; ?>
-                <option value="other">Other / I'll type my own miles…</option>
-            </select>
-            <span class="field-hint">
-                Pick the terminal you started empty from. We'll fill in
-                the miles to your pickup automatically.
-            </span>
-            <p id="begin-empty-status" class="text-sm mt-2 mb-0" style="display:none;"></p>
-            <label for="begin_empty_miles" class="field-label mt-3">Begin empty miles</label>
-            <input id="begin_empty_miles" name="begin_empty_miles" type="number" min="0" max="9999" step="1"
-                   value="<?= e((string) ($old['begin_empty_miles'] ?? '0')) ?>"
-                   class="field max-w-[8rem]">
-            <span class="field-hint">
-                Auto-filled by the terminal pick above. Pick
-                <em>Other</em> to type the miles yourself.
-            </span>
-        </div>
-
-        <div>
-            <label for="pickup_city" class="field-label">Pick-up terminal</label>
-            <select id="pickup_city" name="pickup_city" required class="field-select">
-                <option value="" disabled <?= $old['pickup'] === '' ? 'selected' : '' ?>>Choose a terminal…</option>
-                <?php foreach ($terminals as $t): ?>
-                    <option value="<?= e($t) ?>" <?= $old['pickup'] === $t ? 'selected' : '' ?>>
-                        <?= e($t) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <span class="field-hint">
-                Drivers pick up loads at one of the dispatch terminals; the
-                full city list is for delivery only.
-            </span>
-        </div>
-
-        <div>
-            <label for="delivery_city" class="field-label">Delivery city</label>
-            <input list="city-options" id="delivery_city" name="delivery_city" type="text" required
-                   value="<?= e((string) $old['delivery']) ?>" class="field">
-        </div>
-
-        <datalist id="city-options">
-            <?php foreach ($cities as $c): ?>
-                <option value="<?= e((string) $c['city']) ?>"></option>
-            <?php endforeach; ?>
-        </datalist>
-
-        <fieldset class="border border-brand-line rounded-lg p-4">
-            <legend class="px-2 text-sm font-semibold text-brand-ink">Load type</legend>
-            <div class="flex flex-wrap gap-x-6 gap-y-2 mt-1">
+            <div class="flex flex-wrap gap-x-6 gap-y-2 mb-4">
                 <label class="inline-flex items-center gap-2 min-h-[44px]">
                     <input type="radio" name="load_type" value="0" class="field-radio"
                            <?= $old['load_type'] !== '1' ? 'checked' : '' ?>>
@@ -186,27 +187,24 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                     <span>Round-trip</span>
                 </label>
             </div>
-        </fieldset>
 
-        <div id="end-empty-wrapper" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
-            <label for="end_empty_city" class="field-label">End Empty terminal</label>
-            <select id="end_empty_city" name="end_empty_city" class="field-select">
-                <option value="" <?= ($old['end_empty'] ?? '') === '' ? 'selected' : '' ?>>— I didn't go anywhere empty —</option>
-                <?php foreach ($terminals as $t): ?>
-                    <option value="<?= e($t) ?>" <?= ($old['end_empty'] ?? '') === $t ? 'selected' : '' ?>>
-                        <?= e($t) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <span class="field-hint">
-                Pick the terminal you returned to after the delivery.
-                Empty leg = delivery → here. Leave blank if you didn't go anywhere empty.
-            </span>
-        </div>
+            <div id="end-empty-wrapper" class="mb-4" style="<?= $old['load_type'] === '1' ? 'display:none;' : '' ?>">
+                <label for="end_empty_city" class="field-label">End Empty terminal</label>
+                <select id="end_empty_city" name="end_empty_city" class="field-select">
+                    <option value="" <?= ($old['end_empty'] ?? '') === '' ? 'selected' : '' ?>>— I didn't go anywhere empty —</option>
+                    <?php foreach ($terminals as $t): ?>
+                        <option value="<?= e($t) ?>" <?= ($old['end_empty'] ?? '') === $t ? 'selected' : '' ?>>
+                            <?= e($t) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="field-hint">
+                    Pick the terminal you returned to after the delivery.
+                    Empty leg = delivery → here.
+                </span>
+            </div>
 
-        <fieldset class="border border-brand-line rounded-lg p-4">
-            <legend class="px-2 text-sm font-semibold text-brand-ink">Flags</legend>
-            <div class="flex flex-wrap gap-x-6 gap-y-2 mt-1">
+            <div class="flex flex-wrap gap-x-6 gap-y-2">
                 <label class="inline-flex items-center gap-2 min-h-[44px]">
                     <input type="checkbox" name="is_split" value="1" class="field-checkbox"
                            <?= $old['split'] === '1' ? 'checked' : '' ?>>
@@ -223,19 +221,20 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                     <span>Begin Empty</span>
                 </label>
             </div>
-        </fieldset>
+        </div>
 
-        <fieldset class="border border-brand-line rounded-lg p-4">
-            <legend class="px-2 text-sm font-semibold text-brand-muted">Adjustments <span class="font-normal">(0 if none)</span></legend>
+        <!-- Adjustments -->
+        <div class="form-section">
+            <div class="form-section-title">Adjustments <span class="font-normal normal-case tracking-normal">(0 if none)</span></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                    <label for="dem_minutes" class="field-label">Demurrage minutes</label>
+                    <label for="dem_minutes" class="field-label">Demurrage min</label>
                     <input id="dem_minutes" name="dem_minutes" type="number" min="0" max="1440" step="1"
                            value="<?= e((string) $old['dem']) ?>"
                            class="field">
                 </div>
                 <div>
-                    <label for="break_minutes" class="field-label">Breakdown minutes</label>
+                    <label for="break_minutes" class="field-label">Breakdown min</label>
                     <input id="break_minutes" name="break_minutes" type="number" min="0" max="1440" step="1"
                            value="<?= e((string) $old['break']) ?>"
                            class="field">
@@ -247,25 +246,25 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                            class="field">
                 </div>
                 <div>
-                    <label for="out_of_route_miles" class="field-label">Out-of-route miles</label>
+                    <label for="out_of_route_miles" class="field-label">OOR miles</label>
                     <input id="out_of_route_miles" name="out_of_route_miles" type="number" min="0" max="9999" step="1"
                            value="<?= e((string) ($old['out_of_route_miles'] ?? '0')) ?>"
                            class="field">
                 </div>
             </div>
-        </fieldset>
-
-        <div>
-            <label for="notes" class="field-label">Notes (optional)</label>
-            <textarea id="notes" name="notes" rows="2" maxlength="900"
-                      class="field"><?= e((string) ($old['notes'] ?? '')) ?></textarea>
         </div>
 
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
-            <button type="submit" class="btn-primary">
-                <?= $isEdit ? 'Save changes' : 'Add load' ?>
-            </button>
-            <a href="<?= e($base) ?>/dashboard" class="text-sm">Cancel</a>
+        <!-- Notes + submit -->
+        <div class="form-section">
+            <div class="form-section-title">Notes <span class="font-normal normal-case tracking-normal">(optional)</span></div>
+            <textarea id="notes" name="notes" rows="2" maxlength="900"
+                      class="field mb-4"><?= e((string) ($old['notes'] ?? '')) ?></textarea>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <button type="submit" class="btn-primary">
+                    <?= $isEdit ? 'Save changes' : 'Add load' ?>
+                </button>
+                <a href="<?= e($base) ?>/dashboard" class="text-sm">Cancel</a>
+            </div>
         </div>
     </form>
 </div>
