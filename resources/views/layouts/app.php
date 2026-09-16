@@ -20,6 +20,7 @@ $__account     = $__authService->currentAccount();
 $__role        = is_array($__account) ? (string) ($__account['role'] ?? '') : '';
 $__isAdmin     = in_array($__role, ['admin', 'super_admin'], true);
 $__isSuper     = $__role === 'super_admin';
+$__darkMode    = is_array($__account) && (int) ($__account['dark_mode'] ?? 0) === 1;
 
 // CSRF for the inline logout form in the nav.
 $__csrfForLogout = is_array($__account)
@@ -60,14 +61,14 @@ $__nav = [
     ['href' => $__appPath . '/dashboard',         'label' => 'Dashboard',  'visible' => is_array($__account)],
     ['href' => $__appPath . '/loads/new',         'label' => 'Add load',   'visible' => is_array($__account)],
     ['href' => $__appPath . '/reconcile',         'label' => 'Reconcile',  'visible' => is_array($__account)],
-    ['href' => $__appPath . '/locations',         'label' => 'Locations',  'visible' => is_array($__account)],
+    ['href' => $__appPath . '/locations',         'label' => 'Locations',  'visible' => $__isAdmin],
     ['href' => $__appPath . '/distances',         'label' => 'Distances',  'visible' => $__isAdmin],
     ['href' => $__appPath . '/pay-admin',         'label' => 'Pay admin',  'visible' => $__isAdmin],
     ['href' => $__appPath . '/admin',             'label' => 'Admin',      'visible' => $__isAdmin],
 ];
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="en"<?= $__darkMode ? ' class="dark"' : '' ?>>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -209,7 +210,7 @@ $__nav = [
         <?= $slot ?>
     </main>
 
-    <footer class="text-center text-xs text-brand-muted py-6 px-4 border-t border-brand-line bg-white">
+    <footer class="text-center text-xs text-brand-muted py-6 px-4 border-t border-brand-line bg-white dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700">
         PayTracker <code><?= e(\PayTracker\Support\Version::string()) ?></code>
         &middot; env <code><?= e((string) (config('app.env'))) ?></code>
         &middot; php <code><?= e(PHP_VERSION) ?></code>

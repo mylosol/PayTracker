@@ -9,6 +9,7 @@
  * @var string                  $hireDate         YYYY-MM-DD or empty
  * @var string                  $shift            'day' | 'night'
  * @var string                  $payWeekStartDay  'sun' | 'mon' | ... | 'sat'
+ * @var bool                    $darkMode
  * @var string|null             $flash
  */
 layout('layouts/app');
@@ -152,6 +153,15 @@ if ($hireDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $hireDate) === 1) {
                     Most US carriers use Sunday; pick whatever matches your payroll.
                 </span>
             </div>
+
+            <fieldset class="border border-brand-line rounded-lg p-4">
+                <legend class="px-2 text-sm font-semibold text-brand-muted">Appearance</legend>
+                <label class="inline-flex items-center gap-3 min-h-[44px]">
+                    <input type="checkbox" name="dark_mode" value="1" class="field-checkbox"
+                           <?= $darkMode ? 'checked' : '' ?>>
+                    <span><strong>Dark mode</strong> <span class="text-brand-muted">— easier on the eyes after sundown. Saved per account.</span></span>
+                </label>
+            </fieldset>
 
             <div class="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
                 <button type="submit" class="btn-primary">Save profile</button>

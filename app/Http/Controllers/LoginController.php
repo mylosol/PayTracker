@@ -94,6 +94,14 @@ final class LoginController extends Controller
         // modal once, and the dismiss endpoint clears it.
         $this->session->put('announcement_pending', true);
 
+        // "Keep me logged in" — extend the session cookie lifetime
+        // from the default 12h to the remember window (30 days).
+        // Otherwise the default lifetime already applied at start().
+        if ((string) $request->input('remember', '') === '1') {
+            $rememberMin = (int) config('session.remember_lifetime_min', 43200);
+            $this->session->extendCookie($rememberMin * 60);
+        }
+
         // PRG (Post-Redirect-Get) so a refresh on the dashboard doesn't
         // re-POST the login form.
         return $this->redirect($request->basePath() . '/');

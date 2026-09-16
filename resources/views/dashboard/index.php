@@ -65,11 +65,16 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             <h1 class="m-0">My pay — <?= e($date) ?>
                 <?= $isToday ? '<span class="pill ok align-middle ml-1 text-xs">today</span>' : '' ?>
             </h1>
+            <?php $__driverIsAdmin = in_array((string) ($driver['role'] ?? ''), ['admin', 'super_admin'], true); ?>
             <p class="text-brand-muted mt-2">
                 Signed in as <strong><?= e((string) ($driver['user'] ?? '')) ?></strong>
                 (driver id <?= (int) ($driver['id'] ?? 0) ?>).
-                Pay totals reflect the most recent
-                <a href="<?= e($base) ?>/pay-admin">pay-admin recompute</a>.
+                <?php if ($__driverIsAdmin): ?>
+                    Pay totals reflect the most recent
+                    <a href="<?= e($base) ?>/pay-admin">pay-admin recompute</a>.
+                <?php else: ?>
+                    Pay totals reflect the most recent pay-rate recompute.
+                <?php endif; ?>
             </p>
         </div>
         <span class="inline-flex items-center gap-2 bg-brand-surface text-white text-xs font-semibold uppercase tracking-wide px-3 py-2 rounded-md">

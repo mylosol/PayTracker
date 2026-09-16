@@ -230,7 +230,7 @@ final class AuthService
         }
         $stmt = $this->connection->pdo()->prepare(
             'SELECT id, user, email, payroll_email, role, last_login_at, locked_until, banned_at,
-                    hire_date, shift, pay_week_start_day
+                    hire_date, shift, pay_week_start_day, dark_mode
              FROM `account` WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);

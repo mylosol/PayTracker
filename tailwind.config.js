@@ -26,7 +26,11 @@ module.exports = {
         // via PHP string concatenation; preserve the full set.
         'pill', 'pill-ok', 'pill-warn', 'pill-err', 'pill-muted',
     ],
-    darkMode: 'media',
+    // Class-strategy dark mode. Opt-in per user (saved to
+    // account.dark_mode and re-applied by the layout via
+    // <html class="dark">). 'media' would auto-flip on system pref
+    // and fight the per-user toggle.
+    darkMode: 'class',
     theme: {
         extend: {
             colors: {
