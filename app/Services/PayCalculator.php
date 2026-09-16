@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace PayTracker\Services;
 
-use PayTracker\Models\PayRate;
+use PayTracker\Models\PayRateVersion;
 use PayTracker\Models\PayVariable;
 use PayTracker\Services\Pay\LoadInputs;
 use PayTracker\Services\Pay\RateLookup;
@@ -64,10 +64,10 @@ final class PayCalculator
     private VariableBag $vars;
 
     public function __construct(
-        PayRate $rateModel,
+        PayRateVersion $rateVersionModel,
         private readonly PayVariable $varModel,
     ) {
-        $this->rates = new RateLookup($rateModel);
+        $this->rates = new RateLookup($rateVersionModel);
         $this->vars  = new VariableBag($varModel->allByStage('current'));
     }
 
@@ -182,6 +182,14 @@ final class PayCalculator
         //     load_miles := out_of_route_miles
         // Otherwise unchanged. This lets a Panama→Panama "0-mile" loop with
         // a 10-mile detour bill at the 10-mile tier.
+        // Resolve the date the load occurred for rate-version lookup.
+        // Empty load_date falls back to "today" — matches the pre-
+        // versioning behaviour for the live load-entry path where
+        // the column doesn't bother to set it.
+        $loadDate = $load->load_date !== ''
+            ? $load->load_date
+            : date('Y-m-d');
+
         $effectiveMiles = $load->load_miles;
         if ($load->out_of_route_ind > 0
             && $load->out_of_route_miles > ($load->load_miles + 3)
@@ -200,7 +208,7 @@ final class PayCalculator
         if ($load->load_type === 1) {
             // Round-trip: base = rate-table lookup × (1 + raise). All
             // overlays scale off base alone.
-            $base = $this->rates->lookup('round_trip', $effectiveMiles);
+            $base = $this->rates->lookup('round_trip', $effectiveMiles, $loadDate);
             if ($base !== null) {
                 $base       = $base * (1 + $raise);
                 $basePay    = round($base, 2);
@@ -215,7 +223,7 @@ final class PayCalculator
             // a long deadhead lifts seniority/shift/weekend pay too.
             $oneWay = 0.0;
             if ($effectiveMiles > 0) {
-                $base = $this->rates->lookup('long_haul', $effectiveMiles);
+                $base = $this->rates->lookup('long_haul', $effectiveMiles, $loadDate);
                 if ($base !== null) {
                     $oneWay   = $base * (1 + $raise);
                     // $effectiveMiles is already > 0 from the outer guard;

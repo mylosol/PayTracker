@@ -77,9 +77,16 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                 </button>
             </form>
         <?php else: ?>
-            <form method="post" action="<?= e($base) ?>/pay-admin/draft/promote" class="m-0"
-                  onsubmit="return confirm('Promote draft to current? This replaces the live rates for <?= e($bucket['label']) ?>.');">
+            <form method="post" action="<?= e($base) ?>/pay-admin/draft/promote"
+                  class="m-0 flex flex-wrap items-end gap-2"
+                  onsubmit="return confirm('Promote draft to current and snapshot a new rate-version for <?= e($bucket['label']) ?>? Loads on or after the effective date will use the new rates; earlier loads keep the previous rate.');">
                 <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                <div>
+                    <label for="eff-<?= e($bucket['trip_type']) ?>" class="field-label text-xs">Effective from</label>
+                    <input id="eff-<?= e($bucket['trip_type']) ?>" type="date" name="effective_date"
+                           value="<?= e(date('Y-m-d')) ?>"
+                           class="field text-sm h-9 py-1 px-2 min-h-0 w-auto">
+                </div>
                 <button type="submit" class="btn-primary btn-sm">
                     Promote draft → current
                 </button>

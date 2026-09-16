@@ -23,6 +23,14 @@ final class LoadInputs
         public readonly string $variables_blob,
         public readonly int    $out_of_route_ind   = 0,
         public readonly int    $out_of_route_miles = 0,
+        /**
+         * YYYY-MM-DD — drives rate-version resolution. The PayCalculator
+         * looks this up against pay_rate_versions so loads pre-dating a
+         * rate change still bill at the rate that was active when the
+         * work was performed. Default is today, matching the pre-
+         * versioning behaviour for live load entry.
+         */
+        public readonly string $load_date = '',
     ) {
     }
 }

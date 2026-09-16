@@ -108,6 +108,12 @@ final class PayRecomputer
                 variables_blob:     $useBlob,
                 out_of_route_ind:   (int) ($row['out_of_route_ind']   ?? 0),
                 out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
+                // Critical for rate-version resolution. Without this,
+                // a recompute would walk every load through the
+                // CURRENTLY-active version regardless of when the
+                // load happened — exactly the retroactive-raise bug
+                // we just refactored around.
+                load_date:          isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
             );
             $result = $this->calculator->computeFor($load);
             // Attach the blob that was actually used so recomputePay can
