@@ -149,13 +149,13 @@ $__nav = [
              aria-modal="true"
              aria-label="Mobile navigation"
              data-drawer>
-            <div class="absolute inset-0 bg-slate-900/60" data-drawer-backdrop></div>
-            <nav class="absolute top-0 right-0 h-full w-4/5 max-w-xs bg-white shadow-card-elev flex flex-col"
+            <div class="absolute inset-0 bg-slate-900/60 dark:bg-black/70" data-drawer-backdrop></div>
+            <nav class="absolute top-0 right-0 h-full w-4/5 max-w-xs bg-white dark:bg-slate-900 shadow-card-elev flex flex-col"
                  aria-label="Primary mobile">
-                <div class="flex items-center justify-between px-4 h-14 border-b border-brand-line">
-                    <span class="font-bold text-brand-ink">Menu</span>
+                <div class="flex items-center justify-between px-4 h-14 border-b border-brand-line dark:border-slate-700">
+                    <span class="font-bold text-brand-ink dark:text-slate-100">Menu</span>
                     <button type="button"
-                            class="inline-flex items-center justify-center w-11 h-11 rounded-md text-brand-ink hover:bg-slate-100"
+                            class="inline-flex items-center justify-center w-11 h-11 rounded-md text-brand-ink dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
                             aria-label="Close navigation"
                             data-drawer-close>
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -167,12 +167,12 @@ $__nav = [
                     <?php foreach ($__nav as $item): ?>
                         <?php if (! $item['visible']) continue; ?>
                         <a href="<?= e($item['href']) ?>"
-                           class="flex items-center min-h-[56px] px-5 text-base font-medium text-brand-ink hover:bg-slate-50 no-underline border-b border-brand-line/50">
+                           class="flex items-center min-h-[56px] px-5 text-base font-medium text-brand-ink dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 no-underline border-b border-brand-line/50 dark:border-slate-700/60">
                             <?= e($item['label']) ?>
                         </a>
                     <?php endforeach; ?>
                 </div>
-                <form method="post" action="<?= e($__appPath) ?>/logout" class="px-4 py-4 border-t border-brand-line">
+                <form method="post" action="<?= e($__appPath) ?>/logout" class="px-4 py-4 border-t border-brand-line dark:border-slate-700">
                     <input type="hidden" name="_csrf" value="<?= e($__csrfForLogout) ?>">
                     <button type="submit" class="btn-secondary w-full">Sign out</button>
                 </form>
