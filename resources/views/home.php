@@ -97,7 +97,7 @@ $isSuperAdmin  = $authenticated && Account::hasRole($account, Account::ROLE_SUPE
 
     <div class="w-full max-w-sm">
         <div class="card">
-            <div class="font-bold text-[15px] text-brand-ink">Sign in to continue</div>
+            <h2 class="font-bold text-[15px] text-brand-ink m-0">Sign in to continue</h2>
             <div class="text-sm text-brand-muted mt-1 mb-5">Modern PayTracker requires a per-account login.</div>
             <div class="flex flex-col gap-2.5">
                 <a href="<?= e($base) ?>/login" class="btn-primary w-full">Sign in</a>
