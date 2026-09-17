@@ -12,7 +12,10 @@ final class PwaController extends Controller
     public function serviceWorker(Request $request): Response
     {
         $js = <<<'JS'
-const CACHE = 'paytracker-v2';
+// Bumping the CACHE version deletes every prior generation on
+// activate, forcing all clients to re-fetch. Bump this any time
+// a fix has to reach users who already have the site cached.
+const CACHE = 'paytracker-v3';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -35,9 +38,36 @@ self.addEventListener('fetch', event => {
     const isStatic = /\.(css|woff2?|ttf|svg|png|jpg|jpeg|gif|ico|webp)(\?|$)/.test(url.pathname);
     if (!isStatic) return;
 
+    // The layout appends ?v=<mtime> to cache-bust every asset that
+    // ships from the docroot. Match WITH the query so a bumped
+    // version misses cache and re-fetches — the whole point of the
+    // cache-bust is defeated by ignoreSearch: true (previous bug:
+    // the drawer dark-mode fix landed on the server but every user
+    // kept seeing the stale CSS out of their SW cache).
+    //
+    // CSS specifically uses network-first so a fresh deploy always
+    // wins even when the mtime hasn't changed (e.g. rebuilt-but-
+    // identical asset), with cache as a fall-back for offline use.
+    // Immutable-ish assets (fonts, images) stay cache-first.
+    const cssMatch = /\.css(\?|$)/.test(url.pathname);
+    if (cssMatch) {
+        event.respondWith(
+            fetch(request)
+                .then(response => {
+                    if (response.ok) {
+                        const copy = response.clone();
+                        caches.open(CACHE).then(cache => cache.put(request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => caches.open(CACHE).then(cache => cache.match(request)))
+        );
+        return;
+    }
+
     event.respondWith(
         caches.open(CACHE).then(cache =>
-            cache.match(request, { ignoreSearch: true }).then(cached => {
+            cache.match(request).then(cached => {
                 if (cached) return cached;
                 return fetch(request).then(response => {
                     if (response.ok) cache.put(request, response.clone());
