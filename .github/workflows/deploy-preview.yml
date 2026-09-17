@@ -235,10 +235,15 @@ jobs:
           # Sanity check — bail out BEFORE swapping if the tar landed
           # incomplete. The earlier failure mode was bootstrap/app.php
           # missing post-extract, which is exactly what we want to
-          # detect here.
+          # detect here. deploy/preview.htaccess is checked because the
+          # NEXT workflow step reads from it and errors were showing up
+          # there instead of surfacing at the true point of failure.
           $SSH "$REMOTE" "set -euo pipefail; \
-            for f in bootstrap/app.php public/index.php scripts/migrate.php; do \
-              test -f '$STAGING/'\$f || { echo \"missing in staging: \$f\"; exit 1; }; \
+            for f in bootstrap/app.php public/index.php scripts/migrate.php deploy/preview.htaccess; do \
+              test -f '$STAGING/'\$f || { echo \"missing in staging: \$f\"; \
+                echo '--- staging root listing ---'; ls -la '$STAGING' | head -40; \
+                echo '--- staging/deploy listing ---'; ls -la '$STAGING/deploy' 2>&1 | head -20; \
+                exit 1; }; \
             done"
 
           # Carry .htaccess + .env across so the swap doesn't lose
