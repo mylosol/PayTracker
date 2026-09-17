@@ -37,6 +37,7 @@ declare(strict_types=1);
  *   php scripts/qa-cleanup.php --apply --unlock             # only lockouts
  *   php scripts/qa-cleanup.php --apply --pattern='Test City%'  # custom prefix
  *   php scripts/qa-cleanup.php --apply --terminals          # only Begin Empty Locations
+ *   php scripts/qa-cleanup.php --apply --accounts           # only qatest_* users
  *   php scripts/qa-cleanup.php --apply --confirm-production
  */
 
@@ -58,6 +59,7 @@ $onlyLoads         = in_array('--loads', $flags, true);
 $onlyAnnounce      = in_array('--announcements', $flags, true);
 $onlyInvites       = in_array('--invites', $flags, true);
 $onlyTerminals     = in_array('--terminals', $flags, true);
+$onlyAccounts      = in_array('--accounts', $flags, true);
 $confirmProduction = in_array('--confirm-production', $flags, true);
 
 $customPattern = null;
@@ -84,13 +86,14 @@ $pattern = $customPattern ?? 'Qa Test %';
 
 // If no specific category flag is passed, do all three. Mirrors the common
 // "I just finished a QA pass, please tidy up" intent.
-$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce || $onlyInvites || $onlyTerminals;
+$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce || $onlyInvites || $onlyTerminals || $onlyAccounts;
 $doCities    = $onlyCities    || ! $anySpecific;
 $doUnlock    = $onlyUnlock    || ! $anySpecific;
 $doLoads     = $onlyLoads     || ! $anySpecific;
 $doAnnounce  = $onlyAnnounce  || ! $anySpecific;
 $doInvites   = $onlyInvites   || ! $anySpecific;
 $doTerminals = $onlyTerminals || ! $anySpecific;
+$doAccounts  = $onlyAccounts  || ! $anySpecific;
 
 if (config('app.env') === 'production' && $apply && ! $confirmProduction) {
     fwrite(STDERR, "Refusing to run against APP_ENV=production without --confirm-production.\n");
@@ -373,6 +376,42 @@ try {
                     $del->execute([$termPattern]);
                     echo "    → deleted.\n";
                 }
+            }
+        }
+    }
+
+    // --- 7. QA-test accounts ----------------------------------------
+    // The /register end-to-end spec creates accounts with a
+    // `qatest_` username prefix. Every deploy runs this spec once,
+    // so without a sweep we'd accumulate one fresh account per
+    // deploy. The pattern is fixed (spec-owned, not user input) so
+    // we don't accept --pattern here.
+    if ($doAccounts) {
+        $acctPattern = 'qatest_%';
+        $find = $pdo->prepare(
+            'SELECT id, user, email
+               FROM `account`
+              WHERE user LIKE ?'
+        );
+        $find->execute([$acctPattern]);
+        $rows = $find->fetchAll();
+
+        if ($rows === []) {
+            echo "  accounts: no rows match user LIKE '{$acctPattern}'.\n";
+        } else {
+            echo "  accounts: " . count($rows) . " row(s) match user LIKE '{$acctPattern}':\n";
+            foreach ($rows as $r) {
+                printf(
+                    "    - id=%d user=%s email=%s\n",
+                    (int) $r['id'],
+                    (string) $r['user'],
+                    (string) ($r['email'] ?? '—'),
+                );
+            }
+            if ($apply) {
+                $del = $pdo->prepare('DELETE FROM `account` WHERE user LIKE ?');
+                $del->execute([$acctPattern]);
+                echo "    → deleted.\n";
             }
         }
     }
