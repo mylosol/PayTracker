@@ -293,32 +293,38 @@ try {
     }
 
     // --- 5. QA-test invite codes ------------------------------------
-    // Section 20 of the QA plan creates throw-away codes whose
-    // invitee_email is typically a tester's own address. We sweep
-    // by created_by = QA_TEST_USER when configured; otherwise we
-    // sweep every UNCONSUMED code (consumed ones are real users
-    // we mustn't tamper with).
+    // WAS: swept every unconsumed code. That was catastrophically
+    // wrong — "unconsumed" is exactly the state of a legitimate
+    // pending invite waiting for a real invitee to click the link.
+    // A real user got hit twice by this: admin minted → deploy
+    // fired between mint and click → user saw "invite_not_live".
+    //
+    // NEW: only sweep codes whose invitee_email matches the
+    // `%@example.test` test-domain pattern. Real invites are sent
+    // to real addresses; the /register spec mints with a blank
+    // invitee_email and consumes the code in the same test (with
+    // auto_delete=1 the row disappears on use), so we do NOT
+    // sweep blank-email codes either — a mid-test abort would
+    // leave one behind but it's harmless.
     if ($doInvites) {
         $exists = (bool) $pdo->query("SHOW TABLES LIKE 'invite_codes'")->fetchColumn();
         if (! $exists) {
             echo "  invites: table not present, skipping.\n";
         } else {
-            // The only safe blanket sweep is "unconsumed AND no
-            // used_by_id". Real user registrations (branch 2) set
-            // used_at + used_by_id; QA-created codes that were
-            // never redeemed don't.
+            $inviteEmailPattern = '%@example.test';
             $find = $pdo->prepare(
                 "SELECT id, code, invitee_email, created_at
                    FROM `invite_codes`
-                  WHERE used_at IS NULL"
+                  WHERE used_at IS NULL
+                    AND invitee_email LIKE ?"
             );
-            $find->execute();
+            $find->execute([$inviteEmailPattern]);
             $rows = $find->fetchAll();
 
             if ($rows === []) {
-                echo "  invites: no unconsumed codes on file.\n";
+                echo "  invites: no unconsumed codes match invitee_email LIKE '{$inviteEmailPattern}'.\n";
             } else {
-                echo "  invites: " . count($rows) . " unconsumed code(s):\n";
+                echo "  invites: " . count($rows) . " unconsumed test code(s) match invitee_email LIKE '{$inviteEmailPattern}':\n";
                 foreach ($rows as $r) {
                     printf(
                         "    - id=%d code=%s invitee_email=%s created=%s\n",
@@ -329,8 +335,12 @@ try {
                     );
                 }
                 if ($apply) {
-                    $del = $pdo->prepare('DELETE FROM `invite_codes` WHERE used_at IS NULL');
-                    $del->execute();
+                    $del = $pdo->prepare(
+                        'DELETE FROM `invite_codes`
+                          WHERE used_at IS NULL
+                            AND invitee_email LIKE ?'
+                    );
+                    $del->execute([$inviteEmailPattern]);
                     echo "    → deleted.\n";
                 }
             }
