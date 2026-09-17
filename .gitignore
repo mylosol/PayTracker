@@ -35,6 +35,9 @@ public/assets/fonts/
 /blob-report/
 /playwright/.cache/
 
+# --- Brainstorming / superpowers session files ------------------------------
+.superpowers/
+
 # --- OS metadata ------------------------------------------------------------
 .DS_Store
 Thumbs.db
