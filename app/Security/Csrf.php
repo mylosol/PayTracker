@@ -9,8 +9,21 @@ namespace PayTracker\Security;
  *
  * Every POST/PUT/DELETE form must include the value of `token()` in a hidden
  * `_csrf` field; the controller (or a future middleware) calls `verify()` on
- * arrival. Tokens are bound to the session and rotated on consumption to
- * prevent replay.
+ * arrival. Tokens are bound to the session and stay valid for the session's
+ * lifetime — same model Laravel / Symfony / Rails use.
+ *
+ * We deliberately do NOT rotate on every successful verify. The token's job
+ * is to prove a submission came from a form THIS session rendered, so a
+ * hostile third-party page can't POST using the user's cookies. That
+ * protection works fine with a per-session token; rotating on every use
+ * mostly just breaks legitimate flows (back-button, multiple tabs, submit
+ * → validation error → resubmit) with a misleading "Your session expired"
+ * flash.
+ *
+ * Session-fixation defence — the concern that motivated single-use — is
+ * handled at the session-id layer via Session::regenerate(), called on
+ * every privilege boundary (login, role change, password change). That
+ * invalidates any pre-existing token bound to the old session id.
  */
 final class Csrf
 {
@@ -47,11 +60,10 @@ final class Csrf
             return false;
         }
         // `hash_equals` provides constant-time comparison — protects against
-        // timing-based discovery of the token.
-        $ok = hash_equals($expected, $submitted);
-        if ($ok) {
-            $this->session->forget('_csrf'); // single-use, rotate after success
-        }
-        return $ok;
+        // timing-based discovery of the token. NOT single-use: see the
+        // class docblock for the rationale (back-button / multi-tab
+        // ergonomics vs. token-replay theatre when the attacker already
+        // owns the session).
+        return hash_equals($expected, $submitted);
     }
 }
