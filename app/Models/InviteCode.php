@@ -274,10 +274,17 @@ final class InviteCode extends Model
             // Insert the new account inside the transaction so a
             // failure (unique-email collision, schema mishap)
             // rolls the invite UPDATE back too.
+            // emailValid is a legacy NOT-NULL date column with no
+            // default (from the pre-modern schema). We don't do
+            // email-link verification in the modern app — the admin's
+            // invite + the invitee's re-entry of the address is our
+            // trust boundary — so set it to today so the INSERT
+            // clears the constraint without introducing a fake
+            // verification workflow.
             $ins = $pdo->prepare(
                 'INSERT INTO `account`
-                    (user, email, password_hash, role, accountValid, agree, joinDate, paidDate)
-                 VALUES (?, ?, ?, ?, 1, 1, CURDATE(), CURDATE())'
+                    (user, email, password_hash, role, accountValid, agree, emailValid, joinDate, paidDate)
+                 VALUES (?, ?, ?, ?, 1, 1, CURDATE(), CURDATE(), CURDATE())'
             );
             $ins->execute([
                 $accountFields['user'],

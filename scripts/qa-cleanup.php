@@ -37,6 +37,7 @@ declare(strict_types=1);
  *   php scripts/qa-cleanup.php --apply --unlock             # only lockouts
  *   php scripts/qa-cleanup.php --apply --pattern='Test City%'  # custom prefix
  *   php scripts/qa-cleanup.php --apply --terminals          # only Begin Empty Locations
+ *   php scripts/qa-cleanup.php --apply --accounts           # only qatest_* users
  *   php scripts/qa-cleanup.php --apply --confirm-production
  */
 
@@ -58,6 +59,7 @@ $onlyLoads         = in_array('--loads', $flags, true);
 $onlyAnnounce      = in_array('--announcements', $flags, true);
 $onlyInvites       = in_array('--invites', $flags, true);
 $onlyTerminals     = in_array('--terminals', $flags, true);
+$onlyAccounts      = in_array('--accounts', $flags, true);
 $confirmProduction = in_array('--confirm-production', $flags, true);
 
 $customPattern = null;
@@ -84,13 +86,14 @@ $pattern = $customPattern ?? 'Qa Test %';
 
 // If no specific category flag is passed, do all three. Mirrors the common
 // "I just finished a QA pass, please tidy up" intent.
-$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce || $onlyInvites || $onlyTerminals;
+$anySpecific = $onlyCities || $onlyUnlock || $onlyLoads || $onlyAnnounce || $onlyInvites || $onlyTerminals || $onlyAccounts;
 $doCities    = $onlyCities    || ! $anySpecific;
 $doUnlock    = $onlyUnlock    || ! $anySpecific;
 $doLoads     = $onlyLoads     || ! $anySpecific;
 $doAnnounce  = $onlyAnnounce  || ! $anySpecific;
 $doInvites   = $onlyInvites   || ! $anySpecific;
 $doTerminals = $onlyTerminals || ! $anySpecific;
+$doAccounts  = $onlyAccounts  || ! $anySpecific;
 
 if (config('app.env') === 'production' && $apply && ! $confirmProduction) {
     fwrite(STDERR, "Refusing to run against APP_ENV=production without --confirm-production.\n");
@@ -290,32 +293,38 @@ try {
     }
 
     // --- 5. QA-test invite codes ------------------------------------
-    // Section 20 of the QA plan creates throw-away codes whose
-    // invitee_email is typically a tester's own address. We sweep
-    // by created_by = QA_TEST_USER when configured; otherwise we
-    // sweep every UNCONSUMED code (consumed ones are real users
-    // we mustn't tamper with).
+    // WAS: swept every unconsumed code. That was catastrophically
+    // wrong — "unconsumed" is exactly the state of a legitimate
+    // pending invite waiting for a real invitee to click the link.
+    // A real user got hit twice by this: admin minted → deploy
+    // fired between mint and click → user saw "invite_not_live".
+    //
+    // NEW: only sweep codes whose invitee_email matches the
+    // `%@example.test` test-domain pattern. Real invites are sent
+    // to real addresses; the /register spec mints with a blank
+    // invitee_email and consumes the code in the same test (with
+    // auto_delete=1 the row disappears on use), so we do NOT
+    // sweep blank-email codes either — a mid-test abort would
+    // leave one behind but it's harmless.
     if ($doInvites) {
         $exists = (bool) $pdo->query("SHOW TABLES LIKE 'invite_codes'")->fetchColumn();
         if (! $exists) {
             echo "  invites: table not present, skipping.\n";
         } else {
-            // The only safe blanket sweep is "unconsumed AND no
-            // used_by_id". Real user registrations (branch 2) set
-            // used_at + used_by_id; QA-created codes that were
-            // never redeemed don't.
+            $inviteEmailPattern = '%@example.test';
             $find = $pdo->prepare(
                 "SELECT id, code, invitee_email, created_at
                    FROM `invite_codes`
-                  WHERE used_at IS NULL"
+                  WHERE used_at IS NULL
+                    AND invitee_email LIKE ?"
             );
-            $find->execute();
+            $find->execute([$inviteEmailPattern]);
             $rows = $find->fetchAll();
 
             if ($rows === []) {
-                echo "  invites: no unconsumed codes on file.\n";
+                echo "  invites: no unconsumed codes match invitee_email LIKE '{$inviteEmailPattern}'.\n";
             } else {
-                echo "  invites: " . count($rows) . " unconsumed code(s):\n";
+                echo "  invites: " . count($rows) . " unconsumed test code(s) match invitee_email LIKE '{$inviteEmailPattern}':\n";
                 foreach ($rows as $r) {
                     printf(
                         "    - id=%d code=%s invitee_email=%s created=%s\n",
@@ -326,8 +335,12 @@ try {
                     );
                 }
                 if ($apply) {
-                    $del = $pdo->prepare('DELETE FROM `invite_codes` WHERE used_at IS NULL');
-                    $del->execute();
+                    $del = $pdo->prepare(
+                        'DELETE FROM `invite_codes`
+                          WHERE used_at IS NULL
+                            AND invitee_email LIKE ?'
+                    );
+                    $del->execute([$inviteEmailPattern]);
                     echo "    → deleted.\n";
                 }
             }
@@ -373,6 +386,42 @@ try {
                     $del->execute([$termPattern]);
                     echo "    → deleted.\n";
                 }
+            }
+        }
+    }
+
+    // --- 7. QA-test accounts ----------------------------------------
+    // The /register end-to-end spec creates accounts with a
+    // `qatest_` username prefix. Every deploy runs this spec once,
+    // so without a sweep we'd accumulate one fresh account per
+    // deploy. The pattern is fixed (spec-owned, not user input) so
+    // we don't accept --pattern here.
+    if ($doAccounts) {
+        $acctPattern = 'qatest_%';
+        $find = $pdo->prepare(
+            'SELECT id, user, email
+               FROM `account`
+              WHERE user LIKE ?'
+        );
+        $find->execute([$acctPattern]);
+        $rows = $find->fetchAll();
+
+        if ($rows === []) {
+            echo "  accounts: no rows match user LIKE '{$acctPattern}'.\n";
+        } else {
+            echo "  accounts: " . count($rows) . " row(s) match user LIKE '{$acctPattern}':\n";
+            foreach ($rows as $r) {
+                printf(
+                    "    - id=%d user=%s email=%s\n",
+                    (int) $r['id'],
+                    (string) $r['user'],
+                    (string) ($r['email'] ?? '—'),
+                );
+            }
+            if ($apply) {
+                $del = $pdo->prepare('DELETE FROM `account` WHERE user LIKE ?');
+                $del->execute([$acctPattern]);
+                echo "    → deleted.\n";
             }
         }
     }
