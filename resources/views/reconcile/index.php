@@ -416,6 +416,16 @@ $renderRow = static function (array $row, ?array $reconRow) use (
     $rows = $week['rows'];
     $headerText = $i === 0 ? 'This week' : 'Week of ' . $week['label'];
     $countLabel = count($rows) === 1 ? '1 load' : count($rows) . ' loads';
+    $wkExpected = 0.0; $wkPaid = 0; $wkPending = 0; $wkIssues = 0;
+    foreach ($rows as $r) {
+        $wkExpected += (float) ($r['np'] ?? 0);
+        $wkFrtl = (int) ($r['frtl'] ?? 0);
+        $wkSt   = isset($reconByFrtl[$wkFrtl]['state']) ? (string) $reconByFrtl[$wkFrtl]['state'] : null;
+        if ($wkSt === 'paid')                              $wkPaid++;
+        elseif ($wkSt === 'short' || $wkSt === 'disputed') $wkIssues++;
+        else                                               $wkPending++;
+    }
+    $wkExpectedF = '$' . number_format($wkExpected, 2);
 ?>
 <div class="card">
 <?php if ($i === 0): ?>
@@ -433,6 +443,24 @@ $renderRow = static function (array $row, ?array $reconRow) use (
         <?php if ($rows === []): ?>
             <p class="text-brand-muted mt-3 mb-0">No loads for this week.</p>
         <?php else: ?>
+            <div class="flex divide-x divide-brand-line mt-5 mb-1">
+                <div class="flex-1 pr-4 text-center">
+                    <div class="text-2xl sm:text-3xl font-bold text-emerald-600"><?= e($wkExpectedF) ?></div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Expected Pay</div>
+                </div>
+                <div class="flex-1 px-4 text-center">
+                    <div class="text-2xl sm:text-3xl font-bold <?= $wkPaid > 0 ? 'text-emerald-600' : 'text-brand-muted' ?>"><?= $wkPaid ?></div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Paid</div>
+                </div>
+                <div class="flex-1 px-4 text-center">
+                    <div class="text-2xl sm:text-3xl font-bold text-brand-muted"><?= $wkPending ?></div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Pending</div>
+                </div>
+                <div class="flex-1 pl-4 text-center">
+                    <div class="text-2xl sm:text-3xl font-bold <?= $wkIssues > 0 ? 'text-rose-600' : 'text-brand-muted' ?>"><?= $wkIssues ?></div>
+                    <div class="text-xs font-semibold uppercase tracking-wide text-brand-muted mt-1.5">Issues</div>
+                </div>
+            </div>
             <div class="table-wrap mt-3">
                 <table class="data-table stack-on-mobile text-[14px]">
                     <thead>
