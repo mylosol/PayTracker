@@ -25,9 +25,22 @@ final class Session
         }
 
         $name     = (string) config('session.name', 'paytracker_session');
-        $lifetime = (int) config('session.lifetime_min', 120) * 60;
+        $lifetime = (int) config('session.lifetime_min', 129600) * 60;
         $secure   = (bool) config('session.secure_cookie', true);
         $samesite = (string) config('session.samesite', 'Lax');
+
+        // Match server-side session GC to the cookie lifetime.
+        // Otherwise PHP's default `session.gc_maxlifetime` (typically
+        // 1440s / 24 min on shared hosts) reaps the session file long
+        // before the cookie expires — the browser keeps sending the
+        // session id, but $_SESSION comes back empty on the server,
+        // and the CSRF token check fires "Your session expired" even
+        // though the cookie itself is still live. cPanel may pin
+        // gc_maxlifetime via php_admin_value which makes this
+        // ini_set silently a no-op; when that happens we fall back
+        // to relying on the cookie window still granting access
+        // through the login form.
+        @ini_set('session.gc_maxlifetime', (string) $lifetime);
 
         // Best-effort: ensure session.save_path exists. cPanel hosts
         // typically lock session.save_path via php_admin_value (so a

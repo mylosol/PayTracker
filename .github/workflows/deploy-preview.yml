@@ -314,7 +314,10 @@ jobs:
           DB_CHARSET=utf8mb4
 
           SESSION_NAME=paytracker_preview_session
-          SESSION_LIFETIME_MIN=120
+          # 90 days default, 180 with "Keep me logged in" — drivers
+          # shouldn't get bounced during a long weekend or vacation.
+          SESSION_LIFETIME_MIN=129600
+          SESSION_REMEMBER_LIFETIME_MIN=259200
           SESSION_SECURE_COOKIE=true
           SESSION_SAMESITE=Lax
 
