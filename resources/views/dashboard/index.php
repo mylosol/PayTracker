@@ -311,6 +311,14 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
+                                                <?php if ((float) ($bd['backhaul_pay'] ?? 0) !== 0.0): ?>
+                                                    <tr>
+                                                        <td class="py-1 px-3 text-slate-600">Backhaul</td>
+                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                            <?= e($money((float) $bd['backhaul_pay'])) ?>
+                                                        </td>
+                                                    </tr>
+                                                <?php endif; ?>
                                                 <?php if ((float) ($bd['dem_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
                                                         <td class="py-1 px-3 text-slate-600">Demurrage</td>
@@ -459,6 +467,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             if (Number(bd.seniority_pay) || 0) rows.push(row(`Seniority Pay <span class="text-purple-500">(${pct(bd.seniority_pct || 0)})</span>`, bd.seniority_pay));
             if (Number(bd.weekend_pay)   || 0) rows.push(row(`Weekend <span class="text-amber-500">(${pct(bd.weekend_pct || 0)})</span>`, bd.weekend_pay));
             if (Number(bd.split_pay)     || 0) rows.push(row('Split Pay',  bd.split_pay));
+            if (Number(bd.backhaul_pay)  || 0) rows.push(row('Backhaul',   bd.backhaul_pay));
             if (Number(bd.dem_pay)       || 0) rows.push(row('Demurrage',  bd.dem_pay));
             if (Number(bd.break_pay)     || 0) rows.push(row('Breakdown',  bd.break_pay));
             if (Number(bd.extra_pay)     || 0) rows.push(row('Extra Pay',  bd.extra_pay));

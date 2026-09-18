@@ -17,6 +17,11 @@ final class LoadInputs
         public readonly int    $begin_empty_miles,
         public readonly int    $is_split,
         public readonly int    $is_weekend,
+        /**
+         * Flat $40 backhaul differential when > 0. Adds to op/np as
+         * another "extra" alongside split, extra_pay, dem, break.
+         */
+        public readonly int    $is_backhaul,
         public readonly float  $extra_pay,
         public readonly int    $dem_minutes,
         public readonly int    $break_minutes,

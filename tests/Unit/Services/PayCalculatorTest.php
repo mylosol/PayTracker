@@ -83,6 +83,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          0,
             is_weekend:        0,
+            is_backhaul:       0,
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -111,6 +112,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          0,
             is_weekend:        1,
+            is_backhaul:       0,
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -138,6 +140,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          0,
             is_weekend:        0,
+            is_backhaul:       0,
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -164,6 +167,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          1,
             is_weekend:        0,
+            is_backhaul:       0,
             extra_pay:         10.0,
             dem_minutes:       30,  // 30 * 0.50 = 15.00
             break_minutes:     20,  // 20 * 0.40 = 8.00
@@ -191,6 +195,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 10,
             is_split:          0,
             is_weekend:        1,
+            is_backhaul:       0,
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -227,6 +232,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          0,
             is_weekend:        0,
+            is_backhaul:       0,
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -259,6 +265,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          0,
             is_weekend:        1,
+            is_backhaul:       0,
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -288,6 +295,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles:  0,
             is_split:           0,
             is_weekend:         0,
+            is_backhaul:        0,
             extra_pay:          0.0,
             dem_minutes:        0,
             break_minutes:      0,
@@ -319,6 +327,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles:  0,
             is_split:           0,
             is_weekend:         0,
+            is_backhaul:        0,
             extra_pay:          0.0,
             dem_minutes:        0,
             break_minutes:      0,
@@ -336,6 +345,40 @@ final class PayCalculatorTest extends TestCase
         $this->assertGreaterThan(0, $result['np']);
     }
 
+    public function test_backhaul_adds_flat_forty_to_np_and_op(): void
+    {
+        // Round-trip 100mi @ $50 base, no overlays, no other extras.
+        // Adding is_backhaul: 1 must lift np/op by exactly $40.
+        $calc = $this->makeCalculator();
+        $calc->setRateTiersForTest('round_trip', [
+            ['miles' => 100, 'rate' => 50.0],
+        ]);
+
+        $baseLoad = [
+            'load_type'         => 1,
+            'load_miles'        => 100,
+            'empty_miles'       => 0,
+            'begin_empty_miles' => 0,
+            'is_split'          => 0,
+            'is_weekend'        => 0,
+            'extra_pay'         => 0.0,
+            'dem_minutes'       => 0,
+            'break_minutes'     => 0,
+            'variables_blob'    => '6-day--0', // 0% raise, 0% overlays
+        ];
+
+        $off = new LoadInputs(...$baseLoad, is_backhaul: 0);
+        $on  = new LoadInputs(...$baseLoad, is_backhaul: 1);
+
+        $offResult = $calc->computeFor($off);
+        $onResult  = $calc->computeFor($on);
+
+        $this->assertEqualsWithDelta(40.0, $onResult['np'] - $offResult['np'], 0.005);
+        $this->assertEqualsWithDelta(40.0, $onResult['op'] - $offResult['op'], 0.005);
+        $this->assertEqualsWithDelta( 0.0, $offResult['backhaul_pay'], 0.005);
+        $this->assertEqualsWithDelta(40.0, $onResult['backhaul_pay'],  0.005);
+    }
+
     public function test_trainer_pay_is_flat_amount_plus_extras(): void
     {
         $calc = $this->makeCalculator();
@@ -347,6 +390,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          1,
             is_weekend:        0,
+            is_backhaul:       0,
             extra_pay:         5.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -374,6 +418,7 @@ final class PayCalculatorTest extends TestCase
             begin_empty_miles: 0,
             is_split:          0,
             is_weekend:        0,
+            is_backhaul:       0,
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
@@ -400,7 +445,8 @@ final class PayCalculatorTest extends TestCase
             empty_miles:       0,
             begin_empty_miles: 0,
             is_split:          0,
-            is_weekend:        1,  // weekend bumps np, not op
+            is_weekend:        1,
+            is_backhaul:       0,  // weekend bumps np, not op
             extra_pay:         0.0,
             dem_minutes:       0,
             break_minutes:     0,
