@@ -73,6 +73,66 @@ test.describe.serial('pay-rate admin (write path)', () => {
         ).toBeVisible();
     });
 
+    test('10c2 — "Preview impact" is scoped to the signed-in account', async ({ page }) => {
+        await signIn(page);
+
+        // Everything the viewer legitimately owns this pay week. The pay
+        // week start day is a per-account preference we can't read from
+        // here, so walk the last 8 days — whichever weekday the viewer's
+        // week starts on, it falls inside that span.
+        const ownFrtls = new Set<string>();
+        const now = new Date();
+        for (let back = 0; back < 8; back += 1) {
+            const day = new Date(now);
+            day.setDate(now.getDate() - back);
+            const iso = day.toISOString().slice(0, 10);
+            await page.goto(`dashboard?date=${iso}`);
+            const frtls = await page
+                .locator('#dashboard-loads-table tbody tr > td:nth-child(2) code')
+                .allTextContents();
+            frtls.forEach((t) => ownFrtls.add(t.trim()));
+        }
+
+        await page.goto('pay-admin');
+        await page
+            .locator('div.card', { hasText: ROUND_TRIP })
+            .getByRole('link', { name: /preview impact/i })
+            .click();
+        await expect(page).toHaveURL(/\/pay-admin\/preview\?trip_type=round_trip/);
+        await expect(page.getByRole('heading', { name: /preview draft/i })).toBeVisible();
+
+        // Regression: the first revision of this page rendered a Driver
+        // column (login handle + account id) for EVERY driver's loads in
+        // the window — a cross-driver PII leak from an admin+ page. The
+        // identity column and the `#<account id>` marker must not come
+        // back.
+        await expect(page.locator('th', { hasText: /^Driver$/ })).toHaveCount(0);
+
+        const perLoadCard = page.locator('div.card', { hasText: /Per-load diff/ });
+
+        if (await perLoadCard.count() === 0) {
+            // No rows for this viewer => the page must say so explicitly
+            // rather than falling back to the fleet's loads.
+            await expect(
+                page.getByText(/No round_trip loads on your dashboard for the week of/i),
+            ).toBeVisible();
+            return;
+        }
+
+        // The old page stamped each row with the driver's account id.
+        await expect(perLoadCard).not.toContainText(/#\d+\b/);
+
+        const shown = await perLoadCard.locator('tbody tr td code').allTextContents();
+        const foreign = shown
+            .map((t) => t.trim())
+            .filter((frtl) => frtl !== '' && !ownFrtls.has(frtl));
+
+        expect(
+            foreign,
+            `preview rendered FRTL(s) that are not on the signed-in account's dashboard: ${foreign.join(', ')}`,
+        ).toEqual([]);
+    });
+
     test('10d — edit a draft tier', async ({ page }) => {
         await signIn(page);
         await page.goto('pay-admin');

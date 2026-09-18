@@ -4,15 +4,17 @@
  * @var array<string,mixed>                    $actor
  * @var string                                 $trip_type
  * @var string                                 $trip_label
- * @var int                                    $days
- * @var string                                 $since
+ * @var string                                 $anchor
+ * @var string                                 $week_start
+ * @var string                                 $week_end
+ * @var string                                 $week_start_day
  * @var int                                    $row_count
  * @var float                                  $total_old
  * @var float                                  $total_new
  * @var float                                  $delta_total
  * @var float                                  $delta_pct
  * @var list<array{
- *   driver_user:string, driver_id:int, frtl:int, date:string,
+ *   frtl:int, date:string,
  *   pickup:string, delivery:string,
  *   old_np:float, new_np:float, delta:float
  * }>                                          $comparisons
@@ -35,9 +37,14 @@ $deltaClass = static fn (float $v): string => $v > 0
         <div>
             <h1 class="m-0">Preview draft — <?= e($trip_label) ?></h1>
             <p class="text-brand-muted mt-1 mb-0 text-sm">
-                Nothing has been saved. This is a dry-run of the current
-                <code><?= e($trip_type) ?></code> draft against every load of that type
-                since <code><?= e($since) ?></code> (<?= (int) $days ?> days).
+                Nothing has been saved. This dry-run reprices the
+                <code><?= e($trip_type) ?></code> loads on <strong>your own
+                dashboard</strong> for the pay week
+                <code><?= e($week_start) ?></code> →
+                <code><?= e($week_end) ?></code> against the draft, side by side
+                with what each load currently shows. Nobody else's loads are
+                read here — the fleet-wide dump is the super-admin
+                <code>/loads</code> page.
                 Adjust the draft, hand-tweak tiers, or start over — no drivers
                 see any change until you Promote.
             </p>
@@ -48,6 +55,10 @@ $deltaClass = static fn (float $v): string => $v > 0
 
 <div class="card">
     <h2 class="m-0">Aggregate impact</h2>
+    <p class="text-brand-muted mt-1 mb-0 text-sm">
+        Your <?= e($trip_label) ?> loads for the week of
+        <code><?= e($week_start) ?></code> → <code><?= e($week_end) ?></code>.
+    </p>
     <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
         <div>
             <div class="text-xs text-brand-muted uppercase tracking-wide">Loads considered</div>
@@ -73,9 +84,10 @@ $deltaClass = static fn (float $v): string => $v > 0
     </div>
     <?php if ($row_count === 0): ?>
         <p class="text-brand-muted mt-4 mb-0 text-sm">
-            No <?= e($trip_type) ?> loads in the last <?= (int) $days ?> days —
-            nothing to compare. Widen the window with
-            <code>?days=90</code> or enter a test load and try again.
+            No <?= e($trip_type) ?> loads on your dashboard for the week of
+            <code><?= e($week_start) ?></code> → <code><?= e($week_end) ?></code> —
+            nothing to compare yet. Enter a load, or point the preview at
+            another week with <code>?date=YYYY-MM-DD</code>.
         </p>
     <?php endif; ?>
 </div>
@@ -84,16 +96,16 @@ $deltaClass = static fn (float $v): string => $v > 0
     <div class="card">
         <h2 class="m-0">Per-load diff</h2>
         <p class="text-brand-muted mt-1 text-sm">
-            Sorted newest-first. Deltas ≥ $0.01 are highlighted; loads that
-            price identically are shown in muted rows so you can scan for
-            the ones the raise actually moves.
+            Your own loads, newest-first. Deltas ≥ $0.01 are highlighted; loads
+            that price identically are shown in muted rows so you can scan for
+            the ones the raise actually moves. The driver column that used to
+            be here is gone on purpose — every row is yours.
         </p>
         <div class="table-wrap mt-3">
             <table class="data-table text-[13px] w-full">
                 <thead>
                     <tr>
                         <th class="text-left">Date</th>
-                        <th class="text-left">Driver</th>
                         <th class="text-left">FRTL</th>
                         <th class="text-left">Pickup → Delivery</th>
                         <th class="text-right">Current</th>
@@ -106,10 +118,6 @@ $deltaClass = static fn (float $v): string => $v > 0
                         <?php $changed = abs($c['delta']) >= 0.005; ?>
                         <tr class="<?= $changed ? '' : 'opacity-50' ?>">
                             <td class="whitespace-nowrap"><?= e($c['date']) ?></td>
-                            <td class="whitespace-nowrap">
-                                <?= e($c['driver_user']) ?>
-                                <span class="text-brand-muted text-xs">#<?= (int) $c['driver_id'] ?></span>
-                            </td>
                             <td><code><?= (int) $c['frtl'] ?></code></td>
                             <td class="break-words max-w-md">
                                 <?= e($c['pickup']) ?>

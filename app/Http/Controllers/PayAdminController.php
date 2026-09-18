@@ -16,6 +16,7 @@ use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 use PayTracker\Services\Pay\LoadInputs;
 use PayTracker\Services\Pay\PayRecomputer;
+use PayTracker\Services\Pay\PayWeek;
 use PayTracker\Services\PayCalculator;
 
 /**
@@ -272,14 +273,22 @@ final class PayAdminController extends Controller
     }
 
     /**
-     * GET /pay-admin/preview?trip_type=X[&days=30] — dry-run the draft
-     * rates against every load matching this trip_type over the last
-     * N days. Reprices each row through a fresh PayCalculator whose
-     * RateLookup is seeded with the draft tiers (via
-     * setRateTiersForTest, which was already the injection point unit
-     * tests used and works fine as a preview mechanism too).
+     * GET /pay-admin/preview?trip_type=X[&date=YYYY-MM-DD] — dry-run the
+     * draft rates against the loads the VIEWER sees on their own
+     * dashboard, for the pay week containing `date` (default: today).
+     * Reprices each row through a fresh PayCalculator whose RateLookup is
+     * seeded with the draft tiers (via setRateTiersForTest, which was
+     * already the injection point unit tests used and works fine as a
+     * preview mechanism too).
      *
-     * Answers the "what does a +7% raise actually do to real drivers"
+     * Scope is the signed-in account's own loads — never the fleet's.
+     * See DriverLoad::forPreviewForDriver() for why that predicate is
+     * load-bearing: the first revision repriced "every load in the
+     * window" and rendered other drivers' handles, routes, dates and
+     * pay on an admin+ page. Fleet-wide figures belong on the
+     * super_admin QA surface (/loads), not here.
+     *
+     * Answers the "what does a +7% raise actually do to my paycheck"
      * question without requiring a Promote → observe → un-Promote
      * ceremony. Nothing is written; the DB is untouched.
      */
@@ -298,8 +307,11 @@ final class PayAdminController extends Controller
             $this->session->put('_flash', 'Unknown trip_type in preview request.');
             return $this->redirect($request->basePath() . '/pay-admin');
         }
-        $daysRaw = (string) $request->input('days', '30');
-        $days = ctype_digit($daysRaw) ? min(365, max(1, (int) $daysRaw)) : 30;
+        // Anchor day for the pay week we preview. Same guard as the
+        // dashboard's ?date= so both surfaces agree on which week "now"
+        // means when deciding what counts as a dashboard load.
+        $dateRaw = (string) $request->input('date', '');
+        $anchor  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) === 1 ? $dateRaw : date('Y-m-d');
 
         // Draft must exist — otherwise there is nothing to compare
         // against and the preview would just echo current pay back.
@@ -329,8 +341,19 @@ final class PayAdminController extends Controller
             'long_haul'  => 0,
         };
 
-        $since = date('Y-m-d', strtotime('-' . $days . ' days'));
-        $rows  = $this->loads->forPreviewByLoadType($loadType, $since, 500);
+        // Scope: the viewer's own loads, in the pay week they'd be
+        // looking at on /dashboard. The driver_id comes from the
+        // authenticated account, never from the request, so there is no
+        // parameter an admin could point at another driver's rows.
+        $week     = PayWeek::containing($account, $anchor);
+        $viewerId = (int) $account['id'];
+        $rows     = $this->loads->forPreviewForDriver(
+            $viewerId,
+            $loadType,
+            $week['since'],
+            $week['until'],
+            500,
+        );
 
         $comparisons  = [];
         $totalOld     = 0.0;
@@ -364,8 +387,6 @@ final class PayAdminController extends Controller
             $totalOld += $stored;
             $totalNew += $newPay;
             $comparisons[] = [
-                'driver_user' => (string) ($row['driver_user'] ?? '—'),
-                'driver_id'   => (int) ($row['driver_id'] ?? 0),
                 'frtl'        => (int) ($row['frtl'] ?? 0),
                 'date'        => isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
                 'pickup'      => (string) ($row['pickup_city'] ?? ''),
@@ -380,20 +401,22 @@ final class PayAdminController extends Controller
         $deltaPct   = $totalOld > 0 ? ($deltaTotal / $totalOld) * 100.0 : 0.0;
 
         return $this->view('pay-admin/preview', [
-            'base'         => $request->basePath(),
-            'actor'        => $account,
-            'trip_type'    => $tripType,
-            'trip_label'   => $this->tripLabel($tripType),
-            'days'         => $days,
-            'since'        => $since,
-            'row_count'    => count($comparisons),
-            'total_old'    => $totalOld,
-            'total_new'    => $totalNew,
-            'delta_total'  => $deltaTotal,
-            'delta_pct'    => $deltaPct,
-            'comparisons'  => $comparisons,
-            'draft_tiers'  => $draftTiers,
-            'current_tiers'=> $this->rates->tiers($tripType, 'current'),
+            'base'           => $request->basePath(),
+            'actor'          => $account,
+            'trip_type'      => $tripType,
+            'trip_label'     => $this->tripLabel($tripType),
+            'anchor'         => $anchor,
+            'week_start'     => $week['start'],
+            'week_end'       => $week['end'],
+            'week_start_day' => $week['start_day'],
+            'row_count'      => count($comparisons),
+            'total_old'      => $totalOld,
+            'total_new'      => $totalNew,
+            'delta_total'    => $deltaTotal,
+            'delta_pct'      => $deltaPct,
+            'comparisons'    => $comparisons,
+            'draft_tiers'    => $draftTiers,
+            'current_tiers'  => $this->rates->tiers($tripType, 'current'),
         ]);
     }
 

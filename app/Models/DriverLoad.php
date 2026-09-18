@@ -479,41 +479,53 @@ final class DriverLoad extends Model
     }
 
     /**
-     * Load rows for the /pay-admin preview surface — everything the
-     * calculator needs to reprice a load, plus the stored np we
-     * compare against. Restricted to a specific load_type so a
-     * round-trip draft preview only walks round-trip loads (and
-     * vice versa for one-way / long_haul).
+     * Load rows for the /pay-admin "Preview impact" surface: every load
+     * of ONE load_type that belongs to ONE driver, plus everything the
+     * calculator needs to reprice it and the stored np to compare
+     * against.
      *
-     * Bound to a date window to keep the preview snappy on a fleet
-     * with years of history. The controller passes "since" as the
-     * effective_date the admin is considering, minus the preview
-     * window (default 30 days back).
+     * The driver_id predicate is load-bearing, not a filter convenience.
+     * The preview is an admin+ page whose stated job is to dry-run a
+     * draft against the loads the viewer sees on their own dashboard.
+     * The first revision of this query selected every driver's loads in
+     * the window and LEFT JOINed `account` for the driver's handle, so
+     * the page rendered the whole fleet's routes, dates, handles and
+     * pay — a cross-driver PII leak from a convenience feature. Scope
+     * stays here: never widen it, and never re-add the handle/identity
+     * columns to the SELECT list. Aggregates that span drivers belong
+     * on a super_admin surface (/loads), not on this one.
+     *
+     * Window semantics match forDriverInWindow(): since inclusive,
+     * until exclusive. Restricted to one load_type so a round-trip
+     * draft preview only walks round-trip loads (and vice versa).
      *
      * @return list<array<string,mixed>>
      */
-    public function forPreviewByLoadType(
+    public function forPreviewForDriver(
+        int $driverId,
         int $loadType,
-        string $sinceDate,
+        string $since,
+        string $until,
         int $limit = 200,
     ): array {
-        $limit = max(1, min(1000, $limit));
+        $limit = max(1, min(500, $limit));
         $sql = '
-            SELECT dl.driver_id, a.user AS driver_user, dl.frtl, dl.date,
-                   dl.load_type, dl.pickup_city, dl.delivery_city,
-                   dl.end_empty_city, dl.end_empty_miles,
-                   dl.empty_miles, dl.begin_empty_miles,
-                   dl.is_split, dl.is_weekend, dl.is_backhaul,
-                   dl.extra_pay, dl.dem_minutes, dl.break_minutes,
-                   dl.out_of_route_ind, dl.out_of_route_miles,
-                   dl.variables, dl.np, dl.op
-              FROM ' . self::ident(self::$table) . ' dl
-              LEFT JOIN ' . self::ident('account') . ' a ON a.id = dl.driver_id
-             WHERE dl.load_type = ?
-               AND dl.date >= ?
-             ORDER BY dl.date DESC, dl.driver_id ASC, dl.frtl ASC
+            SELECT frtl, date,
+                   load_type, pickup_city, delivery_city,
+                   end_empty_city, end_empty_miles,
+                   empty_miles, begin_empty_miles,
+                   is_split, is_weekend, is_backhaul,
+                   extra_pay, dem_minutes, break_minutes,
+                   out_of_route_ind, out_of_route_miles,
+                   variables, np, op
+              FROM ' . self::ident(self::$table) . '
+             WHERE driver_id = ?
+               AND load_type = ?
+               AND date >= ?
+               AND date <  ?
+             ORDER BY date DESC, frtl DESC
              LIMIT ' . $limit;
-        $rows = $this->prepared($sql, [$loadType, $sinceDate])->fetchAll();
+        $rows = $this->prepared($sql, [$driverId, $loadType, $since, $until])->fetchAll();
         return is_array($rows) ? $rows : [];
     }
 

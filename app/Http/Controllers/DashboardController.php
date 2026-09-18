@@ -11,6 +11,7 @@ use PayTracker\Models\DriverLoad;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
 use PayTracker\Services\Pay\PayRecomputer;
+use PayTracker\Services\Pay\PayWeek;
 use PayTracker\Services\Pay\VariableBlobBuilder;
 
 /**
@@ -68,24 +69,13 @@ final class DashboardController extends Controller
 
         // Pay-week boundaries containing the viewed date. The start day
         // is the driver's preference (account.pay_week_start_day); the
-        // end is start + 6 inclusive.
-        //
-        // Algorithm: take date('w') of the viewed day (0=Sun..6=Sat),
-        // subtract the configured start-day index, mod 7. That gives
-        // the number of days to subtract to land on the most recent
-        // week-start at or before the viewed date.
-        $startKey = is_string($account['pay_week_start_day'] ?? null)
-            ? (string) $account['pay_week_start_day']
-            : 'sun';
-        $startIndex = ['sun' => 0, 'mon' => 1, 'tue' => 2, 'wed' => 3, 'thu' => 4, 'fri' => 5, 'sat' => 6][$startKey] ?? 0;
-        $dow        = (int) date('w', strtotime($dateRaw));
-        $offsetDays = ($dow - $startIndex + 7) % 7;
-
-        $weekStartDate = date('Y-m-d', strtotime($dateRaw . ' -' . $offsetDays . ' days'));
-        $weekEndDate   = date('Y-m-d', strtotime($weekStartDate . ' +6 days'));
-        $weekSince     = $weekStartDate . ' 00:00:00';
-        $weekUntil     = date('Y-m-d 00:00:00', strtotime($weekStartDate . ' +7 days'));
-        $weekTotals    = $this->loads->totalsForDriverInWindow($driverId, $weekSince, $weekUntil);
+        // end is start + 6 inclusive. The arithmetic lives in PayWeek so
+        // this page and the pay-admin draft preview (which reprices the
+        // same window) can't drift apart on what "this week" means.
+        $week          = PayWeek::containing($account, $dateRaw);
+        $weekStartDate = $week['start'];
+        $weekEndDate   = $week['end'];
+        $weekTotals    = $this->loads->totalsForDriverInWindow($driverId, $week['since'], $week['until']);
 
         $this->session->start();
         $flash = $this->session->get('_flash');
