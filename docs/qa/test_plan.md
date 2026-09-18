@@ -2592,6 +2592,90 @@ must NEVER block submission on a failed Begin Empty lookup.
 
 ---
 
+## 29. Pay-admin draft preview — per-load impact
+
+**Preview impact →** on `/pay-admin` (shown once a draft exists for a
+trip type) answers "what does this draft actually do to the loads on my
+dashboard?" without promoting anything. It reads only the signed-in
+account's own loads, and it includes the unconfirmed loads that live in
+the browser — so the numbers it shows line up with the dashboard card
+it is projecting.
+
+### 29a. Scope and layout
+
+1. Sign in as an admin. Visit `/pay-admin`.
+2. Click **Preview impact →** on the Round-trip card.
+
+**Expected:**
+
+- URL is `/pay-admin/preview?trip_type=round_trip`.
+- A **Loads considered / Current total / Projected total / Delta** grid.
+- A **Per-load diff** table with one row per load of THAT trip type in
+  the pay week named in the heading, newest first.
+- There is **no Driver column** — every row belongs to you. Fleet-wide
+  figures live on the super-admin `/loads` page only.
+- Each row has a **Projected pay breakdown under the draft** disclosure.
+  Expanding it lists Loaded Pay / Empty / Shift / Seniority / Weekend /
+  Split / Backhaul / Demurrage / Breakdown / Extra and a **Total Load
+  Pay** line.
+
+**Fail conditions:** any driver handle or `#<account id>` anywhere on
+the page; rows dated outside the stated week; a breakdown whose Total
+Load Pay disagrees with that row's Projected figure.
+
+### 29b. Unconfirmed loads are included automatically
+
+1. Enter a load with **Store Load Info** OFF (section 24b).
+2. Go to `/pay-admin` → **Preview impact →** for the matching trip type.
+
+**Expected:**
+
+- The page briefly shows *"Found 1 unconfirmed load(s)…"*, submits
+  itself once, then reports *"Included 1 unconfirmed load(s) from this
+  browser"* — no button press needed.
+- The unconfirmed load appears as its own row: the FRTL column shows
+  `—`, the route is followed by *"unconfirmed — in this browser only"*,
+  and an **Edit** link opens `/loads/new?unsaved=…`.
+- The aggregate block reads *N saved load(s) … plus 1 unconfirmed
+  load(s) kept in this browser*, with both totals.
+
+**Fail conditions:** the unconfirmed load is missing from the table and
+the totals; the page reloads itself in a loop; the FRTL column shows a
+number for a load that is not in the database.
+
+### 29c. Numbers reconcile with the dashboard
+
+1. On `/dashboard`, note **This Week → Net Pay** for the trip type you
+   are previewing (the dashboard adds both trip types; the preview is
+   per trip type).
+2. Preview that trip type without promoting anything.
+
+**Expected:** the preview's **Current total** matches what the dashboard
+counts for the same loads, because a fresh draft is a copy of the
+current rates. Once the draft has been edited or Bumped, the delta
+columns show the change instead.
+
+**Fail conditions:** the preview shows `$0.00` while the dashboard shows
+a non-zero week total for that trip type and nothing has been promoted.
+
+### 29d. Unconfirmed loads and past weeks
+
+1. Open `/pay-admin/preview?trip_type=round_trip&date=` with a date in a
+   previous pay week.
+
+**Expected:** a note explaining that unconfirmed loads only appear on
+today's dashboard, so they are not part of a past week — the totals
+cover saved loads only. (The dashboard behaves the same way: past dates
+render DB-backed loads.)
+
+### 29e. Nothing is written
+
+**Expected:** submitting the preview — including the automatic
+unconfirmed-load submit — writes nothing. `/pay-admin` still shows the
+same draft, `/loads` shows no new rows, and no driver's pay changed.
+
+---
+
 ## Reporting template
 
 Copy this into the issue / chat thread when filing a bug:
