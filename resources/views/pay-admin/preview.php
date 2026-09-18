@@ -294,7 +294,11 @@ $bucketNote = static function (array $bucket): ?string {
                 super-admin <code>/loads</code> page.
             </p>
         </div>
-        <a href="<?= e($base) ?>/pay-admin" class="btn-secondary btn-sm">← Back to pay-admin</a>
+        <?php /* Back-link anchors to the bucket the user came from so a
+                 focused preview returns them to that card's action row
+                 instead of scrolling back to the top of the page. */ ?>
+        <a href="<?= e($base) ?>/pay-admin<?= $focused ? '#bucket-' . e($trip_type) : '' ?>"
+           class="btn-secondary btn-sm">← Back to pay-admin</a>
     </div>
 
     <?php if ($vars_draft): ?>
@@ -679,7 +683,7 @@ $tierTypes = $focused ? [$trip_type] : ['round_trip', 'long_haul'];
 
 <div class="card">
     <p class="m-0 text-sm">
-        <a href="<?= e($base) ?>/pay-admin">← Back to pay-admin</a>
+        <a href="<?= e($base) ?>/pay-admin<?= $focused ? '#bucket-' . e($trip_type) : '' ?>">← Back to pay-admin</a>
         &middot; From here you can hand-tweak individual draft tiers, click
         <strong>Bump draft by %</strong> again to try a different number,
         <strong>Reset draft to current</strong> to throw the draft away,

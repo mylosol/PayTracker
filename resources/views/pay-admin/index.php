@@ -173,17 +173,54 @@ $draftRaiseActive = $draftRaise !== null && abs($draftRaise - $currentRaise) > 1
             </div>
         <?php endif; ?>
 
-        <?php /* Row 3 — danger: reset current to shipped defaults. Always visible. */ ?>
-        <div class="flex flex-wrap gap-2 items-center pt-2 border-t border-slate-200 dark:border-slate-700">
-            <form method="post" action="<?= e($base) ?>/pay-admin/reset" class="m-0"
-                  onsubmit="return confirm('Reset current rates to factory defaults? This is irreversible from the UI.');">
-                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-                <button type="submit" class="btn-danger btn-sm">
-                    Reset current ← default
-                </button>
-            </form>
+        <?php /* Row 3 — danger: reset current to shipped defaults. Always visible.
+                 Type-to-confirm: a plain confirm() dialog on this one is too easy
+                 to muscle-memory click through, and it's the one action here that
+                 silently wipes hand-tuned rates AND any draft with them. Requires
+                 the admin to type the trip-type label (case-insensitive) before
+                 the button becomes a real submit. */ ?>
+        <div class="flex flex-col gap-1 pt-2 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-wrap gap-2 items-center">
+                <form method="post" action="<?= e($base) ?>/pay-admin/reset"
+                      class="m-0 flex flex-wrap items-center gap-2"
+                      data-reset-form data-reset-label="<?= e($bucket['label']) ?>"
+                      onsubmit="return (function (f) {
+                          const typed = (f.querySelector('input[name=&quot;confirm_label&quot;]').value || '').trim().toLowerCase();
+                          const need  = (f.dataset.resetLabel || '').trim().toLowerCase();
+                          if (typed !== need) {
+                              alert('Type ' + (f.dataset.resetLabel || '') + ' (case-insensitive) into the confirm box to reset.');
+                              return false;
+                          }
+                          return true;
+                      })(this);">
+                    <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                    <button type="button" class="btn-danger btn-sm"
+                            data-reveal-reset
+                            onclick="const g = this.closest('form').querySelector('[data-reset-confirm]'); g.hidden = false; this.hidden = true; g.querySelector('input').focus();">
+                        Reset current ← default…
+                    </button>
+                    <span data-reset-confirm hidden class="flex flex-wrap items-center gap-2">
+                        <label class="text-xs text-brand-muted">
+                            Type
+                            <code><?= e($bucket['label']) ?></code>
+                            to confirm:
+                        </label>
+                        <input type="text" name="confirm_label" required
+                               class="field text-sm h-9 py-1 px-2 min-h-0 w-40"
+                               autocomplete="off" spellcheck="false"
+                               aria-label="Type <?= e($bucket['label']) ?> to confirm reset">
+                        <button type="submit" class="btn-danger btn-sm">Confirm reset</button>
+                        <button type="button" class="btn-secondary btn-sm"
+                                onclick="const f = this.closest('form'); const g = f.querySelector('[data-reset-confirm]'); g.hidden = true; g.querySelector('input').value = ''; f.querySelector('[data-reveal-reset]').hidden = false;">
+                            Cancel
+                        </button>
+                    </span>
+                </form>
+            </div>
             <span class="text-xs text-brand-muted">
-                Rolls the live rates back to what shipped with the app. Also clears any draft.
+                Rolls the live rates back to what shipped with the app AND clears any
+                draft. Irreversible from the UI — <code><?= e($bucket['label']) ?></code>
+                type-confirmation guards against a muscle-memory click.
             </span>
         </div>
     </div>
