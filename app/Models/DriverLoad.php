@@ -556,6 +556,32 @@ final class DriverLoad extends Model
     }
 
     /**
+     * Look up the driver's most recent stored load — used by /loads/new
+     * to seed a smart Pickup default: long-haul ended at End Empty, so
+     * that's where the next pickup starts; a round-trip ended back at
+     * the pickup terminal, so the same terminal is the default.
+     *
+     * @return array{load_type:int, pickup_city:string, end_empty_city:?string}|null
+     */
+    public function mostRecentForDriver(int $driverId): ?array
+    {
+        $sql = 'SELECT load_type, pickup_city, end_empty_city
+                FROM `driver_loads`
+                WHERE driver_id = ?
+                ORDER BY date DESC, frtl DESC
+                LIMIT 1';
+        $row = $this->prepared($sql, [$driverId])->fetch();
+        if (! is_array($row)) {
+            return null;
+        }
+        return [
+            'load_type'      => (int) $row['load_type'],
+            'pickup_city'    => (string) ($row['pickup_city'] ?? ''),
+            'end_empty_city' => $row['end_empty_city'] !== null ? (string) $row['end_empty_city'] : null,
+        ];
+    }
+
+    /**
      * Fetch a single load by (driver_id, frtl). Used by the edit flow
      * to pre-populate the form. Returns null if the row doesn't exist
      * — the controller then surfaces a 404-style flash so a driver
