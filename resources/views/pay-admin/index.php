@@ -13,6 +13,8 @@
  *   draft:   list<array{miles:int, rate:string}>,
  * }> $buckets
  * @var string|null $flash
+ * @var float       $currentRaise    live `raise` variable, e.g. 0.08675
+ * @var float|null  $draftRaise      draft `raise` value, or null if no draft
  */
 layout('layouts/app');
 
@@ -21,6 +23,17 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
     return '<input type="hidden" name="_csrf"     value="' . e($csrf)     . '">'
          . '<input type="hidden" name="trip_type" value="' . e($tripType) . '">';
 };
+
+/** Format a rate as its effective loaded pay (rate × (1 + raise)). */
+$effectivePay = static function (?string $rate, float $raise): ?string {
+    if ($rate === null || $rate === '') {
+        return null;
+    }
+    return '$' . number_format(((float) $rate) * (1.0 + $raise), 2);
+};
+
+$raiseIsZero      = abs($currentRaise) < 1e-9;
+$draftRaiseActive = $draftRaise !== null && abs($draftRaise - $currentRaise) > 1e-9;
 ?>
 <div class="card">
     <h1 class="m-0">Pay-rate admin</h1>
@@ -30,6 +43,20 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
         row's, and its value is the flat pay for the whole bracket (not a per-mile rate).
         Edit a draft, promote it to current to publish.
     </p>
+    <?php if (! $raiseIsZero || $draftRaiseActive): ?>
+        <div class="mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 text-slate-700 dark:text-slate-200 text-[13px]">
+            <strong class="text-amber-900 dark:text-amber-300">Heads up — hidden multiplier:</strong>
+            every rate below is multiplied by
+            <code>(1 + raise) = <?= number_format(1.0 + $currentRaise, 5) ?></code>
+            before drivers see it (current <code>raise = <?= number_format($currentRaise, 5) ?></code>).
+            The "→ pays" column is what actually lands on the load card.
+            <?php if ($draftRaiseActive): ?>
+                A variables draft is queued (<code>raise = <?= number_format((float) $draftRaise, 5) ?></code>) —
+                that value doesn't take effect until you promote it.
+            <?php endif; ?>
+            <a href="<?= e($base) ?>/pay-admin/variables" class="underline">Edit raise →</a>
+        </div>
+    <?php endif; ?>
     <p class="text-sm mt-3 flex flex-wrap gap-3 items-center">
         <a href="<?= e($base) ?>/pay-admin/preview" class="btn-secondary btn-sm">
             Preview impact — all trip types →
@@ -168,7 +195,9 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                     <th class="text-right">Miles</th>
                     <th class="text-right">Covers</th>
                     <th class="text-right">Current row pay</th>
+                    <th class="text-right">→ pays driver</th>
                     <th class="text-right">Draft row pay</th>
+                    <th class="text-right">→ pays driver</th>
                     <th>Save / delete draft tier</th>
                 </tr>
             </thead>
@@ -216,6 +245,15 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                 foreach ($combined as $miles => $vals):
                     $milesInt = (int) $miles;
                 ?>
+                    <?php
+                    $curEff = $effectivePay($vals['current'], $currentRaise);
+                    // Effective loaded pay uses the *current* raise even
+                    // for the draft rate — that's what promoting the rate
+                    // draft NOW (without touching variables) would land at.
+                    // A separate variables draft is a separate promote,
+                    // called out in the header banner.
+                    $draftEff = $effectivePay($vals['draft'], $currentRaise);
+                    ?>
                     <tr>
                         <td data-label="Miles" class="md:text-right"><code><?= $milesInt ?></code><?php if (isset($flags[$milesInt])): ?> <span class="text-amber-600 dark:text-amber-400" title="<?= e($flags[$milesInt]) ?>" aria-label="flagged: <?= e($flags[$milesInt]) ?>">&#9888;</span><?php endif; ?></td>
                         <td data-label="Covers" class="md:text-right text-brand-muted whitespace-nowrap"><?= e($bands[$milesInt] ?? '—') ?></td>
@@ -226,11 +264,25 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                                 <code><?= e((string) $vals['current']) ?></code>
                             <?php endif; ?>
                         </td>
+                        <td data-label="→ Current pays driver" class="md:text-right text-brand-muted whitespace-nowrap">
+                            <?php if ($curEff === null): ?>
+                                <span class="text-brand-muted">—</span>
+                            <?php else: ?>
+                                <?= e($curEff) ?>
+                            <?php endif; ?>
+                        </td>
                         <td data-label="Draft row pay" class="md:text-right">
                             <?php if ($vals['draft'] === null): ?>
                                 <span class="text-brand-muted">—</span>
                             <?php else: ?>
                                 <code><?= e((string) $vals['draft']) ?></code>
+                            <?php endif; ?>
+                        </td>
+                        <td data-label="→ Draft pays driver" class="md:text-right text-brand-muted whitespace-nowrap">
+                            <?php if ($draftEff === null): ?>
+                                <span class="text-brand-muted">—</span>
+                            <?php else: ?>
+                                <?= e($draftEff) ?>
                             <?php endif; ?>
                         </td>
                         <td data-label="Save / delete">

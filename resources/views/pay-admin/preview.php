@@ -12,6 +12,7 @@
  * @var string                                 $week_start_day
  * @var bool                                   $week_has_today
  * @var array<string,bool>                     $has_draft
+ * @var bool                                   $vars_draft     true when a pay_variables draft is queued (raise/mt/etc.)
  * @var list<array{
  *   key:string, label:string, trip_type:?string, count:int,
  *   saved_count:int, unsaved_count:int, old:float, new:float,
@@ -295,6 +296,16 @@ $bucketNote = static function (array $bucket): ?string {
         </div>
         <a href="<?= e($base) ?>/pay-admin" class="btn-secondary btn-sm">← Back to pay-admin</a>
     </div>
+
+    <?php if ($vars_draft): ?>
+        <div class="mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 text-slate-700 dark:text-slate-200 text-[13px]">
+            <strong class="text-amber-900 dark:text-amber-300">Variables draft applied:</strong>
+            these projections use the draft <code>raise</code> / <code>mt</code> / band-overlay
+            values, not the current ones. So a rate draft + a raise-to-zero draft preview
+            together, matching the promoted state you'd see after both are promoted.
+            <a href="<?= e($base) ?>/pay-admin/variables" class="underline">Review variables draft →</a>
+        </div>
+    <?php endif; ?>
 
     <p class="text-sm mt-3 mb-0 flex flex-wrap gap-2 items-center">
         <?php if ($focused): ?>

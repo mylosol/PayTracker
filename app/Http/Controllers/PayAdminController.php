@@ -84,12 +84,25 @@ final class PayAdminController extends Controller
             ];
         }
 
+        // Current + draft raise are threaded into the rate table so
+        // every row can render its "effective loaded pay" — the number
+        // drivers actually see for that bracket. Without this, an admin
+        // types the ladder value and silently gets rate × (1 + raise)
+        // for the driver, which is how the 68-mile ladder cell drifted
+        // from legacy without anyone noticing.
+        $currentRaise = (float) ($this->payVariables->get('current', 'raise') ?? '0');
+        $draftRaise   = $this->payVariables->hasDraft()
+            ? (float) ($this->payVariables->get('draft', 'raise') ?? '0')
+            : null;
+
         return $this->view('pay-admin/index', [
-            'base'      => $request->basePath(),
-            'csrfToken' => $this->csrf->token(),
-            'summary'   => $this->rates->summary(),
-            'buckets'   => $buckets,
-            'flash'     => $this->popFlash(),
+            'base'         => $request->basePath(),
+            'csrfToken'    => $this->csrf->token(),
+            'summary'      => $this->rates->summary(),
+            'buckets'      => $buckets,
+            'flash'        => $this->popFlash(),
+            'currentRaise' => $currentRaise,
+            'draftRaise'   => $draftRaise,
         ]);
     }
 
@@ -342,16 +355,19 @@ final class PayAdminController extends Controller
         $anchor  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) === 1 ? $dateRaw : date('Y-m-d');
 
         // Which drafts exist. A draft is what makes this a preview rather
-        // than an echo of current pay.
+        // than an echo of current pay. A pay_variables draft counts too:
+        // changing `raise` alone shifts every load's loaded pay even
+        // without touching a single rate row.
         $hasDraft = [];
         foreach (PayRate::TRIP_TYPES as $type) {
             $hasDraft[$type] = $this->rates->hasDraft($type);
         }
-        if (! in_array(true, $hasDraft, true)) {
-            $this->session->put('_flash', 'No drafts yet. Start a draft (or Bump %) before running Preview.');
+        $varsDraftPresent = $this->payVariables->hasDraft();
+        if (! in_array(true, $hasDraft, true) && ! $varsDraftPresent) {
+            $this->session->put('_flash', 'No drafts yet. Start a rate draft (or edit a variable) before running Preview.');
             return $this->redirect($request->basePath() . '/pay-admin');
         }
-        if ($focused && ! $hasDraft[$tripType]) {
+        if ($focused && ! $hasDraft[$tripType] && ! $varsDraftPresent) {
             $this->session->put('_flash', sprintf(
                 'No draft for %s yet. Start Draft (or Bump %%) for it, or preview every trip type.',
                 $tripType,
@@ -364,7 +380,16 @@ final class PayAdminController extends Controller
         $tripLoadTypes = ['round_trip' => 1, 'long_haul' => 0];
 
         // Projection calculator, seeded with every draft in scope.
+        // If a pay_variables draft exists too, swap the calculator over
+        // to that stage so preview reflects BOTH the draft ladder and
+        // the draft raise/mt/newBump. Without this, an admin editing
+        // `raise` alongside a rate draft would see the current raise
+        // applied to the draft ladder and think the projection is off
+        // by the raise-delta.
         $draftCalc = new PayCalculator($this->rateVersions, $this->payVariables);
+        if ($varsDraftPresent) {
+            $draftCalc->useVariablesFrom('draft');
+        }
         foreach (array_keys($tripLoadTypes) as $type) {
             if (! $hasDraft[$type] || ($focused && $type !== $tripType)) {
                 continue;
@@ -627,6 +652,7 @@ final class PayAdminController extends Controller
             'week_start_day'    => $week['start_day'],
             'week_has_today'    => $weekHasToday,
             'has_draft'         => $hasDraft,
+            'vars_draft'        => $varsDraftPresent,
             'buckets'           => array_values($buckets),
             'row_count'         => count($comparisons),
             'saved_count'       => count($rows),
