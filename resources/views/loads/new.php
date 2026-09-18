@@ -62,18 +62,27 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                 </span>
             </span>
         </label>
-        <div id="scratchpad-pitfall" hidden
-             class="mt-3 rounded-lg px-3.5 py-3 bg-amber-50 text-amber-900 border border-amber-200 text-sm">
-            <strong>Heads up:</strong> with <em>Store Load Info</em> off,
-            this load stays <em>unconfirmed</em> — it lives only
-            in your browser:
-            <ul class="list-disc list-inside mt-2 space-y-1">
-                <li>It only shows on <em>today's</em> dashboard — viewing past or future days hides it.</li>
-                <li>Clearing this device's browser data, switching browsers, or switching phones will lose it.</li>
-                <li>It can't be reconciled against pay until you edit it and add a FRTL # to save it.</li>
+        <?php /* Compact reminder when Store Load Info is OFF. Native <details>
+                 stays collapsed by default and remembers its open/closed
+                 state across visits via localStorage — drivers who add
+                 loads with the toggle off all day don't scroll past a
+                 five-line warning every time. The summary carries the
+                 essential facts on one line; the caveats are one click away. */ ?>
+        <details id="scratchpad-pitfall" hidden
+                 class="mt-3 rounded-lg px-3 py-2 bg-amber-50 text-amber-900 border border-amber-200 text-[13px]">
+            <summary class="cursor-pointer select-none list-none flex items-start gap-2 min-h-[32px] py-1">
+                <span aria-hidden="true" class="mt-0.5">⚠</span>
+                <span class="flex-1">
+                    <em>Unconfirmed</em> — this device only, today's dashboard only, auto-clears in 24h.
+                    <span class="underline text-amber-800">Why this matters</span>
+                </span>
+            </summary>
+            <ul class="list-disc list-inside mt-2 space-y-1 pl-1">
+                <li>Shows only on <em>today's</em> dashboard — past or future days hide it.</li>
+                <li>Clearing browser data or switching devices loses it.</li>
+                <li>Can't be reconciled against pay until you add a FRTL #.</li>
             </ul>
-            <p class="mt-2">We'll auto-clear it 24 hours after entry. Add the FRTL # whenever your paperwork catches up.</p>
-        </div>
+        </details>
     </div>
 <?php endif; ?>
 
@@ -498,9 +507,26 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
             const pitfall   = document.getElementById('scratchpad-pitfall');
             const unsavedId = document.getElementById('unsaved_id');
 
-            const STORE_PREF_KEY = 'paytracker.storeLoads';   // bool
-            const ENTRIES_KEY    = 'paytracker.unsavedLoads'; // array
-            const TTL_MS         = 24 * 60 * 60 * 1000;
+            const STORE_PREF_KEY   = 'paytracker.storeLoads';       // bool
+            const PITFALL_OPEN_KEY = 'paytracker.pitfallOpen';      // bool, remembered
+            const ENTRIES_KEY      = 'paytracker.unsavedLoads';     // array
+            const TTL_MS           = 24 * 60 * 60 * 1000;
+
+            // Pitfall <details> starts closed by default and remembers
+            // the user's own open/closed choice. Drivers running with
+            // Store Load Info off all day only pay the summary line's
+            // vertical cost, not the five-line bullet block.
+            if (pitfall) {
+                let pitfallOpen = false;
+                try {
+                    pitfallOpen = localStorage.getItem(PITFALL_OPEN_KEY) === '1';
+                } catch (e) { /* fail silent */ }
+                pitfall.open = pitfallOpen;
+                pitfall.addEventListener('toggle', () => {
+                    try { localStorage.setItem(PITFALL_OPEN_KEY, pitfall.open ? '1' : '0'); }
+                    catch (e) { /* fail silent */ }
+                });
+            }
 
             function readEntries() {
                 let raw;
