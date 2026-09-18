@@ -427,7 +427,10 @@ final class PayAdminController extends Controller
                 'unsaved_count' => 0,
                 'old'         => 0.0,
                 'new'         => 0.0,
-                'repriced'    => in_array((int) $key, $repricable, true),
+                // The '?' bucket (rows whose legacy load_type can't be
+                // priced) must not claim to be repriced: (int) '?' is 0,
+                // which IS a repricable type.
+                'repriced'    => $key !== '?' && in_array((int) $key, $repricable, true),
                 // null = tiers don't apply to this bucket at all.
                 'has_draft'   => $tierType !== null ? $hasDraft[$tierType] : null,
             ];

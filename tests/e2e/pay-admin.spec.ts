@@ -113,8 +113,14 @@ test.describe.serial('pay-rate admin (write path)', () => {
         if (await perLoadCard.count() === 0) {
             // No rows for this viewer => the page must say so explicitly
             // rather than falling back to the fleet's loads.
+            //
+            // Locator + hasText (substring semantics) rather than
+            // getByText(regex): Playwright matches a regex against the
+            // element's FULL text, and this paragraph continues past the
+            // phrase with inline <code> nodes.
             await expect(
-                page.getByText(/No round_trip loads on your dashboard for the week of/i),
+                page.locator('div.card', { hasText: /Aggregate impact/ })
+                    .locator('p', { hasText: /No round_trip loads on your dashboard/ }),
             ).toBeVisible();
             return;
         }
@@ -252,7 +258,9 @@ test.describe.serial('pay-rate admin (write path)', () => {
             const aggregate = page.locator('div.card', { hasText: /Aggregate impact/ });
             await expect(aggregate.locator('tbody tr', { hasText: 'Round-trip' })).toHaveCount(1);
             await expect(aggregate.locator('tbody tr', { hasText: 'One-way' })).toHaveCount(1);
-            await expect(aggregate.locator('tbody tr', { hasText: /^Total/ })).toHaveCount(1);
+            // Unanchored: hasText normalises whitespace but does not trim the
+            // leading newline inside the row, so /^Total/ never matches.
+            await expect(aggregate.locator('tbody tr', { hasText: /Total/ })).toHaveCount(1);
 
             // Per-load table lists both loads, one of each type.
             const diff = page.locator('div.card', { hasText: /Per-load diff/ });
