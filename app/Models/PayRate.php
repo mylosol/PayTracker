@@ -216,6 +216,47 @@ class PayRate extends Model
     }
 
     /**
+     * Multiply every draft tier's rate by (1 + percent/100), rounded
+     * to 2 decimals (dollars.cents — matches how rates are displayed
+     * and hand-edited in the UI). Auto-starts a draft from current
+     * if none exists so a percentage bump from a clean state is one
+     * click, not two.
+     *
+     * Runs the update inside a single UPDATE so a partial application
+     * can't leak — either every tier gets the multiplier or none do.
+     * Returns the count of tiers touched so the controller can flash
+     * an honest "bumped N tiers" number.
+     */
+    public function bumpDraftByPercent(string $tripType, float $percent): int
+    {
+        $this->assertTripType($tripType);
+
+        // Reasonable guard rails: a 500% raise or a -99% cut is almost
+        // certainly a typo. Refuse rather than silently apply.
+        if ($percent < -99.0 || $percent > 500.0) {
+            throw new InvalidArgumentException(
+                sprintf('percent out of range: %.4f (allowed −99 to 500)', $percent)
+            );
+        }
+
+        if (! $this->hasDraft($tripType)) {
+            $this->startOrResetDraft($tripType);
+        }
+
+        $multiplier = 1.0 + ($percent / 100.0);
+        // ROUND(x, 2) at the SQL layer keeps the write atomic and
+        // avoids pulling every row into PHP just to multiply and
+        // send it back. The schema stores DECIMAL(x, 4) so 2-place
+        // rounding leaves headroom if a future tweak wants finer
+        // precision.
+        $sql = 'UPDATE ' . self::ident(self::$table) . '
+                   SET rate = ROUND(rate * ?, 2)
+                 WHERE terminal = ? AND trip_type = ? AND stage = ?';
+        $stmt = $this->prepared($sql, [$multiplier, self::TERMINAL, $tripType, 'draft']);
+        return $stmt->rowCount();
+    }
+
+    /**
      * Promote draft → current. Atomically replaces all current rows
      * with draft rows, then clears the draft so the editor UI shows
      * a clean "no pending changes" state.

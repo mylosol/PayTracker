@@ -115,6 +115,38 @@ final class PayAdminController extends Controller
     }
 
     /**
+     * POST /pay-admin/draft/bump — multiply every draft tier by
+     * (1 + percent/100). Auto-starts a draft from current if none
+     * exists. This is a calculator-button convenience for the common
+     * "payroll gave a 7% raise" case; the resulting rates are
+     * absolute values stored in the draft, and Peter still reviews
+     * + promotes normally with an effective_date.
+     */
+    public function bumpDraft(Request $request): Response
+    {
+        return $this->guard($request, function (string $tripType) use ($request): string {
+            $percentRaw = trim((string) $request->input('percent', ''));
+            // Accept optional leading + / -, integer or decimal.
+            if (! preg_match('/^[+-]?\d+(\.\d{1,4})?$/', $percentRaw)) {
+                throw new \InvalidArgumentException(
+                    'Percent must be a number, optionally with a leading +/- and up to 4 decimals.'
+                );
+            }
+            $percent = (float) $percentRaw;
+            $count   = $this->rates->bumpDraftByPercent($tripType, $percent);
+            $verb    = $percent >= 0 ? 'raised' : 'cut';
+            return sprintf(
+                '%s %s draft by %s%% (%d tier%s). Review the numbers, then click Promote with an effective date.',
+                ucfirst($verb),
+                $tripType,
+                rtrim(rtrim(number_format(abs($percent), 4, '.', ''), '0'), '.'),
+                $count,
+                $count === 1 ? '' : 's',
+            );
+        });
+    }
+
+    /**
      * POST /pay-admin/draft/delete — remove a (miles) tier from the draft.
      */
     public function deleteDraftTier(Request $request): Response

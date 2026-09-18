@@ -99,6 +99,25 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                 </button>
             </form>
         <?php endif; ?>
+        <form method="post" action="<?= e($base) ?>/pay-admin/draft/bump" class="m-0 flex flex-wrap items-end gap-2"
+              data-bump-form data-bump-label="<?= e($bucket['label']) ?>"
+              onsubmit="return confirm('Bump ' + (this.dataset.bumpLabel || 'draft') + ' by ' + (this.querySelector('input[name=&quot;percent&quot;]').value || '?') + '%? Draft rates will be multiplied and rounded to 2 decimals — you can hand-tweak individual tiers before Promote.');">
+            <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+            <div>
+                <label for="bump-<?= e($bucket['trip_type']) ?>" class="field-label text-xs">Bump draft by %</label>
+                <input id="bump-<?= e($bucket['trip_type']) ?>" type="text" name="percent"
+                       inputmode="decimal"
+                       placeholder="e.g. 7 or -2.5"
+                       class="field text-sm h-9 py-1 px-2 min-h-0 w-24"
+                       aria-describedby="bump-hint-<?= e($bucket['trip_type']) ?>">
+            </div>
+            <button type="submit" class="btn-secondary btn-sm">
+                Apply %
+            </button>
+            <span id="bump-hint-<?= e($bucket['trip_type']) ?>" class="text-xs text-brand-muted basis-full">
+                Multiplies every draft tier — auto-starts a draft from current if none exists. Rates are stored as absolute numbers; the % is a calculator, not a policy.
+            </span>
+        </form>
         <form method="post" action="<?= e($base) ?>/pay-admin/reset" class="m-0"
               onsubmit="return confirm('Reset current rates to factory defaults? This is irreversible from the UI.');">
             <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
