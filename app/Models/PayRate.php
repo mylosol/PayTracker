@@ -142,6 +142,78 @@ class PayRate extends Model
     }
 
     /**
+     * Rungs that look WRONG rather than merely different. Feed it a ladder
+     * as [miles => pay] and it returns [miles => reason] for the rows worth
+     * a look before promoting.
+     *
+     * Two rules, both drawn from the live ladder:
+     *
+     *   1. Ladder break — a rung that pays LESS than the rung below it, so a
+     *      load of 43–44 miles would pay less than one of 41–42. That is
+     *      what a row missed by a raise pass looks like: the Pensacola
+     *      round-trip 44-mile rung still carries its 2019 value while all
+     *      111 of its neighbours were raised.
+     *   2. Placeholder outlier — a rung paying more than five times the
+     *      median. The legacy ladder carried 999.9999 at 122 miles, a
+     *      tripwire value that was never a pay rate; that shape should be
+     *      glaring on screen instead of quietly paying ~$1,000.
+     *
+     * Deliberately silent about big-but-monotonic jumps (the long-haul
+     * 204 → 206 mile step is +$50 and presumably intentional). A rule that
+     * flagged those too would train everyone to ignore the flag.
+     *
+     * @param array<int, float> $rungs miles => pay, any order
+     * @return array<int, string> miles => human-readable reason
+     */
+    public static function flagRungs(array $rungs): array
+    {
+        ksort($rungs);
+
+        $flags = [];
+        if ($rungs === []) {
+            return $flags;
+        }
+
+        $values = array_values($rungs);
+        sort($values);
+        $median = (float) $values[intdiv(count($values), 2)];
+
+        // Rule 2 first so a placeholder value is named as such rather than
+        // as a ladder break against whatever row precedes it.
+        foreach ($rungs as $miles => $pay) {
+            if ($median > 0 && $pay > 5 * $median) {
+                $flags[$miles] = sprintf(
+                    'far above the rest of this ladder (%s against a %s median) — placeholder value?',
+                    '$' . number_format($pay, 2),
+                    '$' . number_format($median, 2),
+                );
+            }
+        }
+
+        $prevMiles = null;
+        foreach ($rungs as $miles => $pay) {
+            if (isset($flags[$miles])) {
+                // A placeholder value isn't a rung in the ladder's shape:
+                // skip it so it can't manufacture a break on its neighbour.
+                continue;
+            }
+            if ($prevMiles !== null) {
+                $prevPay = (float) $rungs[$prevMiles];
+                if ($pay < $prevPay - 0.005) {
+                    $flags[$miles] = sprintf(
+                        'pays %s less than the %d mi row, so a load here earns less than a shorter one',
+                        '$' . number_format($prevPay - $pay, 2),
+                        $prevMiles,
+                    );
+                }
+            }
+            $prevMiles = $miles;
+        }
+
+        return $flags;
+    }
+
+    /**
      * All (miles, rate) tiers for a given (trip_type, stage) sorted
      * ascending by miles — the natural order for the editor UI.
      *

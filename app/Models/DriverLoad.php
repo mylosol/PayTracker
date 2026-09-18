@@ -479,6 +479,72 @@ final class DriverLoad extends Model
     }
 
     /**
+     * Load rows for the /pay-admin "Preview impact" surface: the loads
+     * belonging to ONE driver in a window, plus everything the
+     * calculator needs to reprice them and the stored np to compare
+     * against.
+     *
+     * `$loadTypes` narrows to specific load types ([] = every row in the
+     * window). The combined preview passes [] so its totals add up to the
+     * same set the dashboard's week card sums; the per-trip-type
+     * deep-link passes one type.
+     *
+     * The driver_id predicate is load-bearing, not a filter convenience.
+     * The preview is an admin+ page whose job is to dry-run a draft
+     * against the loads the viewer sees on their own dashboard. The first
+     * revision of this query selected every driver's loads in the window
+     * and LEFT JOINed `account` for the driver's handle, so the page
+     * rendered the whole fleet's routes, dates, handles and pay — a
+     * cross-driver PII leak from a convenience feature. Scope stays here:
+     * never widen it, and never re-add the handle/identity columns to the
+     * SELECT list. Aggregates that span drivers belong on a super_admin
+     * surface (/loads), not on this one.
+     *
+     * Window semantics match forDriverInWindow(): since inclusive,
+     * until exclusive.
+     *
+     * @param list<int> $loadTypes
+     * @return list<array<string,mixed>>
+     */
+    public function forPreviewForDriver(
+        int $driverId,
+        array $loadTypes,
+        string $since,
+        string $until,
+        int $limit = 200,
+    ): array {
+        $limit = max(1, min(500, $limit));
+
+        // Binding order matches clause order: driver, window, then the
+        // optional type list.
+        $where    = 'driver_id = ? AND date >= ? AND date < ?';
+        $bindings = [$driverId, $since, $until];
+        if ($loadTypes !== []) {
+            $where .= ' AND load_type IN (' . implode(', ', array_fill(0, count($loadTypes), '?')) . ')';
+            foreach ($loadTypes as $type) {
+                $bindings[] = (int) $type;
+            }
+        }
+
+        $sql = '
+            SELECT frtl, date,
+                   load_type, pickup_city, delivery_city,
+                   end_empty_city, end_empty_miles,
+                   empty_miles, begin_empty_miles,
+                   is_split, is_weekend, is_backhaul,
+                   extra_pay, dem_minutes, break_minutes,
+                   out_of_route_ind, out_of_route_miles,
+                   variables, np, op
+              FROM ' . self::ident(self::$table) . '
+             WHERE ' . $where . '
+             ORDER BY date DESC, frtl DESC
+             LIMIT ' . $limit;
+
+        $rows = $this->prepared($sql, $bindings)->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
      * True if (driver_id, frtl) is already taken. Used by the controller
      * to pre-flight check and produce a friendlier error than letting
      * the PK collision bubble up as a PDOException.

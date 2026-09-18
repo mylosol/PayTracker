@@ -44,6 +44,14 @@ test.describe.serial('pay-rate admin (write path)', () => {
         // Both editor cards present
         await expect(page.getByRole('heading', { name: /^Round-trip$/ })).toBeVisible();
         await expect(page.getByRole('heading', { name: /^Long-haul$/ })).toBeVisible();
+        // The ladder reads as brackets, not per-mile rates: each row shows
+        // the mileages it pays, and the page says so.
+        const ratesTable = page.locator('table.data-table').first();
+        await expect(ratesTable.locator('th', { hasText: 'Covers' })).toHaveCount(1);
+        await expect(ratesTable.locator('th', { hasText: /row pay/ }).first()).toBeVisible();
+        // Locator + hasText, not getByText(regex): the paragraph continues
+        // with inline <strong> nodes and getByText matches full text.
+        await expect(page.locator('p', { hasText: /flat pay for the whole bracket/i })).toBeVisible();
     });
 
     test('10c — start draft from current', async ({ page }) => {
@@ -71,6 +79,215 @@ test.describe.serial('pay-rate admin (write path)', () => {
             page.locator('div.card', { hasText: ROUND_TRIP })
                 .getByRole('button', { name: /promote draft/i })
         ).toBeVisible();
+    });
+
+    test('10c2 — "Preview impact" is scoped to the signed-in account', async ({ page }) => {
+        await signIn(page);
+
+        // Everything the viewer legitimately owns this pay week. The pay
+        // week start day is a per-account preference we can't read from
+        // here, so walk the last 8 days — whichever weekday the viewer's
+        // week starts on, it falls inside that span.
+        const ownFrtls = new Set<string>();
+        const now = new Date();
+        for (let back = 0; back < 8; back += 1) {
+            const day = new Date(now);
+            day.setDate(now.getDate() - back);
+            const iso = day.toISOString().slice(0, 10);
+            await page.goto(`dashboard?date=${iso}`);
+            const frtls = await page
+                .locator('#dashboard-loads-table tbody tr > td:nth-child(2) code')
+                .allTextContents();
+            frtls.forEach((t) => ownFrtls.add(t.trim()));
+        }
+
+        await page.goto('pay-admin');
+        await page
+            .locator('div.card', { hasText: ROUND_TRIP })
+            .getByRole('link', { name: /preview impact/i })
+            .click();
+        await expect(page).toHaveURL(/\/pay-admin\/preview\?trip_type=round_trip/);
+        await expect(page.getByRole('heading', { name: /preview draft/i })).toBeVisible();
+
+        // Regression: the first revision of this page rendered a Driver
+        // column (login handle + account id) for EVERY driver's loads in
+        // the window — a cross-driver PII leak from an admin+ page. The
+        // identity column and the `#<account id>` marker must not come
+        // back.
+        await expect(page.locator('th', { hasText: /^Driver$/ })).toHaveCount(0);
+
+        const perLoadCard = page.locator('div.card', { hasText: /Per-load diff/ });
+
+        if (await perLoadCard.count() === 0) {
+            // No rows for this viewer => the page must say so explicitly
+            // rather than falling back to the fleet's loads.
+            //
+            // Locator + hasText (substring semantics) rather than
+            // getByText(regex): Playwright matches a regex against the
+            // element's FULL text, and this paragraph continues past the
+            // phrase with inline <code> nodes.
+            await expect(
+                page.locator('div.card', { hasText: /Aggregate impact/ })
+                    .locator('p', { hasText: /No round_trip loads on your dashboard/ }),
+            ).toBeVisible();
+            return;
+        }
+
+        // The old page stamped each row with the driver's account id.
+        await expect(perLoadCard).not.toContainText(/#\d+\b/);
+
+        const shown = await perLoadCard.locator('tbody tr td code').allTextContents();
+        const foreign = shown
+            .map((t) => t.trim())
+            .filter((frtl) => frtl !== '' && !ownFrtls.has(frtl));
+
+        expect(
+            foreign,
+            `preview rendered FRTL(s) that are not on the signed-in account's dashboard: ${foreign.join(', ')}`,
+        ).toEqual([]);
+    });
+
+    test('10c3 — preview includes this browser\'s unconfirmed loads', async ({ page }) => {
+        await signIn(page);
+
+        // Enter the preview once with a clean scratchpad so we can read the
+        // server's idea of "today" (the app runs America/Chicago; the runner
+        // may not agree).
+        await page.goto('pay-admin/preview?trip_type=round_trip');
+        const form = page.locator('#preview-local-form');
+        await expect(form).toBeVisible();
+        const today = await form.getAttribute('data-today');
+        expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+        // Seed the exact key/shape the dashboard hydrates from — with a
+        // deliberately bogus np, because the server must reprice, never trust
+        // the browser's money.
+        await page.evaluate((iso) => {
+            localStorage.setItem('paytracker.unsavedLoads', JSON.stringify([{
+                local_id: 'u_e2e_fixture_1',
+                created_at: Date.now(),
+                computed: {
+                    date: iso,
+                    load_type: 1,
+                    pickup_city: 'Pensacola, FL',
+                    delivery_city: 'Mobile, AL',
+                    end_empty_city: '',
+                    end_empty_miles: 0,
+                    empty_miles: 320,
+                    begin_empty_miles: 0,
+                    is_split: 0,
+                    is_weekend: 0,
+                    is_backhaul: 0,
+                    extra_pay: 0,
+                    dem_minutes: 0,
+                    break_minutes: 0,
+                    out_of_route_miles: 0,
+                    out_of_route_ind: 0,
+                    notes: 'QA TEST scratchpad — safe to clean up',
+                    np: 999.99,
+                    op: 999.99,
+                    pay_breakdown: { np: 999.99 },
+                },
+            }]));
+        }, today);
+
+        try {
+            // Arriving again auto-submits the scratchpad once and re-renders
+            // with those rows repriced alongside the saved ones.
+            await page.goto('pay-admin/preview?trip_type=round_trip');
+            await expect(page.locator('#preview-local-status'))
+                .toContainText(/Included\s*1\s*unconfirmed/i);
+
+            const card = page.locator('div.card', { hasText: /Per-load diff/ });
+            await expect(card).toBeVisible();
+            await expect(card).toContainText('Pensacola, FL');
+            await expect(card).toContainText('Mobile, AL');
+            await expect(card).toContainText(/unconfirmed — in this browser only/i);
+            // 999.99 never happened: the projection is server-computed.
+            await expect(card).not.toContainText('999.99');
+            // Per-load breakdown is rendered server-side for every row.
+            const breakdown = card.getByText(/Projected pay breakdown under the draft/i).first();
+            await expect(breakdown).toBeVisible();
+            await breakdown.click();
+            await expect(card.getByText(/Total Load Pay/i).first()).toBeVisible();
+        } finally {
+            // Leave no fixture behind for other specs.
+            await page.evaluate(() => localStorage.removeItem('paytracker.unsavedLoads'));
+        }
+    });
+
+    test('10c4 — combined preview covers every trip type', async ({ page }) => {
+        await signIn(page);
+
+        // Default scope: no trip_type at all.
+        await page.goto('pay-admin/preview');
+        const form = page.locator('#preview-local-form');
+        await expect(form).toBeVisible();
+        const today = await form.getAttribute('data-today');
+
+        // One unconfirmed round-trip and one unconfirmed one-way — the page
+        // must show BOTH, because the dashboard's week card adds both.
+        await page.evaluate((iso) => {
+            const base = {
+                end_empty_city: '', end_empty_miles: 0, begin_empty_miles: 0,
+                is_split: 0, is_weekend: 0, is_backhaul: 0, extra_pay: 0,
+                dem_minutes: 0, break_minutes: 0, out_of_route_miles: 0,
+                out_of_route_ind: 0, np: 111.11, op: 111.11,
+                notes: 'QA TEST scratchpad — safe to clean up',
+            };
+            localStorage.setItem('paytracker.unsavedLoads', JSON.stringify([
+                {
+                    local_id: 'u_e2e_roundtrip',
+                    created_at: Date.now(),
+                    computed: {
+                        ...base, date: iso, load_type: 1,
+                        pickup_city: 'Pensacola, FL', delivery_city: 'Mobile, AL',
+                        empty_miles: 320,
+                    },
+                },
+                {
+                    local_id: 'u_e2e_oneway',
+                    created_at: Date.now(),
+                    computed: {
+                        ...base, date: iso, load_type: 0,
+                        pickup_city: 'Pensacola, FL', delivery_city: 'Lynn Haven, FL',
+                        empty_miles: 90,
+                    },
+                },
+            ]));
+        }, today);
+
+        try {
+            await page.goto('pay-admin/preview');
+            await expect(page.locator('#preview-local-status'))
+                .toContainText(/Included\s*2\s*unconfirmed/i);
+
+            // Sub-total strip names both trip types and closes with a total.
+            const aggregate = page.locator('div.card', { hasText: /Aggregate impact/ });
+            await expect(aggregate.locator('tbody tr', { hasText: 'Round-trip' })).toHaveCount(1);
+            await expect(aggregate.locator('tbody tr', { hasText: 'One-way' })).toHaveCount(1);
+            // Unanchored: hasText normalises whitespace but does not trim the
+            // leading newline inside the row, so /^Total/ never matches.
+            await expect(aggregate.locator('tbody tr', { hasText: /Total/ })).toHaveCount(1);
+
+            // Per-load table lists both loads, one of each type.
+            const diff = page.locator('div.card', { hasText: /Per-load diff/ });
+            await expect(diff).toContainText('Mobile, AL');
+            await expect(diff).toContainText('Lynn Haven, FL');
+            await expect(diff).toContainText('Round-trip');
+            await expect(diff).toContainText('One-way');
+            await expect(diff).not.toContainText('111.11');
+            // The paying rate row is named, so an edit to a row below a
+            // load's mileage is visible as a no-op instead of looking like
+            // a broken preview.
+            const ladder = page.locator('div.card', { hasText: /tiers — draft vs current/ }).first();
+            await expect(ladder).toContainText('Covers');
+            // Either the paying row is named, or the row is beyond the top of
+            // the ladder and the page says so — both are the note rendering.
+            await expect(diff).toContainText(/Paid from the \d+ mi rate row|No rate row reaches \d+ mi/);
+        } finally {
+            await page.evaluate(() => localStorage.removeItem('paytracker.unsavedLoads'));
+        }
     });
 
     test('10d — edit a draft tier', async ({ page }) => {

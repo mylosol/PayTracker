@@ -23,7 +23,7 @@ use PayTracker\Services\Pay\VariableBag;
  * Formula:
  *
  *   round-trip (load_type=1):
- *     base      = lookupTier(round_trip, load_miles) × (1 + raise)
+ *     base      = payingTier(round_trip, load_miles) × (1 + raise)
  *     base_pay  = round(base, 2)
  *     seniority = round(base × newBump, 2)
  *     shift     = round(base × night, 2)  // night-shift only
@@ -58,6 +58,14 @@ use PayTracker\Services\Pay\VariableBag;
  * exceeds load_miles + 3, the rate-table lookup uses the longer mileage
  * (a Panama→Panama 0-mile loop with a 10-mile detour bills at the
  * 10-mile tier).
+ *
+ * Tier semantics (legacy parity): a rate-table row is a bracket CEILING
+ * and its value is the FLAT base pay for that bracket — not a per-mile
+ * rate. A load is paid by the LOWEST row whose miles ≥ its loaded miles
+ * (the legacy `WHERE miles >= ? LIMIT 1`), so a 67-mile load is paid by
+ * the 68-mile row and editing the 66-mile row cannot move it. The
+ * result's `base_rate` is derived ($base_pay ÷ miles) for the pay card
+ * only; the row that actually paid the load is `base_tier_miles`.
  */
 final class PayCalculator
 {
@@ -122,6 +130,7 @@ final class PayCalculator
      *   trip_label: string,
      *   tenure_band: string, shift: string,
      *   base_miles: int, base_rate: float,
+     *   base_tier_miles: int,
      *   base_pay: float,
      *   empty_miles: int, empty_rate: float, empty_pay: float,
      *   seniority_pct: float, seniority_pay: float,
@@ -169,6 +178,7 @@ final class PayCalculator
                 tripLabel: 'Trainer',
                 tenureBand: $tenure, shift: $shift,
                 baseMiles: 0, baseRate: 0.0,
+                baseTierMiles: 0,
                 basePay: round($trainer, 2),
                 emptyMiles: 0, emptyRate: 0.0,
                 emptyPay: 0.0,
@@ -206,13 +216,18 @@ final class PayCalculator
         $shiftPay    = 0.0;
         $weekendPay  = 0.0;
         $baseRate    = 0.0;
+        // The paying rung (bracket ceiling), not the load's mileage —
+        // surfaces use it to explain which row of the rate table paid a
+        // load. 0 = no rung reached this mileage (base pay stays $0).
+        $baseTierMiles = 0;
 
         if ($load->load_type === 1) {
-            // Round-trip: base = rate-table lookup × (1 + raise). All
-            // overlays scale off base alone.
-            $base = $this->rates->lookup('round_trip', $effectiveMiles, $loadDate);
-            if ($base !== null) {
-                $base       = $base * (1 + $raise);
+            // Round-trip: base = the paying rung's flat bracket pay ×
+            // (1 + raise). All overlays scale off base alone.
+            $tier = $this->rates->tierFor('round_trip', $effectiveMiles, $loadDate);
+            if ($tier !== null) {
+                $base       = $tier['rate'] * (1 + $raise);
+                $baseTierMiles = $tier['miles'];
                 $basePay    = round($base, 2);
                 $seniority  = round($base * $newBump, 2);
                 $shiftPay   = round($base * $nightOn, 2);
@@ -231,10 +246,11 @@ final class PayCalculator
             // resolves to the smallest tier on file. The per-mile rate
             // is zero-guarded so the breakdown doesn't divide by zero.
             $oneWay = 0.0;
-            $base = $this->rates->lookup('long_haul', $effectiveMiles, $loadDate);
-            if ($base !== null) {
-                $oneWay   = $base * (1 + $raise);
-                $baseRate = $effectiveMiles > 0 ? $oneWay / $effectiveMiles : 0.0;
+            $tier   = $this->rates->tierFor('long_haul', $effectiveMiles, $loadDate);
+            if ($tier !== null) {
+                $oneWay        = $tier['rate'] * (1 + $raise);
+                $baseTierMiles = $tier['miles'];
+                $baseRate      = $effectiveMiles > 0 ? $oneWay / $effectiveMiles : 0.0;
             }
             $empty           = $emptyMiles * $mt;
 
@@ -259,6 +275,7 @@ final class PayCalculator
             tripLabel: $load->load_type === 1 ? 'Round-trip' : 'One-way',
             tenureBand: $tenure, shift: $shift,
             baseMiles: $effectiveMiles, baseRate: round($baseRate, 4),
+            baseTierMiles: $baseTierMiles,
             basePay: $basePay,
             emptyMiles: $emptyMiles, emptyRate: $mt,
             emptyPay: $emptyPay,
@@ -279,11 +296,12 @@ final class PayCalculator
      *   np: float, op: float, trip_label: string,
      *   tenure_band: string, shift: string,
      *   base_miles: int, base_rate: float,
+     *   base_tier_miles: int,
      *   base_pay: float,
      *   empty_miles: int, empty_rate: float, empty_pay: float,
      *   seniority_pct: float, seniority_pay: float,
-     *   shift_pct: float, shift_pay: float,
-     *   weekend_pct: float, weekend_pay: float,
+     *   shift_pct: float,    shift_pay: float,
+     *   weekend_pct: float,  weekend_pay: float,
      *   split_pay: float, backhaul_pay: float, extra_pay: float, dem_pay: float, break_pay: float,
      * }
      */
@@ -291,6 +309,7 @@ final class PayCalculator
         float $np, float $op, string $tripLabel,
         string $tenureBand, string $shift,
         int $baseMiles, float $baseRate,
+        int $baseTierMiles,
         float $basePay,
         int $emptyMiles, float $emptyRate,
         float $emptyPay,
@@ -307,6 +326,7 @@ final class PayCalculator
             'shift'         => $shift,
             'base_miles'    => $baseMiles,
             'base_rate'     => $baseRate,
+            'base_tier_miles' => $baseTierMiles,
             'base_pay'      => $basePay,
             'empty_miles'   => $emptyMiles,
             'empty_rate'    => $emptyRate,
