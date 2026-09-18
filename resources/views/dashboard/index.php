@@ -229,8 +229,8 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                                             (<?= e((string) ($bd['tenure_band'] ?? '?')) ?>&nbsp;M&nbsp;|&nbsp;<?= e(ucfirst((string) ($bd['shift'] ?? '?'))) ?>)
                                         </summary>
                                         <?php if (!empty($row['notes'])): ?>
-                                            <div class="mt-2 px-3 py-2 bg-amber-50 border-l-4 border-amber-400 text-slate-700 text-[13px] whitespace-pre-wrap break-words">
-                                                <strong class="text-amber-900">Notes:</strong>
+                                            <div class="mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 text-slate-700 dark:text-amber-100 text-[13px] whitespace-pre-wrap break-words">
+                                                <strong class="text-amber-900 dark:text-amber-300">Notes:</strong>
                                                 <?= e((string) $row['notes']) ?>
                                             </div>
                                         <?php endif; ?>
@@ -247,103 +247,103 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                                                 ?>
                                                 <?php if ($showLoaded): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">
                                                             Loaded Pay:
                                                             <?= (int) ($bd['base_miles'] ?? 0) ?> Miles
                                                             <?php if ((int) ($bd['base_miles'] ?? 0) > 0): ?>
                                                                 <span class="text-brand-muted">@ $<?= number_format((float) ($bd['base_rate'] ?? 0), 4) ?></span>
                                                             <?php endif; ?>
                                                         </td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) ($bd['base_pay'] ?? 0))) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['empty_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">
                                                             Empty Pay:
                                                             <?php if ((int) ($bd['empty_miles'] ?? 0) > 0): ?>
                                                                 <?= (int) $bd['empty_miles'] ?> Miles
                                                                 <span class="text-brand-muted">@ $<?= number_format((float) ($bd['empty_rate'] ?? 0), 4) ?></span>
                                                             <?php endif; ?>
                                                         </td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['empty_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['shift_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">
                                                             Shift Pay <span class="text-pink-500">(<?= e($pct((float) $bd['shift_pct'])) ?>)</span>
                                                         </td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['shift_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['seniority_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">
                                                             Seniority Pay <span class="text-purple-500">(<?= e($pct((float) $bd['seniority_pct'])) ?>)</span>
                                                         </td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['seniority_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['weekend_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">
                                                             Weekend <span class="text-amber-500">(<?= e($pct((float) $bd['weekend_pct'])) ?>)</span>
                                                         </td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['weekend_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['split_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">Split Pay</td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">Split Pay</td>
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['split_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['backhaul_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">Backhaul</td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">Backhaul</td>
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['backhaul_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['dem_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">Demurrage</td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">Demurrage</td>
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['dem_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['break_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">Breakdown</td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">Breakdown</td>
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['break_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
                                                 <?php if ((float) ($bd['extra_pay'] ?? 0) !== 0.0): ?>
                                                     <tr>
-                                                        <td class="py-1 px-3 text-slate-600">Extra Pay</td>
-                                                        <td class="py-1 px-3 text-right text-emerald-600 font-semibold">
+                                                        <td class="py-1 px-3 text-slate-600 dark:text-slate-300">Extra Pay</td>
+                                                        <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                                                             <?= e($money((float) $bd['extra_pay'])) ?>
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
-                                                <tr class="border-t border-slate-300">
+                                                <tr class="border-t border-slate-300 dark:border-slate-700">
                                                     <td class="py-1.5 px-3 font-bold">Total Load Pay</td>
                                                     <td class="py-1.5 px-3 text-right font-bold text-brand-primary">
                                                         <?= e($money((float) ($bd['np'] ?? 0))) ?>
@@ -356,8 +356,8 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                             </tr>
                         <?php elseif (!empty($row['notes'])): ?>
                             <tr class="bg-amber-50">
-                                <td colspan="6" class="px-5 py-2 border-l-4 border-amber-400 text-slate-700 text-[13px] whitespace-pre-wrap break-words">
-                                    <strong class="text-amber-900">Notes:</strong>
+                                <td colspan="6" class="px-5 py-2 border-l-4 border-amber-400 text-slate-700 dark:text-slate-200 text-[13px] whitespace-pre-wrap break-words">
+                                    <strong class="text-amber-900 dark:text-amber-300">Notes:</strong>
                                     <?= e((string) $row['notes']) ?>
                                 </td>
                             </tr>
@@ -497,8 +497,8 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             const rows = [];
             const row  = (label, val) => `
                 <tr>
-                    <td class="py-1 px-3 text-slate-600">${label}</td>
-                    <td class="py-1 px-3 text-right text-emerald-600 font-semibold">${money(val)}</td>
+                    <td class="py-1 px-3 text-slate-600 dark:text-slate-300">${label}</td>
+                    <td class="py-1 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">${money(val)}</td>
                 </tr>`;
             // Always show Loaded Pay for one-way / round-trip — a same-city
             // 0-mile load is a real load and hiding the row reads as
@@ -531,7 +531,7 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             if (Number(bd.break_pay)     || 0) rows.push(row('Breakdown',  bd.break_pay));
             if (Number(bd.extra_pay)     || 0) rows.push(row('Extra Pay',  bd.extra_pay));
             rows.push(`
-                <tr class="border-t border-slate-300">
+                <tr class="border-t border-slate-300 dark:border-slate-700">
                     <td class="py-1.5 px-3 font-bold">Total Load Pay</td>
                     <td class="py-1.5 px-3 text-right font-bold text-brand-primary">
                         ${money(bd.np || 0)}
@@ -579,8 +579,8 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
 
             if (bd) {
                 const noteHtml = c.notes
-                    ? `<div class="mt-2 px-3 py-2 bg-amber-50 border-l-4 border-amber-400 text-slate-700 text-[13px] whitespace-pre-wrap break-words">
-                           <strong class="text-amber-900">Notes:</strong> ${escapeHtml(c.notes)}
+                    ? `<div class="mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 text-slate-700 dark:text-amber-100 text-[13px] whitespace-pre-wrap break-words">
+                           <strong class="text-amber-900 dark:text-amber-300">Notes:</strong> ${escapeHtml(c.notes)}
                        </div>` : '';
                 const tripLabel = (bd.trip_label  != null) ? String(bd.trip_label)  : '?';
                 const band      = (bd.tenure_band != null) ? String(bd.tenure_band) : '?';
@@ -606,8 +606,8 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
                 const tr2 = document.createElement('tr');
                 tr2.className = 'bg-amber-50';
                 tr2.innerHTML = `
-                    <td colspan="6" class="px-5 py-2 border-l-4 border-amber-400 text-slate-700 text-[13px] whitespace-pre-wrap break-words">
-                        <strong class="text-amber-900">Notes:</strong> ${escapeHtml(c.notes)}
+                    <td colspan="6" class="px-5 py-2 border-l-4 border-amber-400 text-slate-700 dark:text-slate-200 text-[13px] whitespace-pre-wrap break-words">
+                        <strong class="text-amber-900 dark:text-amber-300">Notes:</strong> ${escapeHtml(c.notes)}
                     </td>`;
                 tbody.appendChild(tr2);
             }
