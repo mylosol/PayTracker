@@ -44,26 +44,55 @@ final class RateLookup
     {
     }
 
-    public function lookup(string $tripType, int $loadMiles, string $loadDate): ?float
+    /**
+     * The tier LIST for a trip type on a date (draft-seeded in tests,
+     * else the version active on that date), sorted by miles ASC.
+     *
+     * @return list<array{miles:int, rate:float}>
+     */
+    private function tiersFor(string $tripType, string $loadDate): array
     {
         $tiers = $this->testTiers[$tripType] ?? null;
-        if ($tiers === null) {
-            $cacheKey = $tripType . '|' . $loadDate;
-            if (! isset($this->tierCache[$cacheKey])) {
-                $rows = $this->versions->activeTiersOn($tripType, $loadDate);
-                $this->tierCache[$cacheKey] = array_map(
-                    static fn (array $r): array => ['miles' => $r['miles'], 'rate' => (float) $r['rate']],
-                    $rows,
-                );
-            }
-            $tiers = $this->tierCache[$cacheKey];
+        if ($tiers !== null) {
+            return $tiers;
         }
-        foreach ($tiers as $tier) {
+        $cacheKey = $tripType . '|' . $loadDate;
+        if (! isset($this->tierCache[$cacheKey])) {
+            $rows = $this->versions->activeTiersOn($tripType, $loadDate);
+            $this->tierCache[$cacheKey] = array_map(
+                static fn (array $r): array => ['miles' => $r['miles'], 'rate' => (float) $r['rate']],
+                $rows,
+            );
+        }
+        return $this->tierCache[$cacheKey];
+    }
+
+    /**
+     * The TIER that pays a load: the lowest rung whose miles ≥ the load's
+     * miles (the legacy `WHERE miles >= ? LIMIT 1` rule). Returns the rung
+     * itself, not just its rate, so a surface can tell an admin WHICH rung
+     * paid a load.
+     *
+     * That matters because the ladder stores a flat bracket pay, not a
+     * per-mile rate: a 67-mile load is paid by the 68-mile rung, so
+     * lowering the 66-mile rung changes nothing about it. Without the rung
+     * on screen that looks like a broken preview.
+     *
+     * @return array{miles:int, rate:float}|null null when no rung reaches that mileage
+     */
+    public function tierFor(string $tripType, int $loadMiles, string $loadDate): ?array
+    {
+        foreach ($this->tiersFor($tripType, $loadDate) as $tier) {
             if ($tier['miles'] >= $loadMiles) {
-                return $tier['rate'];
+                return $tier;
             }
         }
         return null;
+    }
+
+    public function lookup(string $tripType, int $loadMiles, string $loadDate): ?float
+    {
+        return $this->tierFor($tripType, $loadMiles, $loadDate)['rate'] ?? null;
     }
 
     /**

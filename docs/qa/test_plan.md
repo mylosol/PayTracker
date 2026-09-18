@@ -2625,11 +2625,31 @@ the browser. Read it line for line against the dashboard.
 - Each row has a **Projected pay breakdown under the draft** disclosure
   listing Loaded Pay / Empty / Shift / Seniority / Weekend / Split /
   Backhaul / Demurrage / Breakdown / Extra and a **Total Load Pay** line.
+- Under each breakdown, a **paid-from** line names the rate row that
+  paid the load, e.g. *"Paid from the 68 mi rate row (covers 67–68 mi).
+  Your draft leaves this row at $57.5100, so it does not move this
+  load."*
+- Each tier table has a **Covers** column showing the mileages a row
+  pays (`≤ 66 mi`, `67–68 mi`, …).
 
 **Fail conditions:** one-way (or trainer) loads missing from the table
 and the strip when they appear on the dashboard; a Total row that
 disagrees with the KPI grid; any driver handle or `#<account id>`
 anywhere on the page.
+
+**Why the paid-from line exists (rate-row semantics).** A rate row is a
+mileage **bracket**: the calculator takes the *lowest* row whose `miles`
+is at least the load's miles — the legacy `WHERE miles >= ? LIMIT 1`
+rule — and the row's value is that bracket's **flat pay**, not a
+per-mile rate. The ladders are sparse (every ~2 miles, `miles` 10–250),
+so a **67-mile load is paid by the 68 row**. Editing the row *below* a
+load's mileage therefore changes nothing about that load, which looks
+like a broken preview if the page doesn't say which row paid it. Check
+the paid-from line names a row whose value the draft actually changed;
+a row beyond the top of the ladder produces *"No rate row reaches N mi"*
+with $0.00 loaded-leg pay. The `Loaded Pay: 67 Miles @ $0.8584` figure on
+load cards is *derived* ($pay ÷ miles) for display — it is not a value
+stored in the ladder.
 
 ### 29b. Focus one trip type
 

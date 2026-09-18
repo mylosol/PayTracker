@@ -25,8 +25,10 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
 <div class="card">
     <h1 class="m-0">Pay-rate admin</h1>
     <p class="text-brand-muted mt-2">
-        Per-mile pay tiers for each trip type. Edit a draft, promote
-        it to current to publish.
+        Pay rows per trip type. Each row is a mileage bracket: it pays every load whose
+        mileage is at most that row's <strong>Miles</strong> value and above the previous
+        row's, and its value is the flat pay for the whole bracket (not a per-mile rate).
+        Edit a draft, promote it to current to publish.
     </p>
     <p class="text-sm mt-3 flex flex-wrap gap-3 items-center">
         <a href="<?= e($base) ?>/pay-admin/preview" class="btn-secondary btn-sm">
@@ -139,8 +141,9 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
             <thead>
                 <tr>
                     <th class="text-right">Miles</th>
-                    <th class="text-right">Current rate</th>
-                    <th class="text-right">Draft rate</th>
+                    <th class="text-right">Covers</th>
+                    <th class="text-right">Current row pay</th>
+                    <th class="text-right">Draft row pay</th>
                     <th>Save / delete draft tier</th>
                 </tr>
             </thead>
@@ -157,19 +160,35 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                     $combined[$r['miles']]['current']  = $combined[$r['miles']]['current']  ?? null;
                 }
                 ksort($combined);
+
+                // Mileage band each row pays. The calculator takes the
+                // LOWEST row whose ceiling is >= the load's miles, so a row
+                // pays from the previous row's ceiling + 1 up to its own —
+                // "Covers" makes visible which loads a row can move.
+                $bands     = [];
+                $prevMiles = 0;
+                foreach (array_keys($combined) as $m) {
+                    $m = (int) $m;
+                    $bands[$m] = $prevMiles === 0
+                        ? sprintf('≤ %d mi', $m)
+                        : sprintf('%d–%d mi', $prevMiles + 1, $m);
+                    $prevMiles = $m;
+                }
+
                 foreach ($combined as $miles => $vals):
                     $milesInt = (int) $miles;
                 ?>
                     <tr>
                         <td data-label="Miles" class="md:text-right"><code><?= $milesInt ?></code></td>
-                        <td data-label="Current rate" class="md:text-right">
+                        <td data-label="Covers" class="md:text-right text-brand-muted whitespace-nowrap"><?= e($bands[$milesInt] ?? '—') ?></td>
+                        <td data-label="Current row pay" class="md:text-right">
                             <?php if ($vals['current'] === null): ?>
                                 <em class="text-brand-muted">(dropped)</em>
                             <?php else: ?>
                                 <code><?= e((string) $vals['current']) ?></code>
                             <?php endif; ?>
                         </td>
-                        <td data-label="Draft rate" class="md:text-right">
+                        <td data-label="Draft row pay" class="md:text-right">
                             <?php if ($vals['draft'] === null): ?>
                                 <span class="text-brand-muted">—</span>
                             <?php else: ?>
@@ -211,7 +230,7 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
             <input type="number" name="miles" min="1" max="65535" step="1" required class="field w-24">
         </div>
         <div>
-            <label class="field-label">Rate ($)</label>
+            <label class="field-label">Pay for this bracket ($)</label>
             <input type="text" name="rate" inputmode="decimal" required placeholder="e.g. 85.1492" class="field w-32">
         </div>
         <button type="submit" class="btn-primary">Add to draft</button>

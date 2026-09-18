@@ -269,6 +269,14 @@ test.describe.serial('pay-rate admin (write path)', () => {
             await expect(diff).toContainText('Round-trip');
             await expect(diff).toContainText('One-way');
             await expect(diff).not.toContainText('111.11');
+            // The paying rate row is named, so an edit to a row below a
+            // load's mileage is visible as a no-op instead of looking like
+            // a broken preview.
+            const ladder = page.locator('div.card', { hasText: /tiers — draft vs current/ }).first();
+            await expect(ladder).toContainText('Covers');
+            // Either the paying row is named, or the row is beyond the top of
+            // the ladder and the page says so — both are the note rendering.
+            await expect(diff).toContainText(/Paid from the \d+ mi rate row|No rate row reaches \d+ mi/);
         } finally {
             await page.evaluate(() => localStorage.removeItem('paytracker.unsavedLoads'));
         }

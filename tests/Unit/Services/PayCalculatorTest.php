@@ -456,4 +456,106 @@ final class PayCalculatorTest extends TestCase
         $result = $calc->computeFor($load);
         $this->assertEqualsWithDelta(0.0, $result['op'], 0.005);
     }
+
+    /**
+     * The rate ladder stores a bracket PAY per row, and a load is paid by
+     * the LOWEST row whose miles >= the load's miles (legacy parity:
+     * `WHERE miles >= ? LIMIT 1`). These four cases pin that down because
+     * it is the exact thing that makes an admin think the draft preview is
+     * broken: the row they edited (66) is not the row that pays a 67-mile
+     * load (68).
+     */
+    private function makeLoadInput(int $loadType, int $loadMiles): LoadInputs
+    {
+        return new LoadInputs(
+            load_type:         $loadType,
+            load_miles:        $loadMiles,
+            empty_miles:       0,
+            begin_empty_miles: 0,
+            is_split:          0,
+            is_weekend:        0,
+            is_backhaul:       0,
+            extra_pay:         0.0,
+            dem_minutes:       0,
+            break_minutes:     0,
+            variables_blob:    '168-night--0',
+        );
+    }
+
+    public function test_paying_row_is_the_next_bracket_ceiling_not_the_row_below(): void
+    {
+        $calc = $this->makeCalculator();
+        // Sparse ladder sampled every 2 miles, with 66 and 68 carrying the
+        // SAME bracket pay — the "duplicate row" an admin sees in the editor.
+        $calc->setRateTiersForTest('round_trip', [
+            ['miles' => 64, 'rate' => 55.23],
+            ['miles' => 66, 'rate' => 57.51],
+            ['miles' => 68, 'rate' => 57.51],
+        ]);
+
+        $result = $calc->computeFor($this->makeLoadInput(1, 67));
+
+        // Paid by the 68 row. base = 57.51 * 1.10 = 63.261 -> 63.26.
+        $this->assertSame(68, $result['base_tier_miles']);
+        $this->assertEqualsWithDelta(63.26, $result['base_pay'], 0.005);
+        // base_rate is DERIVED for the pay card ($base / miles), which is
+        // why a load card can show a per-mile figure that is not in the table.
+        $this->assertEqualsWithDelta(0.9442, $result['base_rate'], 0.0001);
+    }
+
+    public function test_lowering_the_row_below_the_load_changes_nothing(): void
+    {
+        $calc = $this->makeCalculator();
+        // Draft edit: the 66 row cut by $0.99 (57.51 -> 56.52).
+        $calc->setRateTiersForTest('round_trip', [
+            ['miles' => 66, 'rate' => 56.52],
+            ['miles' => 68, 'rate' => 57.51],
+        ]);
+
+        // The 67-mile load is untouched — it still bills the 68 row.
+        $unchanged = $calc->computeFor($this->makeLoadInput(1, 67));
+        $this->assertSame(68, $unchanged['base_tier_miles']);
+        $this->assertEqualsWithDelta(63.26, $unchanged['base_pay'], 0.005);
+
+        // A 66-mile load DOES move: 56.52 * 1.10 = 62.172 -> 62.17.
+        $moved = $calc->computeFor($this->makeLoadInput(1, 66));
+        $this->assertSame(66, $moved['base_tier_miles']);
+        $this->assertEqualsWithDelta(62.17, $moved['base_pay'], 0.005);
+    }
+
+    public function test_lowering_the_paying_row_moves_the_load(): void
+    {
+        $calc = $this->makeCalculator();
+        // Same edit, applied to the row that actually pays a 67-mile load.
+        $calc->setRateTiersForTest('round_trip', [
+            ['miles' => 66, 'rate' => 57.51],
+            ['miles' => 68, 'rate' => 56.52],
+        ]);
+
+        $result = $calc->computeFor($this->makeLoadInput(1, 67));
+        $this->assertSame(68, $result['base_tier_miles']);
+        $this->assertEqualsWithDelta(62.17, $result['base_pay'], 0.005);
+    }
+
+    public function test_no_bracket_reaching_the_mileage_zeroes_base_pay(): void
+    {
+        $calc = $this->makeCalculator();
+        $calc->setRateTiersForTest('long_haul', [
+            ['miles' => 240, 'rate' => 210.00],
+            ['miles' => 250, 'rate' => 218.00],
+        ]);
+
+        // Beyond the top rung: no bracket, no base pay — and
+        // base_tier_miles = 0 tells a surface to say so instead of
+        // quietly showing $0.00 "base".
+        $beyond = $calc->computeFor($this->makeLoadInput(0, 260));
+        $this->assertSame(0, $beyond['base_tier_miles']);
+        $this->assertEqualsWithDelta(0.0, $beyond['base_pay'], 0.005);
+        $this->assertSame(260, $beyond['base_miles']);
+
+        // One-way rungs are reported the same way.
+        $inside = $calc->computeFor($this->makeLoadInput(0, 245));
+        $this->assertSame(250, $inside['base_tier_miles']);
+        $this->assertEqualsWithDelta(239.80, $inside['base_pay'], 0.005);
+    }
 }

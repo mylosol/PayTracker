@@ -57,6 +57,115 @@ $focused  = $scope === 'focused';
 $otherType = static fn (string $t): string => $t === 'round_trip' ? 'long_haul' : 'round_trip';
 
 /**
+ * The mileage band a rate row covers, e.g. "67–68 mi" (or "≤ 10 mi" for
+ * the bottom row).
+ *
+ * A load is paid by the LOWEST row whose ceiling is ≥ its miles — the
+ * legacy `WHERE miles >= ? LIMIT 1` rule — so a 67-mile load is paid by
+ * the 68 row and NOT by the 66 row. That is the whole reason an edit to
+ * the row below a load's mileage can legitimately change nothing about
+ * that load, which is why the preview names the paying row.
+ *
+ * @param list<array{miles:int, rate:string}> $tiers
+ */
+$bandLabel = static function (array $tiers, int $miles): ?string {
+    $prev = 0;
+    foreach ($tiers as $t) {
+        $m = (int) $t['miles'];
+        if ($m === $miles) {
+            return $prev === 0 ? sprintf('≤ %d mi', $m) : sprintf('%d–%d mi', $prev + 1, $m);
+        }
+        $prev = $m;
+    }
+    return null;
+};
+
+/** The value of one row (by ceiling mileage) in a tier list, or null. */
+$valueAt = static function (array $tiers, int $miles): ?float {
+    foreach ($tiers as $t) {
+        if ((int) $t['miles'] === $miles) {
+            return (float) $t['rate'];
+        }
+    }
+    return null;
+};
+
+/**
+ * "Which row paid this load, and did my draft touch it?" — the line that
+ * turns a silent no-op edit into an explanation. Rendered under the
+ * per-load breakdown.
+ */
+$bracketNote = static function (?array $bd) use ($bandLabel, $valueAt, $current_tiers, $draft_tiers): string {
+    if ($bd === null) {
+        return '';
+    }
+    if (! array_key_exists('base_tier_miles', $bd)) {
+        // Breakdown computed before the paying row was recorded (e.g. a
+        // stored pay_breakdown blob). Say nothing rather than guess.
+        return '';
+    }
+    $tripLabel = (string) ($bd['trip_label'] ?? '');
+    if ($tripLabel !== 'Round-trip' && $tripLabel !== 'One-way') {
+        return '';   // trainer: flat pay, no rate rows apply
+    }
+
+    $trip   = $tripLabel === 'Round-trip' ? 'round_trip' : 'long_haul';
+    $miles  = (int) ($bd['base_miles'] ?? 0);
+    $tier   = (int) ($bd['base_tier_miles'] ?? 0);
+    $draft  = $draft_tiers[$trip] ?? [];
+    $cur    = $current_tiers[$trip] ?? [];
+    $ladder = $draft !== [] ? $draft : $cur;
+
+    if ($tier === 0) {
+        if ($miles === 0) {
+            return '';
+        }
+        $top = $ladder === [] ? null : (int) $ladder[count($ladder) - 1]['miles'];
+        return sprintf(
+            '<p class="mt-1 mb-0 text-xs text-amber-600 dark:text-amber-400">'
+            . 'No rate row reaches %d mi, so the loaded-leg pay is $0.00 (top row on file: %s). '
+            . 'Add a row at %d mi or above to pay this load.</p>',
+            $miles,
+            $top !== null ? $top . ' mi' : 'none',
+            $miles,
+        );
+    }
+
+    $band = $bandLabel($ladder, $tier);
+
+    // Did the draft change the row that pays this load?
+    $curPay   = $valueAt($cur, $tier);
+    $draftPay = $valueAt($draft, $tier);
+    $tail     = '';
+    if ($draft === []) {
+        $tail = ' No draft for this trip type, so this is the current row.';
+    } elseif ($draftPay !== null && $curPay === null) {
+        $tail = sprintf(' Your draft adds this row at $%s.', number_format($draftPay, 4));
+    } elseif ($draftPay !== null && $curPay !== null && abs($draftPay - $curPay) < 0.00005) {
+        $tail = sprintf(
+            ' Your draft leaves this row at $%s, so it does not move this load.',
+            number_format($curPay, 4),
+        );
+    } elseif ($draftPay !== null && $curPay !== null) {
+        $tail = sprintf(
+            ' Your draft moves this row $%s → $%s.',
+            number_format($curPay, 4),
+            number_format($draftPay, 4),
+        );
+    } elseif ($draftPay === null && $curPay !== null) {
+        $tail = ' Your draft deletes this row, so the load falls to a higher one.';
+    }
+
+    return sprintf(
+        '<p class="mt-1 mb-0 text-xs text-brand-muted">Paid from the <strong>%d mi</strong> rate row%s. '
+        . 'A row is that bracket\'s flat pay, not a per-mile rate — a load takes the lowest row whose mileage is at least its own.%s</p>',
+        $tier,
+        $band !== null ? ' (covers ' . e($band) . ')' : '',
+        e($tail),
+    );
+};
+
+/**
  * Component rows for one load's projected pay — the same card the dashboard
  * renders from pay_breakdown, so the two read identically. Rendered
  * server-side (the projection lives in PHP, not the browser).
@@ -444,6 +553,7 @@ $bucketNote = static function (array $bucket): ?string {
                                     <table class="mt-2 text-[13px]">
                                         <tbody><?= $breakdownRows($bd) ?></tbody>
                                     </table>
+                                    <?= $bracketNote($bd) ?>
                                     <p class="text-brand-muted mt-2 mb-0 text-xs">
                                         Current column shows <?= $unsaved ? 'what this load pays today (recomputed)' : 'the stored pay on the load' ?>:
                                         <?= e($money($c['old_np'])) ?>. Projected is the same load repriced
@@ -482,13 +592,21 @@ $tierTypes = $focused ? [$trip_type] : ['round_trip', 'long_haul'];
                 to include it in the projection.
             </p>
         <?php endif; ?>
+        <p class="text-brand-muted mt-2 mb-0 text-xs">
+            A load takes the lowest row whose <strong>Miles ≤</strong> value is at least its own
+            mileage, and that row's value is the flat pay for the whole bracket — not a
+            per-mile rate. <strong>Covers</strong> shows the mileages each row pays, and every
+            load's breakdown names the row that paid it, so an edit that moves nothing is
+            visible as such instead of looking like a broken preview.
+        </p>
         <div class="table-wrap mt-3">
             <table class="data-table text-[13px]">
                 <thead>
                     <tr>
                         <th class="text-left">Miles ≤</th>
-                        <th class="text-right">Current rate</th>
-                        <th class="text-right">Draft rate</th>
+                        <th class="text-left">Covers</th>
+                        <th class="text-right">Current row pay</th>
+                        <th class="text-right">Draft row pay</th>
                         <th class="text-right">Δ</th>
                     </tr>
                 </thead>
@@ -511,6 +629,7 @@ $tierTypes = $focused ? [$trip_type] : ['round_trip', 'long_haul'];
                         ?>
                         <tr>
                             <td class="whitespace-nowrap"><?= (int) $miles ?></td>
+                            <td class="whitespace-nowrap text-brand-muted"><?= e($bandLabel($drf !== [] ? $drf : $cur, (int) $miles) ?? '—') ?></td>
                             <td class="text-right whitespace-nowrap"><?= $curRate !== null ? '$' . number_format($curRate, 4) : '<em class="text-brand-muted">removed</em>' ?></td>
                             <td class="text-right whitespace-nowrap font-semibold"><?= $draftRate !== null ? '$' . number_format($draftRate, 4) : '<em class="text-brand-muted">added</em>' ?></td>
                             <td class="text-right whitespace-nowrap <?= $delta !== null ? $deltaClass($delta) : '' ?>">
