@@ -2631,6 +2631,14 @@ the browser. Read it line for line against the dashboard.
   load."*
 - Each tier table has a **Covers** column showing the mileages a row
   pays (`≤ 66 mi`, `67–68 mi`, …).
+- Both `/pay-admin` and the preview list **flagged rows** under the
+  ladder when one looks wrong rather than merely different: a rung that
+  pays less than a shorter one, or a value over five times the ladder's
+  median (the legacy `999.9999`-at-122 sentinel shape). Expect
+  *"44 mi — pays $7.49 less than the 42 mi row, so a load here earns
+  less than a shorter one"* on the round-trip ladder: the 44-mile rung
+  is the one row a raise pass missed, still at its 2019 value while all
+  111 other rungs moved up.
 
 **Fail conditions:** one-way (or trainer) loads missing from the table
 and the strip when they appear on the dashboard; a Total row that

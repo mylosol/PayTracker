@@ -581,6 +581,15 @@ $tierTypes = $focused ? [$trip_type] : ['round_trip', 'long_haul'];
     <?php
     $cur = $current_tiers[$tierType] ?? [];
     $drf = $draft_tiers[$tierType] ?? [];
+
+    // Rows that look wrong rather than merely different: the ladder that
+    // will pay these loads, checked for a rung below a shorter one and for
+    // placeholder-style values. Reasons are spelled out under the table.
+    $ladderMap = [];
+    foreach ($drf !== [] ? $drf : $cur as $t) {
+        $ladderMap[(int) $t['miles']] = (float) $t['rate'];
+    }
+    $tierFlags = \PayTracker\Models\PayRate::flagRungs($ladderMap);
     ?>
     <div class="card">
         <h2 class="m-0"><?= e($tierType === 'round_trip' ? 'Round-trip' : 'Long-haul') ?> tiers — draft vs current</h2>
@@ -628,7 +637,7 @@ $tierTypes = $focused ? [$trip_type] : ['round_trip', 'long_haul'];
                         $delta     = ($curRate !== null && $draftRate !== null) ? $draftRate - $curRate : null;
                         ?>
                         <tr>
-                            <td class="whitespace-nowrap"><?= (int) $miles ?></td>
+                            <td class="whitespace-nowrap"><?= (int) $miles ?><?php if (isset($tierFlags[(int) $miles])): ?> <span class="text-amber-600 dark:text-amber-400" title="<?= e($tierFlags[(int) $miles]) ?>" aria-label="flagged: <?= e($tierFlags[(int) $miles]) ?>">&#9888;</span><?php endif; ?></td>
                             <td class="whitespace-nowrap text-brand-muted"><?= e($bandLabel($drf !== [] ? $drf : $cur, (int) $miles) ?? '—') ?></td>
                             <td class="text-right whitespace-nowrap"><?= $curRate !== null ? '$' . number_format($curRate, 4) : '<em class="text-brand-muted">removed</em>' ?></td>
                             <td class="text-right whitespace-nowrap font-semibold"><?= $draftRate !== null ? '$' . number_format($draftRate, 4) : '<em class="text-brand-muted">added</em>' ?></td>
@@ -644,6 +653,16 @@ $tierTypes = $focused ? [$trip_type] : ['round_trip', 'long_haul'];
                 </tbody>
             </table>
         </div>
+        <?php if ($tierFlags !== []): ?>
+            <div class="mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 text-slate-700 dark:text-slate-200 text-[13px]">
+                <strong class="text-amber-900 dark:text-amber-300">Ladder looks off at:</strong>
+                <ul class="mb-0 mt-1 pl-4">
+                    <?php foreach ($tierFlags as $flaggedMiles => $reason): ?>
+                        <li><code><?= (int) $flaggedMiles ?></code> mi — <?= e($reason) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php endif; ?>
     </div>
 <?php endforeach; ?>
 

@@ -175,11 +175,24 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                     $prevMiles = $m;
                 }
 
+                // Rows that look WRONG rather than merely different: a rung
+                // paying less than a shorter one, or a placeholder value
+                // many times the ladder's median. The reasons are spelled
+                // out under the table, not hidden behind an icon.
+                $ladderVal = [];
+                foreach ($combined as $m => $vals) {
+                    $val = $vals['draft'] ?? $vals['current'];
+                    if ($val !== null) {
+                        $ladderVal[(int) $m] = (float) $val;
+                    }
+                }
+                $flags = \PayTracker\Models\PayRate::flagRungs($ladderVal);
+
                 foreach ($combined as $miles => $vals):
                     $milesInt = (int) $miles;
                 ?>
                     <tr>
-                        <td data-label="Miles" class="md:text-right"><code><?= $milesInt ?></code></td>
+                        <td data-label="Miles" class="md:text-right"><code><?= $milesInt ?></code><?php if (isset($flags[$milesInt])): ?> <span class="text-amber-600 dark:text-amber-400" title="<?= e($flags[$milesInt]) ?>" aria-label="flagged: <?= e($flags[$milesInt]) ?>">&#9888;</span><?php endif; ?></td>
                         <td data-label="Covers" class="md:text-right text-brand-muted whitespace-nowrap"><?= e($bands[$milesInt] ?? '—') ?></td>
                         <td data-label="Current row pay" class="md:text-right">
                             <?php if ($vals['current'] === null): ?>
@@ -220,6 +233,17 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
             </tbody>
         </table>
     </div>
+
+    <?php if ($flags !== []): ?>
+        <div class="mt-3 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 text-slate-700 dark:text-slate-200 text-[13px]">
+            <strong class="text-amber-900 dark:text-amber-300">Worth checking before you promote:</strong>
+            <ul class="mb-0 mt-1 pl-4">
+                <?php foreach ($flags as $flaggedMiles => $reason): ?>
+                    <li><code><?= (int) $flaggedMiles ?></code> mi — <?= e($reason) ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+    <?php endif; ?>
 
     <h3 class="mt-6 mb-3 text-base font-semibold">Add tier</h3>
     <form method="post" action="<?= e($base) ?>/pay-admin/draft/upsert"

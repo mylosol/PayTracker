@@ -44,6 +44,14 @@ test.describe.serial('pay-rate admin (write path)', () => {
         // Both editor cards present
         await expect(page.getByRole('heading', { name: /^Round-trip$/ })).toBeVisible();
         await expect(page.getByRole('heading', { name: /^Long-haul$/ })).toBeVisible();
+        // The ladder reads as brackets, not per-mile rates: each row shows
+        // the mileages it pays, and the page says so.
+        const ratesTable = page.locator('table.data-table').first();
+        await expect(ratesTable.locator('th', { hasText: 'Covers' })).toHaveCount(1);
+        await expect(ratesTable.locator('th', { hasText: /row pay/ }).first()).toBeVisible();
+        // Locator + hasText, not getByText(regex): the paragraph continues
+        // with inline <strong> nodes and getByText matches full text.
+        await expect(page.locator('p', { hasText: /flat pay for the whole bracket/i })).toBeVisible();
     });
 
     test('10c — start draft from current', async ({ page }) => {
