@@ -277,34 +277,44 @@ final class PayAdminController extends Controller
     }
 
     /**
-     * GET  /pay-admin/preview?trip_type=X[&date=YYYY-MM-DD]
-     * POST /pay-admin/preview  (same query params + `unsaved_loads` JSON)
+     * GET  /pay-admin/preview[?trip_type=round_trip|long_haul][&date=YYYY-MM-DD]
+     * POST /pay-admin/preview  (same params + `unsaved_loads` JSON)
      *
      * Dry-run the draft rates against the loads the VIEWER sees on their
      * own dashboard for the pay week containing `date` (default: today).
-     * Each row is repriced through a fresh PayCalculator whose RateLookup
-     * is seeded with the draft tiers (setRateTiersForTest is the same
-     * injection point the unit tests use).
      *
-     * Scope is the signed-in account's own loads — never the fleet's.
-     * See DriverLoad::forPreviewForDriver() for why that predicate is
-     * load-bearing: the first revision repriced "every load in the
-     * window" and rendered other drivers' handles, routes, dates and
-     * pay on an admin+ page. Fleet-wide figures belong on the
-     * super_admin QA surface (/loads), not here.
+     * Default scope is EVERY trip type. That matters: the question an
+     * admin is really asking is "what does this do to my week", and the
+     * dashboard's This Week card sums every load the driver has — one-ways
+     * included. A per-type-only page silently dropped the one-way loads and
+     * could never be reconciled against the dashboard. `?trip_type=…`
+     * still narrows to a single type for the per-card button on
+     * /pay-admin.
+     *
+     * Drafts are seeded per trip type on ONE calculator (PayCalculator
+     * resolves the tier set from each row's own load_type), so a round-trip
+     * draft and a long-haul draft are previewed together. A type with no
+     * draft is compared at current rates and labelled — visible, not
+     * hidden. Trainer rows (load_type 4) carry no tiers and are shown
+     * unchanged. Rows whose legacy load_type the calculator can't price
+     * keep their stored pay and are flagged, so the totals still reconcile
+     * with the dashboard card.
+     *
+     * Scope is the signed-in account's own loads — never the fleet's. See
+     * DriverLoad::forPreviewForDriver() for why that predicate is
+     * load-bearing: the first revision repriced "every load in the window"
+     * and rendered other drivers' handles, routes, dates and pay on an
+     * admin+ page. Fleet-wide figures belong on the super_admin QA surface
+     * (/loads), not here.
      *
      * Unconfirmed (in-browser) loads. A driver with "Store Load Info" OFF
      * keeps loads in localStorage, and the dashboard hydrates them — so a
      * preview that reads only `driver_loads` disagrees with the very
-     * dashboard it claims to project (the reported "$434.05 vs $0.00").
-     * The page's own JS posts that scratchpad array back here on POST;
-     * UnsavedLoads validates it and we reprice the entries with the same
-     * calculators, never trusting the browser's money figures. Nothing is
-     * written in either case — the DB is untouched.
-     *
-     * Answers the "what does a +7% raise actually do to my paycheck"
-     * question without requiring a Promote → observe → un-Promote
-     * ceremony.
+     * dashboard it claims to project. The page's own JS posts that
+     * scratchpad array back here on POST; UnsavedLoads validates it and we
+     * reprice the entries with the same calculators, never trusting the
+     * browser's money figures. Nothing is written in either case — the DB
+     * is untouched.
      */
     public function preview(Request $request): Response
     {
@@ -316,117 +326,175 @@ final class PayAdminController extends Controller
             return $denied;
         }
 
+        // '' = every trip type (the default view). An explicit value is the
+        // per-type deep-link from the /pay-admin rate cards.
         $tripType = (string) $request->input('trip_type', '');
-        if (! in_array($tripType, PayRate::TRIP_TYPES, true)) {
+        if ($tripType !== '' && ! in_array($tripType, PayRate::TRIP_TYPES, true)) {
             $this->session->put('_flash', 'Unknown trip_type in preview request.');
             return $this->redirect($request->basePath() . '/pay-admin');
         }
+        $focused = $tripType !== '';
+
         // Anchor day for the pay week we preview. Same guard as the
         // dashboard's ?date= so both surfaces agree on which week "now"
         // means when deciding what counts as a dashboard load.
         $dateRaw = (string) $request->input('date', '');
         $anchor  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateRaw) === 1 ? $dateRaw : date('Y-m-d');
 
-        // Draft must exist — otherwise there is nothing to compare
-        // against and the preview would just echo current pay back.
-        if (! $this->rates->hasDraft($tripType)) {
+        // Which drafts exist. A draft is what makes this a preview rather
+        // than an echo of current pay.
+        $hasDraft = [];
+        foreach (PayRate::TRIP_TYPES as $type) {
+            $hasDraft[$type] = $this->rates->hasDraft($type);
+        }
+        if (! in_array(true, $hasDraft, true)) {
+            $this->session->put('_flash', 'No drafts yet. Start a draft (or Bump %) before running Preview.');
+            return $this->redirect($request->basePath() . '/pay-admin');
+        }
+        if ($focused && ! $hasDraft[$tripType]) {
             $this->session->put('_flash', sprintf(
-                'No draft for %s yet. Start Draft (or Bump %%) before running Preview.',
+                'No draft for %s yet. Start Draft (or Bump %%) for it, or preview every trip type.',
                 $tripType,
             ));
             return $this->redirect($request->basePath() . '/pay-admin');
         }
 
-        $draftTiers = array_map(
-            static fn (array $t): array => ['miles' => (int) $t['miles'], 'rate' => (float) $t['rate']],
-            $this->rates->tiers($tripType, 'draft'),
-        );
+        // trip_type ↔ load_type. Explicit map so a future trip_type shows up
+        // here rather than silently misrouting.
+        $tripLoadTypes = ['round_trip' => 1, 'long_haul' => 0];
 
-        // Two fresh calculators, so neither tier override leaks into the
-        // shared instance the recomputer uses:
-        //   draft   → the projection we are previewing
-        //   current → what the load pays today, recomputed server-side so
-        //             the "current" column never comes from the browser
+        // Projection calculator, seeded with every draft in scope.
         $draftCalc = new PayCalculator($this->rateVersions, $this->payVariables);
-        $draftCalc->setRateTiersForTest($tripType, $draftTiers);
+        foreach (array_keys($tripLoadTypes) as $type) {
+            if (! $hasDraft[$type] || ($focused && $type !== $tripType)) {
+                continue;
+            }
+            $draftCalc->setRateTiersForTest($type, array_map(
+                static fn (array $t): array => ['miles' => (int) $t['miles'], 'rate' => (float) $t['rate']],
+                $this->rates->tiers($type, 'draft'),
+            ));
+        }
+
+        // Current-rate calculator (unseeded → the live version-anchored
+        // tiers). Unconfirmed rows get their "current" figure from here
+        // rather than from the browser.
         $currentCalc = new PayCalculator($this->rateVersions, $this->payVariables);
 
-        // load_type: round_trip → 1, long_haul → 0. Kept as a match
-        // so a future trip_type addition surfaces here as a fatal
-        // rather than a silent misroute.
-        $loadType = match ($tripType) {
-            'round_trip' => 1,
-            'long_haul'  => 0,
-        };
+        // Load types the calculator can price: 0 one-way, 1 round-trip,
+        // 4 trainer. Anything else in the window keeps its stored pay.
+        $repricable = [0, 1, 4];
+        $scopeTypes = $focused ? [$tripLoadTypes[$tripType]] : [];
 
-        // Scope: the viewer's own loads, in the pay week they'd be
-        // looking at on /dashboard. The driver_id comes from the
-        // authenticated account, never from the request, so there is no
-        // parameter an admin could point at another driver's rows.
+        // Scope: the viewer's own loads, in the pay week they'd be looking
+        // at on /dashboard. The driver_id comes from the authenticated
+        // account, never from the request, so there is no parameter an
+        // admin could point at another driver's rows.
         $week     = PayWeek::containing($account, $anchor);
         $viewerId = (int) $account['id'];
         $today    = date('Y-m-d');
         $rows     = $this->loads->forPreviewForDriver(
             $viewerId,
-            $loadType,
+            $scopeTypes,
             $week['since'],
             $week['until'],
             500,
         );
 
+        // Sub-total buckets, keyed by load_type string ('?' = a row the
+        // calculator can't price).
+        $bucketMeta = [
+            '1' => ['label' => 'Round-trip', 'trip_type' => 'round_trip'],
+            '0' => ['label' => 'One-way',    'trip_type' => 'long_haul'],
+            '4' => ['label' => 'Trainer',    'trip_type' => null],
+            '?' => ['label' => 'Not repriced', 'trip_type' => null],
+        ];
+
         $comparisons = [];
-        $savedOld    = 0.0;
-        $savedNew    = 0.0;
+        $buckets     = [];
+
+        $bucketFor = function (string $key) use (&$buckets, $bucketMeta, $hasDraft, $repricable): void {
+            if (isset($buckets[$key])) {
+                return;
+            }
+            $meta       = $bucketMeta[$key] ?? $bucketMeta['?'];
+            $tierType   = $meta['trip_type'];
+            $buckets[$key] = [
+                'key'         => $key,
+                'label'       => $meta['label'],
+                'trip_type'   => $tierType,
+                'count'       => 0,
+                'saved_count' => 0,
+                'unsaved_count' => 0,
+                'old'         => 0.0,
+                'new'         => 0.0,
+                'repriced'    => in_array((int) $key, $repricable, true),
+                // null = tiers don't apply to this bucket at all.
+                'has_draft'   => $tierType !== null ? $hasDraft[$tierType] : null,
+            ];
+        };
 
         foreach ($rows as $row) {
-            $stored = (float) ($row['np'] ?? 0);
-            try {
-                $input = new LoadInputs(
-                    load_type:          (int) $row['load_type'],
-                    load_miles:         (int) ($row['empty_miles'] ?? 0), // legacy misnomer — loaded miles
-                    empty_miles:        (int) ($row['end_empty_miles'] ?? 0),
-                    begin_empty_miles:  (int) ($row['begin_empty_miles'] ?? 0),
-                    is_split:           (int) ($row['is_split'] ?? 0),
-                    is_weekend:         (int) ($row['is_weekend'] ?? 0),
-                    is_backhaul:        (int) ($row['is_backhaul'] ?? 0),
-                    extra_pay:          (float) ($row['extra_pay'] ?? 0),
-                    dem_minutes:        (int) ($row['dem_minutes'] ?? 0),
-                    break_minutes:      (int) ($row['break_minutes'] ?? 0),
-                    variables_blob:     (string) ($row['variables'] ?? '168-day--0'),
-                    out_of_route_ind:   (int) ($row['out_of_route_ind'] ?? 0),
-                    out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
-                    load_date:          isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
-                );
-                $projection = $draftCalc->computeFor($input);
-                $newPay     = (float) $projection['np'];
-            } catch (\Throwable $e) {
-                // A single bad row shouldn't blank the preview — skip
-                // it and let the aggregate still surface. Rare in
-                // practice (all fields have defaults) but defensive.
-                $newPay     = $stored;
-                $projection = null;
+            $stored   = (float) ($row['np'] ?? 0);
+            $rowType  = is_numeric($row['load_type'] ?? null) ? (int) $row['load_type'] : -1;
+            $pricable = in_array($rowType, $repricable, true);
+            $key      = $pricable ? (string) $rowType : '?';
+
+            $projection = null;
+            $newPay     = $stored;
+
+            if ($pricable) {
+                try {
+                    $input = new LoadInputs(
+                        load_type:          $rowType,
+                        load_miles:         (int) ($row['empty_miles'] ?? 0), // legacy misnomer — loaded miles
+                        empty_miles:        (int) ($row['end_empty_miles'] ?? 0),
+                        begin_empty_miles:  (int) ($row['begin_empty_miles'] ?? 0),
+                        is_split:           (int) ($row['is_split'] ?? 0),
+                        is_weekend:         (int) ($row['is_weekend'] ?? 0),
+                        is_backhaul:        (int) ($row['is_backhaul'] ?? 0),
+                        extra_pay:          (float) ($row['extra_pay'] ?? 0),
+                        dem_minutes:        (int) ($row['dem_minutes'] ?? 0),
+                        break_minutes:      (int) ($row['break_minutes'] ?? 0),
+                        variables_blob:     (string) ($row['variables'] ?? '168-day--0'),
+                        out_of_route_ind:   (int) ($row['out_of_route_ind'] ?? 0),
+                        out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
+                        load_date:          isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
+                    );
+                    $projection = $draftCalc->computeFor($input);
+                    $newPay     = (float) $projection['np'];
+                } catch (\Throwable $e) {
+                    // A single bad row shouldn't blank the preview — fall
+                    // back to its stored pay and let the aggregate surface.
+                    $projection = null;
+                    $newPay     = $stored;
+                }
             }
 
+            $bucketFor($key);
             $comparisons[] = [
-                'source'         => 'saved',
-                'frtl'           => (int) ($row['frtl'] ?? 0),
-                'local_id'       => null,
-                'date'           => isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
-                'pickup'         => (string) ($row['pickup_city'] ?? ''),
-                'delivery'       => (string) ($row['delivery_city'] ?? ''),
-                'notes'          => (string) ($row['notes'] ?? ''),
-                'old_np'         => $stored,
-                'new_np'         => $newPay,
-                'delta'          => $newPay - $stored,
-                'new_breakdown'  => $projection,
+                'source'        => 'saved',
+                'bucket'        => $key,
+                'repriced'      => $pricable,
+                'frtl'          => (int) ($row['frtl'] ?? 0),
+                'local_id'      => null,
+                'date'          => isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
+                'pickup'        => (string) ($row['pickup_city'] ?? ''),
+                'delivery'      => (string) ($row['delivery_city'] ?? ''),
+                'notes'         => (string) ($row['notes'] ?? ''),
+                'old_np'        => $stored,
+                'new_np'        => $newPay,
+                'delta'         => $newPay - $stored,
+                'new_breakdown' => $projection,
             ];
-            $savedOld += $stored;
-            $savedNew += $newPay;
+            $buckets[$key]['count']++;
+            $buckets[$key]['saved_count']++;
+            $buckets[$key]['old'] += $stored;
+            $buckets[$key]['new'] += $newPay;
         }
 
         // --- Unconfirmed (in-browser) loads ---------------------------------
-        // Only on POST: the entries live in the browser, so the page has
-        // to hand them over before the server can reprice them.
+        // Only on POST: the entries live in the browser, so the page has to
+        // hand them over before the server can reprice them.
         $unsaved = ['entries' => [], 'dropped' => 0, 'truncated' => false, 'error' => null];
         if ($request->isMethod('POST')) {
             $this->session->start();
@@ -437,22 +505,21 @@ final class PayAdminController extends Controller
         }
 
         // The dashboard hydrates scratchpad rows for TODAY only — past and
-        // future dates render DB-backed loads by spec. Mirror that exactly
-        // so the preview total reconciles with the card it is projecting,
-        // rather than inventing rows the driver can't see.
-        $weekHasToday  = $today >= $week['start'] && $today <= $week['end'];
-        $unsavedShown  = 0;
-        $unsavedOld    = 0.0;
-        $unsavedNew    = 0.0;
+        // future dates render DB-backed loads by spec. Mirror that exactly so
+        // the preview reconciles with the card it is projecting, rather than
+        // inventing rows the driver can't see.
+        $weekHasToday = $today >= $week['start'] && $today <= $week['end'];
+        $unsavedShown = 0;
 
         if ($unsaved['entries'] !== [] && ! $weekHasToday) {
             $unsaved['error'] = 'Unconfirmed loads only appear on today\'s dashboard, so they are not part of a past or future week. Preview the week containing today to include them.';
         } elseif ($unsaved['entries'] !== []) {
-            $blob = $this->blobBuilder->build($account);
+            $unsavedTypes = $focused ? [$tripLoadTypes[$tripType]] : $repricable;
+            $blob         = $this->blobBuilder->build($account);
 
             foreach ($unsaved['entries'] as $entry) {
-                // A different trip type isn't part of this draft's scope.
-                if ((int) $entry['load_type'] !== $loadType) {
+                $entryType = (int) $entry['load_type'];
+                if (! in_array($entryType, $unsavedTypes, true)) {
                     continue;
                 }
                 if ((string) $entry['date'] !== $today) {
@@ -469,8 +536,12 @@ final class PayAdminController extends Controller
                     continue;
                 }
 
+                $key = (string) $entryType;
+                $bucketFor($key);
                 $comparisons[] = [
                     'source'        => 'unsaved',
+                    'bucket'        => $key,
+                    'repriced'      => true,
                     'frtl'          => null,
                     'local_id'      => (string) $entry['local_id'],
                     'date'          => (string) $entry['date'],
@@ -482,14 +553,16 @@ final class PayAdminController extends Controller
                     'delta'         => $newPay - $oldPay,
                     'new_breakdown' => $projection,
                 ];
-                $unsavedOld += $oldPay;
-                $unsavedNew += $newPay;
+                $buckets[$key]['count']++;
+                $buckets[$key]['unsaved_count']++;
+                $buckets[$key]['old'] += $oldPay;
+                $buckets[$key]['new'] += $newPay;
                 $unsavedShown++;
             }
         }
 
-        // Unconfirmed rows first (they're the ones the viewer just entered),
-        // then newest-first, which is how the dashboard tables read.
+        // Unconfirmed rows first (they're the ones just entered), then
+        // newest-first, which is how the dashboard tables read.
         usort($comparisons, static function (array $a, array $b): int {
             $byDate = strcmp((string) $b['date'], (string) $a['date']);
             if ($byDate !== 0) {
@@ -498,8 +571,31 @@ final class PayAdminController extends Controller
             return ($b['source'] === 'unsaved' ? 1 : 0) <=> ($a['source'] === 'unsaved' ? 1 : 0);
         });
 
-        $totalOld   = $savedOld + $unsavedOld;
-        $totalNew   = $savedNew + $unsavedNew;
+        // Bucket order: round-trip, one-way, trainer, then the unpriced
+        // leftovers. Keeps the sub-total strip stable between renders.
+        $bucketOrder = ['1' => 0, '0' => 1, '4' => 2, '?' => 3];
+        uksort($buckets, static fn (string $a, string $b): int => ($bucketOrder[$a] ?? 9) <=> ($bucketOrder[$b] ?? 9));
+
+        $totalOld = 0.0;
+        $totalNew = 0.0;
+        $savedOld = 0.0;
+        $savedNew = 0.0;
+        $unsavedOld = 0.0;
+        $unsavedNew = 0.0;
+        foreach ($buckets as $bucket) {
+            $totalOld += $bucket['old'];
+            $totalNew += $bucket['new'];
+        }
+        foreach ($comparisons as $comparison) {
+            if ($comparison['source'] === 'saved') {
+                $savedOld += $comparison['old_np'];
+                $savedNew += $comparison['new_np'];
+            } else {
+                $unsavedOld += $comparison['old_np'];
+                $unsavedNew += $comparison['new_np'];
+            }
+        }
+
         $deltaTotal = $totalNew - $totalOld;
         $deltaPct   = $totalOld > 0 ? ($deltaTotal / $totalOld) * 100.0 : 0.0;
 
@@ -511,43 +607,49 @@ final class PayAdminController extends Controller
             $unsaved['error'] = $unsaved['error'] === null ? $note : $unsaved['error'] . ' ' . $note;
         }
         if ($unsaved['dropped'] > 0) {
-            $note = sprintf(
-                '%d unconfirmed load(s) could not be read and were left out.',
-                $unsaved['dropped'],
-            );
+            $note = sprintf('%d unconfirmed load(s) could not be read and were left out.', $unsaved['dropped']);
             $unsaved['error'] = $unsaved['error'] === null ? $note : $unsaved['error'] . ' ' . $note;
         }
 
         return $this->view('pay-admin/preview', [
-            'base'                => $request->basePath(),
-            'actor'               => $account,
-            'trip_type'           => $tripType,
-            'trip_label'          => $this->tripLabel($tripType),
-            'load_type'           => $loadType,
-            'anchor'              => $anchor,
-            'today'               => $today,
-            'week_start'          => $week['start'],
-            'week_end'            => $week['end'],
-            'week_start_day'      => $week['start_day'],
-            'week_has_today'      => $weekHasToday,
-            'row_count'           => count($comparisons),
-            'saved_count'         => count($rows),
-            'unsaved_count'       => $unsavedShown,
-            'unsaved_requested'   => $request->isMethod('POST'),
-            'unsaved_live'        => count($unsaved['entries']),
-            'unsaved_error'       => $unsaved['error'],
-            'total_old'           => $totalOld,
-            'total_new'           => $totalNew,
-            'delta_total'         => $deltaTotal,
-            'delta_pct'           => $deltaPct,
-            'total_old_saved'     => $savedOld,
-            'total_new_saved'     => $savedNew,
-            'total_old_unsaved'   => $unsavedOld,
-            'total_new_unsaved'   => $unsavedNew,
-            'comparisons'         => $comparisons,
-            'draft_tiers'         => $draftTiers,
-            'current_tiers'       => $this->rates->tiers($tripType, 'current'),
-            'csrf_token'          => $this->csrf->token(),
+            'base'              => $request->basePath(),
+            'actor'             => $account,
+            'scope'             => $focused ? 'focused' : 'all',
+            'trip_type'         => $tripType,
+            'trip_label'        => $focused ? $this->tripLabel($tripType) : 'All trip types',
+            'anchor'            => $anchor,
+            'today'             => $today,
+            'week_start'        => $week['start'],
+            'week_end'          => $week['end'],
+            'week_start_day'    => $week['start_day'],
+            'week_has_today'    => $weekHasToday,
+            'has_draft'         => $hasDraft,
+            'buckets'           => array_values($buckets),
+            'row_count'         => count($comparisons),
+            'saved_count'       => count($rows),
+            'unsaved_count'     => $unsavedShown,
+            'unsaved_requested' => $request->isMethod('POST'),
+            'unsaved_live'      => count($unsaved['entries']),
+            'unsaved_error'     => $unsaved['error'],
+            'total_old'         => $totalOld,
+            'total_new'         => $totalNew,
+            'delta_total'       => $deltaTotal,
+            'delta_pct'         => $deltaPct,
+            'total_old_saved'   => $savedOld,
+            'total_new_saved'   => $savedNew,
+            'total_old_unsaved' => $unsavedOld,
+            'total_new_unsaved' => $unsavedNew,
+            'comparisons'       => $comparisons,
+            'scope_load_types'  => $focused ? [$tripLoadTypes[$tripType]] : $repricable,
+            'current_tiers'     => [
+                'round_trip' => $this->rates->tiers('round_trip', 'current'),
+                'long_haul'  => $this->rates->tiers('long_haul', 'current'),
+            ],
+            'draft_tiers'       => [
+                'round_trip' => $hasDraft['round_trip'] ? $this->rates->tiers('round_trip', 'draft') : [],
+                'long_haul'  => $hasDraft['long_haul'] ? $this->rates->tiers('long_haul', 'draft') : [],
+            ],
+            'csrf_token'        => $this->csrf->token(),
         ]);
     }
 

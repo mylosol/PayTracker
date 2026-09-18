@@ -28,7 +28,10 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
         Per-mile pay tiers for each trip type. Edit a draft, promote
         it to current to publish.
     </p>
-    <p class="text-sm mt-3">
+    <p class="text-sm mt-3 flex flex-wrap gap-3 items-center">
+        <a href="<?= e($base) ?>/pay-admin/preview" class="btn-secondary btn-sm">
+            Preview impact — all trip types →
+        </a>
         <a href="<?= e($base) ?>/">← Back</a>
     </p>
 

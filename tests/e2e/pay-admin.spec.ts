@@ -202,6 +202,70 @@ test.describe.serial('pay-rate admin (write path)', () => {
         }
     });
 
+    test('10c4 — combined preview covers every trip type', async ({ page }) => {
+        await signIn(page);
+
+        // Default scope: no trip_type at all.
+        await page.goto('pay-admin/preview');
+        const form = page.locator('#preview-local-form');
+        await expect(form).toBeVisible();
+        const today = await form.getAttribute('data-today');
+
+        // One unconfirmed round-trip and one unconfirmed one-way — the page
+        // must show BOTH, because the dashboard's week card adds both.
+        await page.evaluate((iso) => {
+            const base = {
+                end_empty_city: '', end_empty_miles: 0, begin_empty_miles: 0,
+                is_split: 0, is_weekend: 0, is_backhaul: 0, extra_pay: 0,
+                dem_minutes: 0, break_minutes: 0, out_of_route_miles: 0,
+                out_of_route_ind: 0, np: 111.11, op: 111.11,
+                notes: 'QA TEST scratchpad — safe to clean up',
+            };
+            localStorage.setItem('paytracker.unsavedLoads', JSON.stringify([
+                {
+                    local_id: 'u_e2e_roundtrip',
+                    created_at: Date.now(),
+                    computed: {
+                        ...base, date: iso, load_type: 1,
+                        pickup_city: 'Pensacola, FL', delivery_city: 'Mobile, AL',
+                        empty_miles: 320,
+                    },
+                },
+                {
+                    local_id: 'u_e2e_oneway',
+                    created_at: Date.now(),
+                    computed: {
+                        ...base, date: iso, load_type: 0,
+                        pickup_city: 'Pensacola, FL', delivery_city: 'Lynn Haven, FL',
+                        empty_miles: 90,
+                    },
+                },
+            ]));
+        }, today);
+
+        try {
+            await page.goto('pay-admin/preview');
+            await expect(page.locator('#preview-local-status'))
+                .toContainText(/Included\s*2\s*unconfirmed/i);
+
+            // Sub-total strip names both trip types and closes with a total.
+            const aggregate = page.locator('div.card', { hasText: /Aggregate impact/ });
+            await expect(aggregate.locator('tbody tr', { hasText: 'Round-trip' })).toHaveCount(1);
+            await expect(aggregate.locator('tbody tr', { hasText: 'One-way' })).toHaveCount(1);
+            await expect(aggregate.locator('tbody tr', { hasText: /^Total/ })).toHaveCount(1);
+
+            // Per-load table lists both loads, one of each type.
+            const diff = page.locator('div.card', { hasText: /Per-load diff/ });
+            await expect(diff).toContainText('Mobile, AL');
+            await expect(diff).toContainText('Lynn Haven, FL');
+            await expect(diff).toContainText('Round-trip');
+            await expect(diff).toContainText('One-way');
+            await expect(diff).not.toContainText('111.11');
+        } finally {
+            await page.evaluate(() => localStorage.removeItem('paytracker.unsavedLoads'));
+        }
+    });
+
     test('10d — edit a draft tier', async ({ page }) => {
         await signIn(page);
         await page.goto('pay-admin');
