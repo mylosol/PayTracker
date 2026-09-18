@@ -207,6 +207,7 @@ return static function (Router $router): void {
     $router->post('/pay-admin/draft/upsert',   [PayAdminController::class, 'upsertDraftTier']);
     $router->post('/pay-admin/draft/delete',   [PayAdminController::class, 'deleteDraftTier']);
     $router->post('/pay-admin/draft/bump',     [PayAdminController::class, 'bumpDraft']);
+    $router->get('/pay-admin/preview',         [PayAdminController::class, 'preview']);
     $router->post('/pay-admin/draft/promote',  [PayAdminController::class, 'promoteDraft']);
     $router->post('/pay-admin/reset',          [PayAdminController::class, 'resetCurrent']);
     $router->post('/pay-admin/recompute',      [PayAdminController::class, 'recompute']);

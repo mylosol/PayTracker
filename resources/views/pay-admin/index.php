@@ -98,6 +98,10 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
                     Reset draft to current
                 </button>
             </form>
+            <a href="<?= e($base) ?>/pay-admin/preview?trip_type=<?= e($bucket['trip_type']) ?>"
+               class="btn-secondary btn-sm">
+                Preview impact →
+            </a>
         <?php endif; ?>
         <form method="post" action="<?= e($base) ?>/pay-admin/draft/bump" class="m-0 flex flex-wrap items-end gap-2"
               data-bump-form data-bump-label="<?= e($bucket['label']) ?>"

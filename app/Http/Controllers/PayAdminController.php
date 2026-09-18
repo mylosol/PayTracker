@@ -8,11 +8,15 @@ use PayTracker\Auth\AuthService;
 use PayTracker\Http\Request;
 use PayTracker\Http\Response;
 use PayTracker\Models\Account;
+use PayTracker\Models\DriverLoad;
 use PayTracker\Models\PayRate;
 use PayTracker\Models\PayRateVersion;
+use PayTracker\Models\PayVariable;
 use PayTracker\Security\Csrf;
 use PayTracker\Security\Session;
+use PayTracker\Services\Pay\LoadInputs;
 use PayTracker\Services\Pay\PayRecomputer;
+use PayTracker\Services\PayCalculator;
 
 /**
  * PayAdminController — modern replacement for the legacy pay-admin
@@ -48,6 +52,8 @@ final class PayAdminController extends Controller
         private readonly PayRate $rates,
         private readonly PayRateVersion $rateVersions,
         private readonly PayRecomputer $recomputer,
+        private readonly DriverLoad $loads,
+        private readonly PayVariable $payVariables,
     ) {
     }
 
@@ -263,6 +269,132 @@ final class PayAdminController extends Controller
             $stats['skipped'],
         ));
         return $this->redirect($request->basePath() . '/pay-admin');
+    }
+
+    /**
+     * GET /pay-admin/preview?trip_type=X[&days=30] — dry-run the draft
+     * rates against every load matching this trip_type over the last
+     * N days. Reprices each row through a fresh PayCalculator whose
+     * RateLookup is seeded with the draft tiers (via
+     * setRateTiersForTest, which was already the injection point unit
+     * tests used and works fine as a preview mechanism too).
+     *
+     * Answers the "what does a +7% raise actually do to real drivers"
+     * question without requiring a Promote → observe → un-Promote
+     * ceremony. Nothing is written; the DB is untouched.
+     */
+    public function preview(Request $request): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
+        }
+
+        $tripType = (string) $request->input('trip_type', '');
+        if (! in_array($tripType, PayRate::TRIP_TYPES, true)) {
+            $this->session->put('_flash', 'Unknown trip_type in preview request.');
+            return $this->redirect($request->basePath() . '/pay-admin');
+        }
+        $daysRaw = (string) $request->input('days', '30');
+        $days = ctype_digit($daysRaw) ? min(365, max(1, (int) $daysRaw)) : 30;
+
+        // Draft must exist — otherwise there is nothing to compare
+        // against and the preview would just echo current pay back.
+        if (! $this->rates->hasDraft($tripType)) {
+            $this->session->put('_flash', sprintf(
+                'No draft for %s yet. Start Draft (or Bump %%) before running Preview.',
+                $tripType,
+            ));
+            return $this->redirect($request->basePath() . '/pay-admin');
+        }
+
+        $draftTiers = array_map(
+            static fn (array $t): array => ['miles' => (int) $t['miles'], 'rate' => (float) $t['rate']],
+            $this->rates->tiers($tripType, 'draft'),
+        );
+
+        // Fresh calculator so the tier override doesn't leak into the
+        // shared instance the recomputer / other requests use.
+        $calc = new PayCalculator($this->rateVersions, $this->payVariables);
+        $calc->setRateTiersForTest($tripType, $draftTiers);
+
+        // load_type: round_trip → 1, long_haul → 0. Kept as a match
+        // so a future trip_type addition surfaces here as a fatal
+        // rather than a silent misroute.
+        $loadType = match ($tripType) {
+            'round_trip' => 1,
+            'long_haul'  => 0,
+        };
+
+        $since = date('Y-m-d', strtotime('-' . $days . ' days'));
+        $rows  = $this->loads->forPreviewByLoadType($loadType, $since, 500);
+
+        $comparisons  = [];
+        $totalOld     = 0.0;
+        $totalNew     = 0.0;
+        foreach ($rows as $row) {
+            $stored = (float) ($row['np'] ?? 0);
+            try {
+                $input = new LoadInputs(
+                    load_type:          (int) $row['load_type'],
+                    load_miles:         (int) ($row['empty_miles'] ?? 0), // legacy misnomer — loaded miles
+                    empty_miles:        (int) ($row['end_empty_miles'] ?? 0),
+                    begin_empty_miles:  (int) ($row['begin_empty_miles'] ?? 0),
+                    is_split:           (int) ($row['is_split'] ?? 0),
+                    is_weekend:         (int) ($row['is_weekend'] ?? 0),
+                    is_backhaul:        (int) ($row['is_backhaul'] ?? 0),
+                    extra_pay:          (float) ($row['extra_pay'] ?? 0),
+                    dem_minutes:        (int) ($row['dem_minutes'] ?? 0),
+                    break_minutes:      (int) ($row['break_minutes'] ?? 0),
+                    variables_blob:     (string) ($row['variables'] ?? '168-day--0'),
+                    out_of_route_ind:   (int) ($row['out_of_route_ind'] ?? 0),
+                    out_of_route_miles: (int) ($row['out_of_route_miles'] ?? 0),
+                    load_date:          isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
+                );
+                $newPay = (float) $calc->computeFor($input)['np'];
+            } catch (\Throwable $e) {
+                // A single bad row shouldn't blank the preview — skip
+                // it and let the aggregate still surface. Rare in
+                // practice (all fields have defaults) but defensive.
+                $newPay = $stored;
+            }
+            $totalOld += $stored;
+            $totalNew += $newPay;
+            $comparisons[] = [
+                'driver_user' => (string) ($row['driver_user'] ?? '—'),
+                'driver_id'   => (int) ($row['driver_id'] ?? 0),
+                'frtl'        => (int) ($row['frtl'] ?? 0),
+                'date'        => isset($row['date']) ? substr((string) $row['date'], 0, 10) : '',
+                'pickup'      => (string) ($row['pickup_city'] ?? ''),
+                'delivery'    => (string) ($row['delivery_city'] ?? ''),
+                'old_np'      => $stored,
+                'new_np'      => $newPay,
+                'delta'       => $newPay - $stored,
+            ];
+        }
+
+        $deltaTotal = $totalNew - $totalOld;
+        $deltaPct   = $totalOld > 0 ? ($deltaTotal / $totalOld) * 100.0 : 0.0;
+
+        return $this->view('pay-admin/preview', [
+            'base'         => $request->basePath(),
+            'actor'        => $account,
+            'trip_type'    => $tripType,
+            'trip_label'   => $this->tripLabel($tripType),
+            'days'         => $days,
+            'since'        => $since,
+            'row_count'    => count($comparisons),
+            'total_old'    => $totalOld,
+            'total_new'    => $totalNew,
+            'delta_total'  => $deltaTotal,
+            'delta_pct'    => $deltaPct,
+            'comparisons'  => $comparisons,
+            'draft_tiers'  => $draftTiers,
+            'current_tiers'=> $this->rates->tiers($tripType, 'current'),
+        ]);
     }
 
     /**

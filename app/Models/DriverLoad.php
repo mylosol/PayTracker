@@ -479,6 +479,45 @@ final class DriverLoad extends Model
     }
 
     /**
+     * Load rows for the /pay-admin preview surface — everything the
+     * calculator needs to reprice a load, plus the stored np we
+     * compare against. Restricted to a specific load_type so a
+     * round-trip draft preview only walks round-trip loads (and
+     * vice versa for one-way / long_haul).
+     *
+     * Bound to a date window to keep the preview snappy on a fleet
+     * with years of history. The controller passes "since" as the
+     * effective_date the admin is considering, minus the preview
+     * window (default 30 days back).
+     *
+     * @return list<array<string,mixed>>
+     */
+    public function forPreviewByLoadType(
+        int $loadType,
+        string $sinceDate,
+        int $limit = 200,
+    ): array {
+        $limit = max(1, min(1000, $limit));
+        $sql = '
+            SELECT dl.driver_id, a.user AS driver_user, dl.frtl, dl.date,
+                   dl.load_type, dl.pickup_city, dl.delivery_city,
+                   dl.end_empty_city, dl.end_empty_miles,
+                   dl.empty_miles, dl.begin_empty_miles,
+                   dl.is_split, dl.is_weekend, dl.is_backhaul,
+                   dl.extra_pay, dl.dem_minutes, dl.break_minutes,
+                   dl.out_of_route_ind, dl.out_of_route_miles,
+                   dl.variables, dl.np, dl.op
+              FROM ' . self::ident(self::$table) . ' dl
+              LEFT JOIN ' . self::ident('account') . ' a ON a.id = dl.driver_id
+             WHERE dl.load_type = ?
+               AND dl.date >= ?
+             ORDER BY dl.date DESC, dl.driver_id ASC, dl.frtl ASC
+             LIMIT ' . $limit;
+        $rows = $this->prepared($sql, [$loadType, $sinceDate])->fetchAll();
+        return is_array($rows) ? $rows : [];
+    }
+
+    /**
      * True if (driver_id, frtl) is already taken. Used by the controller
      * to pre-flight check and produce a friendlier error than letting
      * the PK collision bubble up as a PDOException.
