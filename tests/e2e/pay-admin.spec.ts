@@ -357,8 +357,13 @@ test.describe.serial('pay-rate admin (write path)', () => {
         await page.goto('pay-admin');
         const card = page.locator('div.card', { hasText: ROUND_TRIP });
 
-        page.once('dialog', (d) => d.accept());
-        await card.getByRole('button', { name: /reset current/i }).click();
+        // Two-step gate: click reveals a type-to-confirm input, then a
+        // second click posts. Regex is anchored so it never matches the
+        // reveal-and-input state's Confirm/Cancel buttons on other cards.
+        await card.getByRole('button', { name: /reset current ← default…/i }).click();
+        await card.getByRole('textbox', { name: /type round-trip to confirm reset/i })
+            .fill('Round-trip');
+        await card.getByRole('button', { name: /^confirm reset$/i }).click();
 
         await expect(page.getByText(/reset round_trip rates to defaults/i)).toBeVisible();
     });
