@@ -73,67 +73,89 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
         Draft: <code><?= $bucket['has_draft'] ? count($bucket['draft']) . ' rows' : 'none' ?></code>
     </p>
 
-    <div class="flex gap-2 flex-wrap mt-4 mb-5">
+    <div class="flex flex-col gap-4 mt-4 mb-5">
         <?php if (! $bucket['has_draft']): ?>
-            <form method="post" action="<?= e($base) ?>/pay-admin/draft/start" class="m-0">
-                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-                <button type="submit" class="btn-primary btn-sm">
-                    Start draft from current
-                </button>
-            </form>
-        <?php else: ?>
-            <form method="post" action="<?= e($base) ?>/pay-admin/draft/promote"
-                  class="m-0 flex flex-wrap items-end gap-2"
-                  onsubmit="return confirm('Promote draft to current and snapshot a new rate-version for <?= e($bucket['label']) ?>? Loads on or after the effective date will use the new rates; earlier loads keep the previous rate.');">
-                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-                <div>
-                    <label for="eff-<?= e($bucket['trip_type']) ?>" class="field-label text-xs">Effective from</label>
-                    <input id="eff-<?= e($bucket['trip_type']) ?>" type="date" name="effective_date"
-                           value="<?= e(date('Y-m-d')) ?>"
-                           class="field text-sm h-9 py-1 px-2 min-h-0 w-auto">
-                </div>
-                <button type="submit" class="btn-primary btn-sm">
-                    Promote draft → current
-                </button>
-            </form>
-            <form method="post" action="<?= e($base) ?>/pay-admin/draft/start" class="m-0"
-                  onsubmit="return confirm('Discard the current draft and start fresh from current?');">
-                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-                <button type="submit" class="btn-secondary btn-sm">
-                    Reset draft to current
-                </button>
-            </form>
-            <a href="<?= e($base) ?>/pay-admin/preview?trip_type=<?= e($bucket['trip_type']) ?>"
-               class="btn-secondary btn-sm">
-                Preview impact →
-            </a>
-        <?php endif; ?>
-        <form method="post" action="<?= e($base) ?>/pay-admin/draft/bump" class="m-0 flex flex-wrap items-end gap-2"
-              data-bump-form data-bump-label="<?= e($bucket['label']) ?>"
-              onsubmit="return confirm('Bump ' + (this.dataset.bumpLabel || 'draft') + ' by ' + (this.querySelector('input[name=&quot;percent&quot;]').value || '?') + '%? Draft rates will be multiplied and rounded to 2 decimals — you can hand-tweak individual tiers before Promote.');">
-            <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-            <div>
-                <label for="bump-<?= e($bucket['trip_type']) ?>" class="field-label text-xs">Bump draft by %</label>
-                <input id="bump-<?= e($bucket['trip_type']) ?>" type="text" name="percent"
-                       inputmode="decimal"
-                       placeholder="e.g. 7 or -2.5"
-                       class="field text-sm h-9 py-1 px-2 min-h-0 w-24"
-                       aria-describedby="bump-hint-<?= e($bucket['trip_type']) ?>">
+            <div class="flex flex-wrap gap-2 items-center">
+                <form method="post" action="<?= e($base) ?>/pay-admin/draft/start" class="m-0">
+                    <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                    <button type="submit" class="btn-primary btn-sm">
+                        Start draft from current
+                    </button>
+                </form>
+                <span class="text-xs text-brand-muted">
+                    Start a draft to edit rates, bump every tier by %, or preview impact.
+                </span>
             </div>
-            <button type="submit" class="btn-secondary btn-sm">
-                Apply %
-            </button>
-            <span id="bump-hint-<?= e($bucket['trip_type']) ?>" class="text-xs text-brand-muted basis-full">
-                Multiplies every draft tier — auto-starts a draft from current if none exists. Rates are stored as absolute numbers; the % is a calculator, not a policy.
+        <?php else: ?>
+            <?php /* Row 1 — publish: date + promote + preview, primary flow. */ ?>
+            <div class="flex flex-wrap gap-2 items-end">
+                <form method="post" action="<?= e($base) ?>/pay-admin/draft/promote"
+                      class="m-0 flex flex-wrap items-end gap-2"
+                      onsubmit="return confirm('Promote draft to current and snapshot a new rate-version for <?= e($bucket['label']) ?>? Loads on or after the effective date will use the new rates; earlier loads keep the previous rate.');">
+                    <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                    <div>
+                        <label for="eff-<?= e($bucket['trip_type']) ?>" class="field-label text-xs">Effective from</label>
+                        <input id="eff-<?= e($bucket['trip_type']) ?>" type="date" name="effective_date"
+                               value="<?= e(date('Y-m-d')) ?>"
+                               class="field text-sm h-9 py-1 px-2 min-h-0 w-auto">
+                    </div>
+                    <button type="submit" class="btn-primary btn-sm">
+                        Promote draft → current
+                    </button>
+                </form>
+                <a href="<?= e($base) ?>/pay-admin/preview?trip_type=<?= e($bucket['trip_type']) ?>"
+                   class="btn-secondary btn-sm">
+                    Preview impact →
+                </a>
+            </div>
+
+            <?php /* Row 2 — draft edits: bump + reset draft, with the hint. */ ?>
+            <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap gap-2 items-end">
+                    <form method="post" action="<?= e($base) ?>/pay-admin/draft/bump"
+                          class="m-0 flex flex-wrap items-end gap-2"
+                          data-bump-form data-bump-label="<?= e($bucket['label']) ?>"
+                          onsubmit="return confirm('Bump ' + (this.dataset.bumpLabel || 'draft') + ' by ' + (this.querySelector('input[name=&quot;percent&quot;]').value || '?') + '%? Draft rates will be multiplied and rounded to 2 decimals — you can hand-tweak individual tiers before Promote.');">
+                        <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                        <div>
+                            <label for="bump-<?= e($bucket['trip_type']) ?>" class="field-label text-xs">Bump draft by %</label>
+                            <input id="bump-<?= e($bucket['trip_type']) ?>" type="text" name="percent"
+                                   inputmode="decimal"
+                                   placeholder="e.g. 7 or -2.5"
+                                   class="field text-sm h-9 py-1 px-2 min-h-0 w-24"
+                                   aria-describedby="bump-hint-<?= e($bucket['trip_type']) ?>">
+                        </div>
+                        <button type="submit" class="btn-secondary btn-sm">
+                            Apply %
+                        </button>
+                    </form>
+                    <form method="post" action="<?= e($base) ?>/pay-admin/draft/start" class="m-0"
+                          onsubmit="return confirm('Discard the current draft and start fresh from current?');">
+                        <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                        <button type="submit" class="btn-secondary btn-sm">
+                            Reset draft to current
+                        </button>
+                    </form>
+                </div>
+                <span id="bump-hint-<?= e($bucket['trip_type']) ?>" class="text-xs text-brand-muted">
+                    Multiplies every draft tier and rounds to 2 decimals. Rates are stored as absolute numbers; the % is a calculator, not a policy.
+                </span>
+            </div>
+        <?php endif; ?>
+
+        <?php /* Row 3 — danger: reset current to shipped defaults. Always visible. */ ?>
+        <div class="flex flex-wrap gap-2 items-center pt-2 border-t border-slate-200 dark:border-slate-700">
+            <form method="post" action="<?= e($base) ?>/pay-admin/reset" class="m-0"
+                  onsubmit="return confirm('Reset current rates to factory defaults? This is irreversible from the UI.');">
+                <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
+                <button type="submit" class="btn-danger btn-sm">
+                    Reset current ← default
+                </button>
+            </form>
+            <span class="text-xs text-brand-muted">
+                Rolls the live rates back to what shipped with the app. Also clears any draft.
             </span>
-        </form>
-        <form method="post" action="<?= e($base) ?>/pay-admin/reset" class="m-0"
-              onsubmit="return confirm('Reset current rates to factory defaults? This is irreversible from the UI.');">
-            <?= $bucketInputs($bucket['trip_type'], $csrfToken) ?>
-            <button type="submit" class="btn-danger btn-sm">
-                Reset current ← default
-            </button>
-        </form>
+        </div>
     </div>
 
     <div class="table-wrap">

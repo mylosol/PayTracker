@@ -273,7 +273,7 @@ final class PayAdminController extends Controller
             $stats['unchanged'],
             $stats['skipped'],
         ));
-        return $this->redirect($request->basePath() . '/pay-admin');
+        return $this->redirect($request->basePath() . '/pay-admin#recompute-pay');
     }
 
     /**
@@ -705,13 +705,17 @@ final class PayAdminController extends Controller
         }
 
         $this->session->put('_flash', $message);
-        return $this->redirect($request->basePath() . '/pay-admin');
+        return $this->redirect($request->basePath() . '/pay-admin#bucket-' . $tripType);
     }
 
     private function failBack(string $message, Request $request): Response
     {
         $this->session->put('_flash', $message);
-        return $this->redirect($request->basePath() . '/pay-admin');
+        $tripType = (string) $request->input('trip_type', '');
+        $anchor   = in_array($tripType, PayRate::TRIP_TYPES, true)
+            ? '#bucket-' . $tripType
+            : '';
+        return $this->redirect($request->basePath() . '/pay-admin' . $anchor);
     }
 
     private function popFlash(): ?string
