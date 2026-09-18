@@ -384,10 +384,11 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
     // Loads table, and bumps the Today + Week totals using ONLY the
     // precomputed np figures from each entry. Past/future dates do not
     // run this script.
-    (function () {
+    (async function () {
         const ENTRIES_KEY = 'paytracker.unsavedLoads';
         const TTL_MS      = 24 * 60 * 60 * 1000;
         const basePath    = <?= json_encode($base) ?>;
+        let csrfToken     = <?= json_encode($csrfToken) ?>;
 
         function readEntries() {
             let raw;
@@ -426,6 +427,64 @@ $pct   = static fn (float $v): string => number_format($v * 100, 2) . '%';
             e && e.computed && typeof e.computed.date === 'string'
             && e.computed.date.slice(0, 10) === date);
         if (todays.length === 0) return;
+
+        // Auto-refresh every scratchpad entry against the current pay
+        // ladder + variables before rendering. A promote in /pay-admin
+        // updates DB rows but a scratchpad entry's stored np was frozen
+        // at entry-time — without this, a driver looking at their own
+        // dashboard would see stale pay for unconfirmed loads until they
+        // hand-edited each. Batch is serial and bounded (few entries at
+        // most for one day) and rotates the CSRF token from each reply.
+        //
+        // Cost model: N POSTs per dashboard render on days where the
+        // driver has scratchpad loads. Almost always 0–4. Any single
+        // failure silently keeps the entry's previous computed values,
+        // and the load still renders.
+        for (const entry of todays) {
+            const c = entry.computed;
+            if (! c) continue;
+            const body = new URLSearchParams();
+            body.set('_csrf', csrfToken);
+            body.set('pickup_city',        c.pickup_city ?? '');
+            body.set('delivery_city',      c.delivery_city ?? '');
+            body.set('end_empty_city',     c.end_empty_city ?? '');
+            body.set('load_type',          String(c.load_type ?? '0'));
+            body.set('is_split',           String(c.is_split ?? '0'));
+            body.set('is_weekend',         String(c.is_weekend ?? '0'));
+            body.set('is_backhaul',        String(c.is_backhaul ?? '0'));
+            body.set('extra_pay',          String(c.extra_pay ?? '0'));
+            body.set('dem_minutes',        String(c.dem_minutes ?? '0'));
+            body.set('break_minutes',      String(c.break_minutes ?? '0'));
+            body.set('begin_empty_miles',  String(c.begin_empty_miles ?? '0'));
+            body.set('out_of_route_miles', String(c.out_of_route_miles ?? '0'));
+            body.set('load_date',          c.date ?? '');
+            body.set('notes',              c.notes ?? '');
+            try {
+                const resp = await fetch(basePath + '/loads/preview', {
+                    method:      'POST',
+                    credentials: 'same-origin',
+                    headers:     { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body,
+                });
+                if (! resp.ok) continue;
+                const json = await resp.json();
+                if (json && typeof json.next_csrf === 'string') { csrfToken = json.next_csrf; }
+                if (json && json.ok && json.computed) {
+                    entry.computed = json.computed;
+                }
+            } catch (e) {
+                // Network hiccup — keep the stored computed and move on.
+            }
+        }
+        // Persist any refreshed values so the next dashboard visit
+        // doesn't have to re-fetch the same numbers, and so the entry's
+        // stored np matches what the driver just saw on this render.
+        try {
+            const all = readEntries();
+            const byId = new Map(all.map(e => [e.local_id, e]));
+            for (const e of todays) { byId.set(e.local_id, e); }
+            writeEntries([...byId.values()]);
+        } catch (e) { /* fail silent */ }
 
         const typeLabel = (t) => t === 0 ? 'One-way'
                               : t === 1 ? 'Round-trip'

@@ -231,11 +231,49 @@ final class PayAdminController extends Controller
                     $draftTiers,
                 ),
             );
+
+            // Auto-refresh the loads dated on-or-after the effective_from —
+            // without this, a driver who already entered today's loads sees
+            // the old np on the dashboard until either they hand-edit each
+            // one or the admin walks down to /pay-admin#recompute-pay and
+            // clicks Recompute. Historical loads (before effective_from)
+            // are excluded on purpose: their stored pay corresponds to the
+            // version active on their own date and we don't want to
+            // silently rewrite past paychecks.
+            //
+            // Scope: all drivers (null filter). recomputePay skips rows
+            // whose computed value matches the stored value, so this is
+            // cheap when the promote only moves a few brackets and the
+            // fleet's other trip types are untouched.
+            $recomputeNote = '';
+            try {
+                $stats = $this->recomputer->run(null, $effectiveDate);
+                if ($stats['updated'] > 0 || $stats['considered'] > 0) {
+                    $recomputeNote = sprintf(
+                        ' Auto-recomputed %d load%s dated %s or later (%d updated, %d unchanged).',
+                        $stats['considered'],
+                        $stats['considered'] === 1 ? '' : 's',
+                        $effectiveDate,
+                        $stats['updated'],
+                        $stats['unchanged'],
+                    );
+                }
+            } catch (\Throwable $e) {
+                // Promote succeeded; auto-recompute is a convenience. Tell
+                // the admin to trigger a manual Recompute if they want the
+                // dashboards refreshed now.
+                $recomputeNote = sprintf(
+                    ' (Auto-recompute failed: %s. Run Recompute pay manually to refresh dashboards.)',
+                    $e->getMessage(),
+                );
+            }
+
             return sprintf(
-                'Promoted %s draft → current, effective %s. Historical loads pre-%s keep their previous rate.',
+                'Promoted %s draft → current, effective %s. Historical loads pre-%s keep their previous rate.%s',
                 $tripType,
                 $effectiveDate,
                 $effectiveDate,
+                $recomputeNote,
             );
         });
     }
@@ -787,12 +825,44 @@ final class PayAdminController extends Controller
 
     /**
      * POST /pay-admin/variables/draft/promote — promote draft → current.
+     * Auto-refreshes today's loads afterwards (same reasoning as
+     * promoteDraft): raise/mt/overlay changes affect np immediately and a
+     * driver looking at their dashboard should see the new figure without
+     * hand-editing each row.
      */
     public function promoteDraftVariables(Request $request): Response
     {
         return $this->guardVars($request, function (): string {
             $this->payVariables->promoteDraftToCurrent();
-            return 'Promoted variables draft → current. Historical loads keep their stored pay until you run Recompute pay.';
+
+            // Variables have no per-load version anchoring (PayCalculator
+            // resolves current stage at compute time), so a change to
+            // raise/mt/overlays affects EVERY future compute regardless
+            // of load_date. Scope the auto-refresh to today+ anyway so
+            // we don't silently rewrite past paychecks; older loads can
+            // be refreshed on demand from /pay-admin#recompute-pay.
+            $today = date('Y-m-d');
+            $recomputeNote = '';
+            try {
+                $stats = $this->recomputer->run(null, $today);
+                if ($stats['updated'] > 0 || $stats['considered'] > 0) {
+                    $recomputeNote = sprintf(
+                        ' Auto-recomputed %d load%s dated %s or later (%d updated, %d unchanged).',
+                        $stats['considered'],
+                        $stats['considered'] === 1 ? '' : 's',
+                        $today,
+                        $stats['updated'],
+                        $stats['unchanged'],
+                    );
+                }
+            } catch (\Throwable $e) {
+                $recomputeNote = sprintf(
+                    ' (Auto-recompute failed: %s. Run Recompute pay manually to refresh dashboards.)',
+                    $e->getMessage(),
+                );
+            }
+
+            return 'Promoted variables draft → current. Historical loads keep their stored pay until you run Recompute pay.' . $recomputeNote;
         });
     }
 
