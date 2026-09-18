@@ -4,22 +4,36 @@
  * @var array<string,mixed>                    $actor
  * @var string                                 $trip_type
  * @var string                                 $trip_label
+ * @var int                                    $load_type
  * @var string                                 $anchor
+ * @var string                                 $today
  * @var string                                 $week_start
  * @var string                                 $week_end
  * @var string                                 $week_start_day
+ * @var bool                                   $week_has_today
  * @var int                                    $row_count
+ * @var int                                    $saved_count
+ * @var int                                    $unsaved_count
+ * @var bool                                   $unsaved_requested
+ * @var int                                    $unsaved_live
+ * @var ?string                                $unsaved_error
  * @var float                                  $total_old
  * @var float                                  $total_new
  * @var float                                  $delta_total
  * @var float                                  $delta_pct
+ * @var float                                  $total_old_saved
+ * @var float                                  $total_new_saved
+ * @var float                                  $total_old_unsaved
+ * @var float                                  $total_new_unsaved
  * @var list<array{
- *   frtl:int, date:string,
- *   pickup:string, delivery:string,
- *   old_np:float, new_np:float, delta:float
+ *   source:string, frtl:?int, local_id:?string, date:string,
+ *   pickup:string, delivery:string, notes:string,
+ *   old_np:float, new_np:float, delta:float,
+ *   new_breakdown:?array<string,mixed>
  * }>                                          $comparisons
  * @var list<array{miles:int, rate:string}>    $draft_tiers
  * @var list<array{miles:int, rate:string}>    $current_tiers
+ * @var string                                 $csrf_token
  */
 layout('layouts/app');
 
@@ -31,6 +45,98 @@ $signedMoney = static function (float $v): string {
 $deltaClass = static fn (float $v): string => $v > 0
     ? 'text-emerald-700 dark:text-emerald-300'
     : ($v < 0 ? 'text-rose-700 dark:text-rose-300' : 'text-brand-muted');
+
+/**
+ * Component rows for one load's projected pay — same card the dashboard
+ * renders from pay_breakdown, so the two read identically. Rendered
+ * server-side (the projection lives in PHP, not the browser).
+ */
+$breakdownRows = static function (?array $bd) use ($money): string {
+    if ($bd === null) {
+        return '<tr><td colspan="2" class="py-1 px-3 text-brand-muted">No breakdown available for this row.</td></tr>';
+    }
+
+    $pct = static fn (float $v): string => number_format($v * 100, 2) . '%';
+    $row = static fn (string $label, float $value): string => sprintf(
+        '<tr><td class="py-1 px-3 text-slate-600 dark:text-slate-300">%s</td>'
+        . '<td class="py-1 px-3 text-right font-semibold text-emerald-700 dark:text-emerald-300">%s</td></tr>',
+        $label,
+        e($money($value)),
+    );
+
+    $rows = [];
+
+    // Loaded Pay shows for the trip types that have one, even at 0 miles —
+    // a same-city load is real, and hiding the row reads as "miles missing".
+    $tripLabel  = (string) ($bd['trip_label'] ?? '');
+    $baseMiles  = (int) ($bd['base_miles'] ?? 0);
+    $baseRate   = (float) ($bd['base_rate'] ?? 0);
+    $basePay    = (float) ($bd['base_pay'] ?? 0);
+    if ($tripLabel === 'One-way' || $tripLabel === 'Round-trip' || $basePay !== 0.0) {
+        $label = $baseMiles > 0
+            ? sprintf(
+                'Loaded Pay: %d Miles <span class="text-brand-muted">@ $%s</span>',
+                $baseMiles,
+                number_format($baseRate, 4),
+            )
+            : sprintf('Loaded Pay: %d Miles', $baseMiles);
+        $rows[] = $row($label, $basePay);
+    }
+
+    if ((float) ($bd['empty_pay'] ?? 0) !== 0.0) {
+        $emptyMiles = (int) ($bd['empty_miles'] ?? 0);
+        $emptyRate  = (float) ($bd['empty_rate'] ?? 0);
+        $label = $emptyMiles > 0
+            ? sprintf(
+                'Empty Pay: %d Miles <span class="text-brand-muted">@ $%s</span>',
+                $emptyMiles,
+                number_format($emptyRate, 4),
+            )
+            : 'Empty Pay:';
+        $rows[] = $row($label, (float) $bd['empty_pay']);
+    }
+
+    if ((float) ($bd['shift_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row(
+            sprintf('Shift Pay <span class="text-pink-500">(%s)</span>', $pct((float) ($bd['shift_pct'] ?? 0))),
+            (float) $bd['shift_pay'],
+        );
+    }
+    if ((float) ($bd['seniority_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row(
+            sprintf('Seniority Pay <span class="text-purple-500">(%s)</span>', $pct((float) ($bd['seniority_pct'] ?? 0))),
+            (float) $bd['seniority_pay'],
+        );
+    }
+    if ((float) ($bd['weekend_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row(
+            sprintf('Weekend <span class="text-amber-500">(%s)</span>', $pct((float) ($bd['weekend_pct'] ?? 0))),
+            (float) $bd['weekend_pay'],
+        );
+    }
+    if ((float) ($bd['split_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row('Split Pay', (float) $bd['split_pay']);
+    }
+    if ((float) ($bd['backhaul_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row('Backhaul', (float) $bd['backhaul_pay']);
+    }
+    if ((float) ($bd['dem_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row('Demurrage', (float) $bd['dem_pay']);
+    }
+    if ((float) ($bd['break_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row('Breakdown', (float) $bd['break_pay']);
+    }
+    if ((float) ($bd['extra_pay'] ?? 0) !== 0.0) {
+        $rows[] = $row('Extra Pay', (float) $bd['extra_pay']);
+    }
+
+    $rows[] = '<tr class="border-t border-slate-300 dark:border-slate-600">'
+        . '<td class="py-1.5 px-3 font-bold">Total Load Pay</td>'
+        . '<td class="py-1.5 px-3 text-right font-bold text-brand-primary">'
+        . e($money((float) ($bd['np'] ?? 0))) . '</td></tr>';
+
+    return implode('', $rows);
+};
 ?>
 <div class="card">
     <div class="flex flex-wrap items-start justify-between gap-3">
@@ -41,12 +147,9 @@ $deltaClass = static fn (float $v): string => $v > 0
                 <code><?= e($trip_type) ?></code> loads on <strong>your own
                 dashboard</strong> for the pay week
                 <code><?= e($week_start) ?></code> →
-                <code><?= e($week_end) ?></code> against the draft, side by side
-                with what each load currently shows. Nobody else's loads are
-                read here — the fleet-wide dump is the super-admin
-                <code>/loads</code> page.
-                Adjust the draft, hand-tweak tiers, or start over — no drivers
-                see any change until you Promote.
+                <code><?= e($week_end) ?></code>, side by side with what each load
+                currently shows. Nobody else's loads are read here — the
+                fleet-wide dump is the super-admin <code>/loads</code> page.
             </p>
         </div>
         <a href="<?= e($base) ?>/pay-admin" class="btn-secondary btn-sm">← Back to pay-admin</a>
@@ -82,6 +185,29 @@ $deltaClass = static fn (float $v): string => $v > 0
             </div>
         </div>
     </div>
+
+    <?php if ($unsaved_count > 0): ?>
+        <p class="text-brand-muted mt-4 mb-0 text-sm">
+            <?= (int) $saved_count ?> saved load(s)
+            <?= e($money($total_old_saved)) ?> →
+            <?= e($money($total_new_saved)) ?>,
+            plus <strong><?= (int) $unsaved_count ?></strong> unconfirmed load(s)
+            kept in this browser
+            <?= e($money($total_old_unsaved)) ?> →
+            <?= e($money($total_new_unsaved)) ?>.
+            <span class="text-amber-700 dark:text-amber-300">
+                Unconfirmed loads live only in this browser and are marked
+                <code>—</code> in the FRTL column.
+            </span>
+        </p>
+    <?php endif; ?>
+
+    <?php if ($unsaved_error !== null): ?>
+        <p class="mt-4 mb-0 text-sm text-amber-800 dark:text-amber-300">
+            <strong>Unconfirmed loads:</strong> <?= e($unsaved_error) ?>
+        </p>
+    <?php endif; ?>
+
     <?php if ($row_count === 0): ?>
         <p class="text-brand-muted mt-4 mb-0 text-sm">
             No <?= e($trip_type) ?> loads on your dashboard for the week of
@@ -92,20 +218,67 @@ $deltaClass = static fn (float $v): string => $v > 0
     <?php endif; ?>
 </div>
 
+<?php // ------------------------------------------------------------------ ?>
+<?php // Unconfirmed-loads (browser scratchpad) handoff.                    ?>
+<?php //                                                                    ?>
+<?php // Entries entered with "Store Load Info" OFF never reach the         ?>
+<?php // database — they live in this browser's localStorage and the         ?>
+<?php // dashboard hydrates them client-side. The preview is rendered        ?>
+<?php // server-side, so the only way to reprice them is to hand them over:  ?>
+<?php // this form's JS reads the same key the dashboard reads, filters to   ?>
+<?php // this trip type + today (exactly the dashboard's hydration rule),    ?>
+<?php // and submits once. The server recomputes their pay; nothing about    ?>
+<?php // the payload's own money figures is trusted.                         ?>
+<?php // ------------------------------------------------------------------ ?>
+<div class="card" id="preview-local-card">
+    <h2 class="m-0">Unconfirmed loads (in this browser)</h2>
+    <p class="text-brand-muted mt-1 mb-0 text-sm">
+        Loads entered with <em>Store Load Info</em> off stay in this browser
+        until you add a FRTL #. They show on your dashboard, so they belong in
+        this projection too.
+    </p>
+
+    <p class="mt-3 mb-3 text-sm" id="preview-local-status">Checking this browser…</p>
+
+    <form method="post" action="<?= e($base) ?>/pay-admin/preview"
+          id="preview-local-form"
+          data-state="<?= $unsaved_requested ? 'included' : 'pending' ?>"
+          data-trip-type="<?= e($trip_type) ?>"
+          data-load-type="<?= (int) $load_type ?>"
+          data-today="<?= e($today) ?>"
+          class="m-0 flex flex-wrap items-center gap-2">
+        <input type="hidden" name="_csrf" value="<?= e($csrf_token) ?>">
+        <input type="hidden" name="trip_type" value="<?= e($trip_type) ?>">
+        <input type="hidden" name="date" value="<?= e($anchor) ?>">
+        <input type="hidden" name="unsaved_loads" id="preview-unsaved-payload" value="">
+        <button type="submit" class="btn-secondary btn-sm" id="preview-local-submit">
+            Include unconfirmed loads
+        </button>
+    </form>
+
+    <noscript>
+        <p class="text-brand-muted mt-3 mb-0 text-sm">
+            JavaScript is off in this browser, so the unconfirmed loads stored
+            here cannot be read. The tables below cover the saved loads only.
+        </p>
+    </noscript>
+</div>
+
 <?php if ($row_count > 0): ?>
     <div class="card">
         <h2 class="m-0">Per-load diff</h2>
         <p class="text-brand-muted mt-1 text-sm">
             Your own loads, newest-first. Deltas ≥ $0.01 are highlighted; loads
-            that price identically are shown in muted rows so you can scan for
-            the ones the raise actually moves. The driver column that used to
-            be here is gone on purpose — every row is yours.
+            that price identically are shown in muted rows. Expand a row for the
+            projected breakdown of that load's pay. The driver column that used
+            to be here is gone on purpose — every row is yours.
         </p>
         <div class="table-wrap mt-3">
             <table class="data-table text-[13px] w-full">
                 <thead>
                     <tr>
                         <th class="text-left">Date</th>
+                        <th class="text-left">Load</th>
                         <th class="text-left">FRTL</th>
                         <th class="text-left">Pickup → Delivery</th>
                         <th class="text-right">Current</th>
@@ -115,19 +288,72 @@ $deltaClass = static fn (float $v): string => $v > 0
                 </thead>
                 <tbody>
                     <?php foreach ($comparisons as $c): ?>
-                        <?php $changed = abs($c['delta']) >= 0.005; ?>
-                        <tr class="<?= $changed ? '' : 'opacity-50' ?>">
+                        <?php
+                        $changed  = abs($c['delta']) >= 0.005;
+                        $unsaved  = $c['source'] === 'unsaved';
+                        $bd       = is_array($c['new_breakdown'] ?? null) ? $c['new_breakdown'] : null;
+                        $tripName = (string) ($bd['trip_label'] ?? '');
+                        ?>
+                        <tr class="<?= $changed ? '' : 'opacity-50' ?> <?= $unsaved ? 'bg-amber-50 dark:bg-amber-950/30' : '' ?>">
                             <td class="whitespace-nowrap"><?= e($c['date']) ?></td>
-                            <td><code><?= (int) $c['frtl'] ?></code></td>
+                            <td class="whitespace-nowrap">
+                                <?= e($tripName !== '' ? $tripName : '—') ?>
+                            </td>
+                            <td class="whitespace-nowrap">
+                                <?php if ($unsaved): ?>
+                                    <code title="No FRTL # yet — this load lives in the browser">—</code>
+                                <?php else: ?>
+                                    <code><?= (int) $c['frtl'] ?></code>
+                                <?php endif; ?>
+                            </td>
                             <td class="break-words max-w-md">
                                 <?= e($c['pickup']) ?>
                                 <span class="text-brand-muted">→</span>
                                 <?= e($c['delivery']) ?>
+                                <?php if ($unsaved): ?>
+                                    <br><small class="text-amber-900 dark:text-amber-300">
+                                        unconfirmed — in this browser only
+                                        <?php if (is_string($c['local_id']) && $c['local_id'] !== ''): ?>
+                                            &middot; <a class="underline"
+                                                href="<?= e($base) ?>/loads/new?unsaved=<?= e(urlencode($c['local_id'])) ?>"
+                                                title="Edit this unconfirmed load">Edit</a>
+                                        <?php endif; ?>
+                                    </small>
+                                <?php elseif ($c['notes'] !== ''): ?>
+                                    <br><small class="text-brand-muted"><?= e($c['notes']) ?></small>
+                                <?php endif; ?>
                             </td>
                             <td class="text-right whitespace-nowrap"><?= e($money($c['old_np'])) ?></td>
                             <td class="text-right whitespace-nowrap font-semibold"><?= e($money($c['new_np'])) ?></td>
                             <td class="text-right whitespace-nowrap <?= $deltaClass($c['delta']) ?>">
                                 <?= $changed ? e($signedMoney($c['delta'])) : '—' ?>
+                            </td>
+                        </tr>
+                        <tr class="<?= $unsaved ? 'bg-amber-50 dark:bg-amber-950/30' : '' ?>">
+                            <td colspan="7" class="px-5 py-3">
+                                <details>
+                                    <summary class="cursor-pointer text-brand-primary font-semibold">
+                                        Projected pay breakdown under the draft
+                                        <?php if ($bd !== null): ?>
+                                            — <?= e($tripName !== '' ? $tripName : '?') ?>
+                                            (<?= e((string) ($bd['tenure_band'] ?? '?')) ?>&nbsp;M&nbsp;|&nbsp;<?= e(ucfirst((string) ($bd['shift'] ?? '?'))) ?>)
+                                        <?php endif; ?>
+                                    </summary>
+                                    <?php if ($c['notes'] !== '' && ! $unsaved): ?>
+                                        <div class="mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/40 border-l-4 border-amber-400 text-slate-700 dark:text-slate-200 text-[13px] whitespace-pre-wrap break-words">
+                                            <strong class="text-amber-900 dark:text-amber-300">Notes:</strong>
+                                            <?= e($c['notes']) ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <table class="mt-2 text-[13px]">
+                                        <tbody><?= $breakdownRows($bd) ?></tbody>
+                                    </table>
+                                    <p class="text-brand-muted mt-2 mb-0 text-xs">
+                                        Current column shows <?= $unsaved ? 'what this load pays today (recomputed)' : 'the stored pay on the load' ?>:
+                                        <?= e($money($c['old_np'])) ?>. Projected is the same load repriced
+                                        against the draft tiers. Nothing has been written.
+                                    </p>
+                                </details>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -194,3 +420,95 @@ $deltaClass = static fn (float $v): string => $v > 0
         or <strong>Promote</strong> when you're ready to make it live.
     </p>
 </div>
+
+<script>
+    // -------------------------------------------------------------------
+    // Hand the browser's unconfirmed loads to the server so they can be
+    // repriced with the draft.
+    //
+    // This mirrors the dashboard's hydration rule exactly: the same
+    // localStorage key, the same 24-hour TTL, the same "today only"
+    // restriction (past/future dates on the dashboard are DB-backed by
+    // spec), and the same trip type. The server re-validates and
+    // recomputes everything — this script only moves the data.
+    //
+    // Loop safety: the page renders data-state="pending" for the GET
+    // render and "included" once the payload has been submitted, so the
+    // auto-submit fires at most once per arrival.
+    // -------------------------------------------------------------------
+    (function () {
+        const form   = document.getElementById('preview-local-form');
+        const card   = document.getElementById('preview-local-card');
+        const status = document.getElementById('preview-local-status');
+        const payload = document.getElementById('preview-unsaved-payload');
+        const button = document.getElementById('preview-local-submit');
+        if (!form || !card || !status || !payload || !button) return;
+
+        const ENTRIES_KEY = 'paytracker.unsavedLoads';
+        const TTL_MS      = 24 * 60 * 60 * 1000;
+        const tripType    = form.dataset.tripType || '';
+        const loadType    = Number(form.dataset.loadType);
+        const today       = form.dataset.today || '';
+        const state       = form.dataset.state || 'pending';
+
+        function readEntries() {
+            let raw;
+            try { raw = localStorage.getItem(ENTRIES_KEY); }
+            catch (e) { return { entries: [], blocked: true }; }
+            if (!raw) return { entries: [], blocked: false };
+            let arr;
+            try { arr = JSON.parse(raw); }
+            catch (e) { return { entries: [], blocked: false }; }
+            if (!Array.isArray(arr)) return { entries: [], blocked: false };
+            const now = Date.now();
+            return {
+                entries: arr.filter(e => e && typeof e === 'object'
+                    && e.computed && typeof e.computed === 'object'
+                    && typeof e.created_at === 'number'
+                    && (now - e.created_at) < TTL_MS),
+                blocked: false,
+            };
+        }
+
+        const { entries, blocked } = readEntries();
+        const eligible = entries.filter(e =>
+            Number(e.computed.load_type) === loadType
+            && String(e.computed.date || '').slice(0, 10) === today);
+
+        if (blocked) {
+            status.textContent = 'This browser is blocking local storage, so unconfirmed loads cannot be read.';
+            button.disabled = true;
+            return;
+        }
+
+        if (eligible.length === 0) {
+            status.textContent = state === 'included'
+                ? 'No unconfirmed ' + tripType.replace('_', '-') + ' loads in this browser for today — the tables above are complete.'
+                : 'No unconfirmed ' + tripType.replace('_', '-') + ' loads in this browser for today.';
+            button.disabled = true;
+            button.textContent = 'No unconfirmed loads to include';
+            return;
+        }
+
+        payload.value = JSON.stringify(eligible);
+
+        if (state === 'included') {
+            status.innerHTML = 'Included <strong>' + eligible.length + '</strong> unconfirmed load(s) from this browser in the projection below.';
+            button.textContent = 'Re-include ' + eligible.length + ' unconfirmed load(s)';
+            return;
+        }
+
+        status.innerHTML = 'Found <strong>' + eligible.length + '</strong> unconfirmed load(s) in this browser — adding them to the projection…';
+        button.textContent = 'Include ' + eligible.length + ' unconfirmed load(s)';
+
+        // One auto-submit per GET arrival; the POST render carries
+        // data-state="included" so this cannot loop. Deferred to the load
+        // event so the submit doesn't abort a half-finished page load.
+        const submit = () => form.submit();
+        if (document.readyState === 'complete') {
+            submit();
+        } else {
+            window.addEventListener('load', submit, { once: true });
+        }
+    })();
+</script>

@@ -208,6 +208,10 @@ return static function (Router $router): void {
     $router->post('/pay-admin/draft/delete',   [PayAdminController::class, 'deleteDraftTier']);
     $router->post('/pay-admin/draft/bump',     [PayAdminController::class, 'bumpDraft']);
     $router->get('/pay-admin/preview',         [PayAdminController::class, 'preview']);
+    // Same surface, POST variant: the preview page's own JS posts the
+    // browser's unconfirmed (Store Load Info OFF) loads so they can be
+    // repriced alongside the saved ones. Read-only — nothing is written.
+    $router->post('/pay-admin/preview',        [PayAdminController::class, 'preview']);
     $router->post('/pay-admin/draft/promote',  [PayAdminController::class, 'promoteDraft']);
     $router->post('/pay-admin/reset',          [PayAdminController::class, 'resetCurrent']);
     $router->post('/pay-admin/recompute',      [PayAdminController::class, 'recompute']);

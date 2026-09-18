@@ -133,6 +133,75 @@ test.describe.serial('pay-rate admin (write path)', () => {
         ).toEqual([]);
     });
 
+    test('10c3 — preview includes this browser\'s unconfirmed loads', async ({ page }) => {
+        await signIn(page);
+
+        // Enter the preview once with a clean scratchpad so we can read the
+        // server's idea of "today" (the app runs America/Chicago; the runner
+        // may not agree).
+        await page.goto('pay-admin/preview?trip_type=round_trip');
+        const form = page.locator('#preview-local-form');
+        await expect(form).toBeVisible();
+        const today = await form.getAttribute('data-today');
+        expect(today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+        // Seed the exact key/shape the dashboard hydrates from — with a
+        // deliberately bogus np, because the server must reprice, never trust
+        // the browser's money.
+        await page.evaluate((iso) => {
+            localStorage.setItem('paytracker.unsavedLoads', JSON.stringify([{
+                local_id: 'u_e2e_fixture_1',
+                created_at: Date.now(),
+                computed: {
+                    date: iso,
+                    load_type: 1,
+                    pickup_city: 'Pensacola, FL',
+                    delivery_city: 'Mobile, AL',
+                    end_empty_city: '',
+                    end_empty_miles: 0,
+                    empty_miles: 320,
+                    begin_empty_miles: 0,
+                    is_split: 0,
+                    is_weekend: 0,
+                    is_backhaul: 0,
+                    extra_pay: 0,
+                    dem_minutes: 0,
+                    break_minutes: 0,
+                    out_of_route_miles: 0,
+                    out_of_route_ind: 0,
+                    notes: 'QA TEST scratchpad — safe to clean up',
+                    np: 999.99,
+                    op: 999.99,
+                    pay_breakdown: { np: 999.99 },
+                },
+            }]));
+        }, today);
+
+        try {
+            // Arriving again auto-submits the scratchpad once and re-renders
+            // with those rows repriced alongside the saved ones.
+            await page.goto('pay-admin/preview?trip_type=round_trip');
+            await expect(page.locator('#preview-local-status'))
+                .toContainText(/Included\s*1\s*unconfirmed/i);
+
+            const card = page.locator('div.card', { hasText: /Per-load diff/ });
+            await expect(card).toBeVisible();
+            await expect(card).toContainText('Pensacola, FL');
+            await expect(card).toContainText('Mobile, AL');
+            await expect(card).toContainText(/unconfirmed — in this browser only/i);
+            // 999.99 never happened: the projection is server-computed.
+            await expect(card).not.toContainText('999.99');
+            // Per-load breakdown is rendered server-side for every row.
+            const breakdown = card.getByText(/Projected pay breakdown under the draft/i).first();
+            await expect(breakdown).toBeVisible();
+            await breakdown.click();
+            await expect(card.getByText(/Total Load Pay/i).first()).toBeVisible();
+        } finally {
+            // Leave no fixture behind for other specs.
+            await page.evaluate(() => localStorage.removeItem('paytracker.unsavedLoads'));
+        }
+    });
+
     test('10d — edit a draft tier', async ({ page }) => {
         await signIn(page);
         await page.goto('pay-admin');
