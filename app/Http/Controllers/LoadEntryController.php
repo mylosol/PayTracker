@@ -80,6 +80,23 @@ final class LoadEntryController extends Controller
             return $this->redirect($request->basePath() . '/login');
         }
 
+        // Smart Pickup default from the driver's most recent stored load:
+        // long-haul ended at End Empty (so that's where the next load starts),
+        // round-trip ended back at the pickup terminal. Only used when the
+        // form isn't already carrying preserved input from a failed submit,
+        // and the previous terminal is silently ignored if it isn't in the
+        // current active list — the select then falls back to "Choose a
+        // terminal…" instead of pre-selecting a decommissioned option.
+        $suggestedPickup = '';
+        if ($this->session->get('_old_pickup') === null) {
+            $last = $this->loads->mostRecentForDriver((int) $account['id']);
+            if ($last !== null) {
+                $suggestedPickup = ($last['load_type'] === 0 && (string) $last['end_empty_city'] !== '')
+                    ? (string) $last['end_empty_city']
+                    : $last['pickup_city'];
+            }
+        }
+
         return $this->view('loads/new', [
             'csrfToken' => $this->csrf->token(),
             'base'      => $request->basePath(),
@@ -92,7 +109,7 @@ final class LoadEntryController extends Controller
             'editFrtl'  => 0,
             'old'       => [
                 'frtl'              => $this->session->get('_old_frtl')              ?? '',
-                'pickup'            => $this->session->get('_old_pickup')            ?? '',
+                'pickup'            => $this->session->get('_old_pickup')            ?? $suggestedPickup,
                 'delivery'          => $this->session->get('_old_delivery')          ?? '',
                 'load_type'         => $this->session->get('_old_type')              ?? '0',
                 'dem'               => $this->session->get('_old_dem')               ?? '0',
