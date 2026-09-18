@@ -10,7 +10,7 @@
  * @var array{
  *   frtl:string, pickup:string, delivery:string, load_type:string,
  *   dem:string, break:string, extra:string,
- *   split:string, weekend:string,
+ *   split:string, weekend:string, backhaul?:string,
  *   notes?:string, end_empty?:string,
  *   date?:string, begin_empty_miles?:string, out_of_route_miles?:string,
  * } $old
@@ -214,6 +214,11 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                     <input type="checkbox" name="is_weekend" value="1" class="field-checkbox"
                            <?= $old['weekend'] === '1' ? 'checked' : '' ?>>
                     <span>Weekend</span>
+                </label>
+                <label class="inline-flex items-center gap-2 min-h-[44px]">
+                    <input type="checkbox" name="is_backhaul" value="1" class="field-checkbox"
+                           <?= ($old['backhaul'] ?? '0') === '1' ? 'checked' : '' ?>>
+                    <span>Backhaul <span class="text-brand-muted text-sm">(+$40)</span></span>
                 </label>
                 <label id="begin-empty-toggle-label" class="inline-flex items-center gap-2 min-h-[44px]">
                     <input type="checkbox" id="begin_empty_checkbox" class="field-checkbox"
@@ -625,6 +630,8 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                     if (split) split.checked = c.is_split === 1;
                     const wk = document.querySelector('input[name="is_weekend"]');
                     if (wk) wk.checked = c.is_weekend === 1;
+                    const bh = document.querySelector('input[name="is_backhaul"]');
+                    if (bh) bh.checked = c.is_backhaul === 1;
                     // Update the page heading so the driver knows they're editing.
                     const h1 = document.querySelector('h1');
                     if (h1) h1.textContent = 'Edit unconfirmed load';

@@ -57,6 +57,7 @@ $componentLabels = [
     'seniority_pay' => 'Seniority pay',
     'weekend_pay'   => 'Weekend pay',
     'split_pay'     => 'Split pay',
+    'backhaul_pay'  => 'Backhaul',
     'dem_pay'       => 'Demurrage',
     'break_pay'     => 'Breakdown',
     'extra_pay'     => 'Extra pay',

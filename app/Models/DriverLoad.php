@@ -132,7 +132,7 @@ final class DriverLoad extends Model
      * @return list<array{
      *   frtl:int, date:string,
      *   load_type:?int, pickup_city:?string, delivery_city:?string,
-     *   empty_miles:?int, is_split:?int, is_weekend:?int,
+     *   empty_miles:?int, is_split:?int, is_weekend:?int, is_backhaul:?int,
      *   extra_pay:?string, dem_minutes:?int, break_minutes:?int,
      *   out_of_route_miles:?int, np:string, op:string,
      * }>
@@ -144,7 +144,7 @@ final class DriverLoad extends Model
                 frtl, date,
                 load_type, pickup_city, delivery_city,
                 end_empty_city, end_empty_miles,
-                empty_miles, is_split, is_weekend,
+                empty_miles, is_split, is_weekend, is_backhaul,
                 extra_pay, dem_minutes, break_minutes,
                 out_of_route_miles,
                 notes,
@@ -225,7 +225,7 @@ final class DriverLoad extends Model
      *   delivery_city:string,
      *   empty_miles:int,
      *   begin_empty_miles:int,
-     *   is_split:int,
+     *   is_split:int, is_backhaul:int,
      *   is_weekend:int,
      *   extra_pay:float,
      *   dem_minutes:int,
@@ -281,7 +281,7 @@ final class DriverLoad extends Model
                     driver_id, frtl,
                     load_type, empty_miles, pickup_city, delivery_city,
                     end_empty_city, end_empty_miles,
-                    is_split, is_weekend, begin_empty_miles,
+                    is_split, is_weekend, is_backhaul, begin_empty_miles,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles, terminal_pcola,
                     variables, np, op, pay_breakdown
@@ -447,7 +447,7 @@ final class DriverLoad extends Model
                     variables, loadinfo, paid, notPaid, notes, np, op, pay_breakdown,
                     load_type, empty_miles, pickup_city, delivery_city,
                     end_empty_city, end_empty_miles,
-                    is_split, is_weekend, begin_empty_miles, used_google_maps,
+                    is_split, is_weekend, is_backhaul, begin_empty_miles, used_google_maps,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles, terminal_pcola
                 ) VALUES (
@@ -455,7 +455,7 @@ final class DriverLoad extends Model
                     ?, ?, ?, 0, ?, ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?,
-                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, 0
                 )';
@@ -469,7 +469,7 @@ final class DriverLoad extends Model
             $np, $op, $payBreakdown,
             $data['load_type'], $data['empty_miles'], $data['pickup_city'], $data['delivery_city'],
             $data['end_empty_city'] ?? null, (int) ($data['end_empty_miles'] ?? 0),
-            $data['is_split'], $data['is_weekend'], $data['begin_empty_miles'], $data['used_google_maps'],
+            $data['is_split'], $data['is_weekend'], (int) ($data['is_backhaul'] ?? 0), $data['begin_empty_miles'], $data['used_google_maps'],
             number_format($data['extra_pay'], 2, '.', ''),
             $data['dem_minutes'], $data['break_minutes'],
             $data['out_of_route_ind'], $data['out_of_route_miles'],
@@ -503,7 +503,7 @@ final class DriverLoad extends Model
                     driver_id, frtl, date,
                     load_type, pickup_city, delivery_city,
                     end_empty_city, end_empty_miles,
-                    empty_miles, begin_empty_miles, is_split, is_weekend,
+                    empty_miles, begin_empty_miles, is_split, is_weekend, is_backhaul,
                     extra_pay, dem_minutes, break_minutes,
                     out_of_route_ind, out_of_route_miles,
                     used_google_maps, notes,
@@ -525,7 +525,7 @@ final class DriverLoad extends Model
      *
      * @param array{
      *   load_type:int, pickup_city:string, delivery_city:string,
-     *   empty_miles:int, is_split:int, is_weekend:int,
+     *   empty_miles:int, is_split:int, is_weekend:int, is_backhaul:int,
      *   extra_pay:float, dem_minutes:int, break_minutes:int,
      *   notes:?string,
      *   np:float, op:float,
@@ -577,7 +577,7 @@ final class DriverLoad extends Model
                     pickup_city = ?, delivery_city = ?,
                     end_empty_city = ?, end_empty_miles = ?,
                     begin_empty_miles = ?,
-                    is_split = ?, is_weekend = ?,
+                    is_split = ?, is_weekend = ?, is_backhaul = ?,
                     extra_pay = ?, dem_minutes = ?, break_minutes = ?,
                     out_of_route_ind = ?, out_of_route_miles = ?,
                     notes = ?,
@@ -594,7 +594,7 @@ final class DriverLoad extends Model
             $data['pickup_city'], $data['delivery_city'],
             $data['end_empty_city'] ?? null, (int) ($data['end_empty_miles'] ?? 0),
             $beginEmptyMiles,
-            $data['is_split'], $data['is_weekend'],
+            $data['is_split'], $data['is_weekend'], (int) ($data['is_backhaul'] ?? 0),
             number_format($data['extra_pay'], 2, '.', ''),
             $data['dem_minutes'], $data['break_minutes'],
             $outOfRouteInd, $outOfRouteMiles,

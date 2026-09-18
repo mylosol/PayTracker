@@ -102,6 +102,7 @@ final class PayRecomputer
                 begin_empty_miles:  (int) $row['begin_empty_miles'],
                 is_split:           (int) $row['is_split'],
                 is_weekend:         (int) $row['is_weekend'],
+                is_backhaul:        (int) ($row['is_backhaul'] ?? 0),
                 extra_pay:          (float) $row['extra_pay'],
                 dem_minutes:        (int) $row['dem_minutes'],
                 break_minutes:      (int) $row['break_minutes'],

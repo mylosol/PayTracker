@@ -100,6 +100,7 @@ final class LoadEntryController extends Controller
                 'extra'             => $this->session->get('_old_extra')             ?? '0',
                 'split'             => $this->session->get('_old_split')             ?? '0',
                 'weekend'           => $this->session->get('_old_weekend')           ?? '0',
+                'backhaul'          => $this->session->get('_old_backhaul')          ?? '0',
                 'end_empty'         => $this->session->get('_old_end_empty')         ?? '',
                 'date'              => $this->session->get('_old_date')              ?? '',
                 'begin_empty_miles' => $this->session->get('_old_begin_empty_miles') ?? '0',
@@ -130,8 +131,9 @@ final class LoadEntryController extends Controller
         $delivery  = trim((string) $request->input('delivery_city', ''));
         $endEmpty  = trim((string) $request->input('end_empty_city', ''));
         $typeRaw   = (string) $request->input('load_type', '');
-        $splitRaw  = (string) $request->input('is_split', '0');
-        $wkRaw     = (string) $request->input('is_weekend', '0');
+        $splitRaw    = (string) $request->input('is_split', '0');
+        $wkRaw       = (string) $request->input('is_weekend', '0');
+        $backhaulRaw = (string) $request->input('is_backhaul', '0');
         $demRaw    = (string) $request->input('dem_minutes', '0');
         $brkRaw    = (string) $request->input('break_minutes', '0');
         $extraRaw  = (string) $request->input('extra_pay', '0');
@@ -150,6 +152,7 @@ final class LoadEntryController extends Controller
         $this->session->put('_old_extra', $extraRaw);
         $this->session->put('_old_split', $splitRaw);
         $this->session->put('_old_weekend', $wkRaw);
+        $this->session->put('_old_backhaul', $backhaulRaw);
         $this->session->put('_old_date', $dateRaw);
         $this->session->put('_old_begin_empty_miles', $beginEmptyRaw);
         $this->session->put('_old_out_of_route_miles', $outOfRouteRaw);
@@ -187,6 +190,7 @@ final class LoadEntryController extends Controller
         $loadType        = $ctx['load_type'];
         $isSplit         = $ctx['is_split'];
         $isWeekend       = $ctx['is_weekend'];
+        $isBackhaul      = $ctx['is_backhaul'];
         $emptyMiles      = $ctx['empty_miles'];
         $endEmptyMiles   = $ctx['end_empty_miles'];
         $beginEmptyMiles = $ctx['begin_empty_miles'];
@@ -211,6 +215,7 @@ final class LoadEntryController extends Controller
             'begin_empty_miles'  => $beginEmptyMiles,
             'is_split'           => $isSplit,
             'is_weekend'         => $isWeekend,
+            'is_backhaul'        => $isBackhaul,
             'extra_pay'          => (float) $extraRaw,
             'dem_minutes'        => (int) $demRaw,
             'break_minutes'      => (int) $brkRaw,
@@ -225,7 +230,7 @@ final class LoadEntryController extends Controller
         ]);
 
         // Clear preserved input on success.
-        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_end_empty', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend', '_old_date', '_old_begin_empty_miles', '_old_out_of_route_miles'] as $k) {
+        foreach (['_old_frtl', '_old_pickup', '_old_delivery', '_old_end_empty', '_old_type', '_old_dem', '_old_break', '_old_extra', '_old_split', '_old_weekend', '_old_backhaul', '_old_date', '_old_begin_empty_miles', '_old_out_of_route_miles'] as $k) {
             $this->session->forget($k);
         }
 
@@ -292,6 +297,7 @@ final class LoadEntryController extends Controller
                 'extra'              => (string) ($row['extra_pay']           ?? '0'),
                 'split'              => (string) ($row['is_split']            ?? '0'),
                 'weekend'            => (string) ($row['is_weekend']          ?? '0'),
+                'backhaul'           => (string) ($row['is_backhaul']         ?? '0'),
                 // Drop the datetime's time portion for the <input type="date">.
                 'date'               => substr((string) ($row['date'] ?? ''), 0, 10),
                 'begin_empty_miles'  => (string) ($row['begin_empty_miles']   ?? '0'),
@@ -333,8 +339,9 @@ final class LoadEntryController extends Controller
         $delivery  = trim((string) $request->input('delivery_city', ''));
         $endEmpty  = trim((string) $request->input('end_empty_city', ''));
         $typeRaw   = (string) $request->input('load_type', '');
-        $splitRaw  = (string) $request->input('is_split', '0');
-        $wkRaw     = (string) $request->input('is_weekend', '0');
+        $splitRaw    = (string) $request->input('is_split', '0');
+        $wkRaw       = (string) $request->input('is_weekend', '0');
+        $backhaulRaw = (string) $request->input('is_backhaul', '0');
         $demRaw    = (string) $request->input('dem_minutes', '0');
         $brkRaw    = (string) $request->input('break_minutes', '0');
         $extraRaw  = (string) $request->input('extra_pay', '0');
@@ -404,9 +411,10 @@ final class LoadEntryController extends Controller
         }
         $outOfRouteInd   = $outOfRouteMiles > 0 ? 1 : 0;
 
-        $loadType  = (int) $typeRaw;
-        $isSplit   = $splitRaw === '1' ? 1 : 0;
-        $isWeekend = $wkRaw === '1' ? 1 : 0;
+        $loadType   = (int) $typeRaw;
+        $isSplit    = $splitRaw === '1' ? 1 : 0;
+        $isWeekend  = $wkRaw === '1' ? 1 : 0;
+        $isBackhaul = $backhaulRaw === '1' ? 1 : 0;
 
         $miles = $this->distances->lookupOrFetch($pickup, $delivery);
         if ($miles === null) {
@@ -449,6 +457,7 @@ final class LoadEntryController extends Controller
             begin_empty_miles:  $beginEmptyMiles,
             is_split:           $isSplit,
             is_weekend:         $isWeekend,
+            is_backhaul:        $isBackhaul,
             extra_pay:          (float) $extraRaw,
             dem_minutes:        (int) $demRaw,
             break_minutes:      (int) $brkRaw,
@@ -475,6 +484,7 @@ final class LoadEntryController extends Controller
                 'begin_empty_miles' => $beginEmptyMiles,
                 'is_split'          => $isSplit,
                 'is_weekend'        => $isWeekend,
+                'is_backhaul'       => $isBackhaul,
                 'extra_pay'         => (float) $extraRaw,
                 'dem_minutes'       => (int) $demRaw,
                 'break_minutes'     => (int) $brkRaw,
@@ -745,8 +755,9 @@ final class LoadEntryController extends Controller
         $delivery  = trim((string) $request->input('delivery_city', ''));
         $endEmpty  = trim((string) $request->input('end_empty_city', ''));
         $typeRaw   = (string) $request->input('load_type', '');
-        $splitRaw  = (string) $request->input('is_split', '0');
-        $wkRaw     = (string) $request->input('is_weekend', '0');
+        $splitRaw    = (string) $request->input('is_split', '0');
+        $wkRaw       = (string) $request->input('is_weekend', '0');
+        $backhaulRaw = (string) $request->input('is_backhaul', '0');
         $demRaw    = (string) $request->input('dem_minutes', '0');
         $brkRaw    = (string) $request->input('break_minutes', '0');
         $extraRaw  = (string) $request->input('extra_pay', '0');
@@ -761,9 +772,10 @@ final class LoadEntryController extends Controller
         if (! is_numeric($typeRaw) || ! in_array((int) $typeRaw, self::ALLOWED_LOAD_TYPES, true)) {
             return ['ok' => false, 'error' => 'Load type must be loaded one-way or round-trip.'];
         }
-        $loadType  = (int) $typeRaw;
-        $isSplit   = $splitRaw === '1' ? 1 : 0;
-        $isWeekend = $wkRaw === '1' ? 1 : 0;
+        $loadType   = (int) $typeRaw;
+        $isSplit    = $splitRaw === '1' ? 1 : 0;
+        $isWeekend  = $wkRaw === '1' ? 1 : 0;
+        $isBackhaul = $backhaulRaw === '1' ? 1 : 0;
 
         if (! is_numeric($demRaw) || (int) $demRaw < 0 || (int) $demRaw > self::MAX_MINUTES) {
             return ['ok' => false, 'error' => 'Demurrage minutes must be between 0 and ' . self::MAX_MINUTES . '.'];
@@ -841,6 +853,7 @@ final class LoadEntryController extends Controller
             begin_empty_miles:  $beginEmptyMiles,
             is_split:           $isSplit,
             is_weekend:         $isWeekend,
+            is_backhaul:        $isBackhaul,
             extra_pay:          (float) $extraRaw,
             dem_minutes:        (int) $demRaw,
             break_minutes:      (int) $brkRaw,
@@ -868,6 +881,7 @@ final class LoadEntryController extends Controller
                 'begin_empty_miles'    => $beginEmptyMiles,
                 'is_split'             => $isSplit,
                 'is_weekend'           => $isWeekend,
+                'is_backhaul'          => $isBackhaul,
                 'extra_pay'            => (float) $extraRaw,
                 'dem_minutes'          => (int) $demRaw,
                 'break_minutes'        => (int) $brkRaw,

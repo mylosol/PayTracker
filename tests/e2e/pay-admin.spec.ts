@@ -51,6 +51,14 @@ test.describe.serial('pay-rate admin (write path)', () => {
         await page.goto('pay-admin');
         const card = page.locator('div.card', { hasText: ROUND_TRIP });
 
+        // The Reset-Draft form has an onsubmit confirm("Discard the
+        // current draft…") — Playwright dismisses unhandled dialogs,
+        // which would silently cancel the POST and leave the flash
+        // never appearing. Register the accepter up front so either
+        // branch below works regardless of the preview DB's current
+        // draft state.
+        page.once('dialog', (d) => d.accept());
+
         const startButton = card.getByRole('button', { name: /start draft from current/i });
         if (await startButton.isVisible()) {
             await startButton.click();

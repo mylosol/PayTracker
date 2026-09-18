@@ -46,7 +46,8 @@ use PayTracker\Services\Pay\VariableBag;
  *     np = op = round(trainer_pay + extras, 2)
  *
  * Extras (the op total, also added to np):
- *   split (flat $15 if is_split) + extra_pay + dem×CPM + break×CPM
+ *   split (flat $15 if is_split) + backhaul (flat $40 if is_backhaul)
+ *   + extra_pay + dem×CPM + break×CPM
  *
  * Rounding doctrine: every component is rounded to 2 decimals, and
  * the totals are the sums of those rounded components. The breakdown
@@ -126,7 +127,7 @@ final class PayCalculator
      *   seniority_pct: float, seniority_pay: float,
      *   shift_pct: float,    shift_pay: float,
      *   weekend_pct: float,  weekend_pay: float,
-     *   split_pay: float, extra_pay: float, dem_pay: float, break_pay: float,
+     *   split_pay: float, backhaul_pay: float, extra_pay: float, dem_pay: float, break_pay: float,
      * }
      */
     public function computeFor(LoadInputs $load): array
@@ -152,6 +153,7 @@ final class PayCalculator
         // drift between the row-by-row card and the totals.
         $extrasBreakdown = $this->extrasBreakdown($load, $demRate, $brkRate);
         $extras          = $extrasBreakdown['split_pay']
+                         + $extrasBreakdown['backhaul_pay']
                          + $extrasBreakdown['extra_pay']
                          + $extrasBreakdown['dem_pay']
                          + $extrasBreakdown['break_pay'];
@@ -272,7 +274,7 @@ final class PayCalculator
      * returns the same shape — the dashboard view trusts every key to
      * exist.
      *
-     * @param array{split_pay:float, extra_pay:float, dem_pay:float, break_pay:float} $extras
+     * @param array{split_pay:float, backhaul_pay:float, extra_pay:float, dem_pay:float, break_pay:float} $extras
      * @return array{
      *   np: float, op: float, trip_label: string,
      *   tenure_band: string, shift: string,
@@ -282,7 +284,7 @@ final class PayCalculator
      *   seniority_pct: float, seniority_pay: float,
      *   shift_pct: float, shift_pay: float,
      *   weekend_pct: float, weekend_pay: float,
-     *   split_pay: float, extra_pay: float, dem_pay: float, break_pay: float,
+     *   split_pay: float, backhaul_pay: float, extra_pay: float, dem_pay: float, break_pay: float,
      * }
      */
     private function buildResult(
@@ -316,6 +318,7 @@ final class PayCalculator
             'weekend_pct'   => $weekendPct,
             'weekend_pay'   => $weekendPay,
             'split_pay'     => $extras['split_pay'],
+            'backhaul_pay'  => $extras['backhaul_pay'],
             'extra_pay'     => $extras['extra_pay'],
             'dem_pay'       => $extras['dem_pay'],
             'break_pay'     => $extras['break_pay'],
@@ -323,15 +326,20 @@ final class PayCalculator
     }
 
     /**
-     * @return array{split_pay:float, extra_pay:float, dem_pay:float, break_pay:float}
+     * @return array{split_pay:float, backhaul_pay:float, extra_pay:float, dem_pay:float, break_pay:float}
      */
     private function extrasBreakdown(LoadInputs $load, float $demRate, float $brkRate): array
     {
         return [
-            'split_pay' => $load->is_split > 0 ? 15.0 : 0.0,
-            'extra_pay' => round($load->extra_pay, 2),
-            'dem_pay'   => round($load->dem_minutes   * $demRate, 2),
-            'break_pay' => round($load->break_minutes * $brkRate, 2),
+            'split_pay'    => $load->is_split    > 0 ? 15.0 : 0.0,
+            // Flat $40 backhaul differential — matches the legacy
+            // "Backhaul Differential" line. If payroll ever changes
+            // the amount, promote it to pay_variables like the
+            // demurrage/breakdown rates.
+            'backhaul_pay' => $load->is_backhaul > 0 ? 40.0 : 0.0,
+            'extra_pay'    => round($load->extra_pay, 2),
+            'dem_pay'      => round($load->dem_minutes   * $demRate, 2),
+            'break_pay'    => round($load->break_minutes * $brkRate, 2),
         ];
     }
 
