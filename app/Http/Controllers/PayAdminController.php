@@ -667,6 +667,172 @@ final class PayAdminController extends Controller
         });
     }
 
+    // ─── pay_variables editor ─────────────────────────────────────────
+    // The formula reads global constants from pay_variables — `raise`
+    // (the ladder-wide multiplier), `mt` (per-band empty-mile rate),
+    // `newBump`/`night`/`wk` (per-band overlays), `trainer_pay`,
+    // `demurrage`, `breakdown`. Same draft → current → reset staging
+    // as pay_rates; no per-load version snapshot because
+    // PayCalculator resolves the current stage at compute time and
+    // historical loads' pay was stored at write-time (rerun Recompute
+    // pay to refresh them).
+    //
+    // The `_tb` (tenure-bump) column is queried by the legacy schema
+    // but the formula never consumes it; the row is still editable
+    // here so admins don't see a variable disappear on migration.
+
+    private const VARIABLE_LABELS = [
+        'raise'       => 'Ladder multiplier (raise)',
+        'trainer_pay' => 'Trainer flat pay ($)',
+        'demurrage'   => 'Demurrage ($/min)',
+        'breakdown'   => 'Breakdown ($/min)',
+    ];
+
+    private const TENURE_BANDS = ['6', '12', '24', '60', '108', '168', 'max'];
+
+    private const TENURE_SUFFIXES = ['mt', 'newBump', 'night', 'wk', 'tb'];
+
+    /**
+     * GET /pay-admin/variables — render the pay_variables editor.
+     */
+    public function variables(Request $request): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
+        }
+        $this->session->start();
+
+        return $this->view('pay-admin/variables', [
+            'base'         => $request->basePath(),
+            'csrfToken'    => $this->csrf->token(),
+            'current'      => $this->payVariables->allByStage('current'),
+            'draft'        => $this->payVariables->allByStage('draft'),
+            'defaultVars'  => $this->payVariables->allByStage('default'),
+            'hasDraft'     => $this->payVariables->hasDraft(),
+            'globalKeys'   => array_keys(self::VARIABLE_LABELS),
+            'globalLabels' => self::VARIABLE_LABELS,
+            'bands'        => self::TENURE_BANDS,
+            'suffixes'     => self::TENURE_SUFFIXES,
+            'flash'        => $this->popFlash(),
+        ]);
+    }
+
+    /**
+     * POST /pay-admin/variables/draft/start — copy current → draft.
+     * The upsert path auto-starts a draft too; this exists so the
+     * admin can "reset draft to current" mid-edit without an SQL
+     * shell, matching the pay_rates flow.
+     */
+    public function startDraftVariables(Request $request): Response
+    {
+        return $this->guardVars($request, function (): string {
+            $this->payVariables->startOrResetDraft();
+            return 'Draft started (copied from current).';
+        });
+    }
+
+    /**
+     * POST /pay-admin/variables/draft/upsert — save a single variable
+     * into the draft. Percent-style variables (raise, night, wk,
+     * newBump, tb) are typed as decimals (e.g. 0.1627 for 16.27%);
+     * the view labels them accordingly so an admin doesn't type
+     * "16.27" and 16× the payroll.
+     */
+    public function upsertDraftVariable(Request $request): Response
+    {
+        return $this->guardVars($request, function () use ($request): string {
+            $variable = trim((string) $request->input('variable', ''));
+            $amount   = trim((string) $request->input('amount', ''));
+            if ($variable === '') {
+                throw new \InvalidArgumentException('Variable name is required.');
+            }
+            if (! $this->isKnownVariable($variable)) {
+                throw new \InvalidArgumentException(sprintf('Unknown variable: %s', $variable));
+            }
+            // upsertDraft re-validates the numeric format itself.
+            $this->payVariables->upsertDraft($variable, $amount);
+            return sprintf('Saved %s → %s in draft.', $variable, $amount);
+        });
+    }
+
+    /**
+     * POST /pay-admin/variables/draft/promote — promote draft → current.
+     */
+    public function promoteDraftVariables(Request $request): Response
+    {
+        return $this->guardVars($request, function (): string {
+            $this->payVariables->promoteDraftToCurrent();
+            return 'Promoted variables draft → current. Historical loads keep their stored pay until you run Recompute pay.';
+        });
+    }
+
+    /**
+     * POST /pay-admin/variables/reset — current ← default, clear draft.
+     */
+    public function resetVariables(Request $request): Response
+    {
+        return $this->guardVars($request, function (): string {
+            $this->payVariables->resetCurrentToDefault();
+            return 'Reset variables to factory defaults.';
+        });
+    }
+
+    private function isKnownVariable(string $variable): bool
+    {
+        if (isset(self::VARIABLE_LABELS[$variable])) {
+            return true;
+        }
+        foreach (self::TENURE_BANDS as $band) {
+            foreach (self::TENURE_SUFFIXES as $suffix) {
+                if ($variable === $band . '_' . $suffix) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Auth + CSRF wrapper for the variables actions — same shape as
+     * guard() but without the trip_type check (variables are global)
+     * and redirecting back to /pay-admin/variables.
+     *
+     * @param callable(): string $body Returns the flash message on success.
+     */
+    private function guardVars(Request $request, callable $body): Response
+    {
+        $account = $this->auth->currentAccount();
+        if ($account === null) {
+            return $this->redirect($request->basePath() . '/login');
+        }
+        if (($denied = $this->requireRole($request, $account, Account::ROLE_ADMIN)) !== null) {
+            return $denied;
+        }
+        $this->session->start();
+
+        if (! $this->csrf->verify($request->input('_csrf'))) {
+            $this->session->put('_flash', 'Your session expired. Please try again.');
+            return $this->redirect($request->basePath() . '/pay-admin/variables');
+        }
+
+        try {
+            $message = $body();
+        } catch (\InvalidArgumentException $e) {
+            $this->session->put('_flash', $e->getMessage());
+            return $this->redirect($request->basePath() . '/pay-admin/variables');
+        } catch (\Throwable $e) {
+            $this->session->put('_flash', 'Operation failed: ' . $e->getMessage());
+            return $this->redirect($request->basePath() . '/pay-admin/variables');
+        }
+
+        $this->session->put('_flash', $message);
+        return $this->redirect($request->basePath() . '/pay-admin/variables');
+    }
+
     /**
      * Common shell for all POST handlers: auth → CSRF → trip_type validation
      * → invoke the per-action body → flash + redirect.

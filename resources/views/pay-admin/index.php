@@ -34,6 +34,9 @@ $bucketInputs = static function (string $tripType, string $csrf): string {
         <a href="<?= e($base) ?>/pay-admin/preview" class="btn-secondary btn-sm">
             Preview impact — all trip types →
         </a>
+        <a href="<?= e($base) ?>/pay-admin/variables" class="btn-secondary btn-sm">
+            Edit pay variables →
+        </a>
         <a href="<?= e($base) ?>/">← Back</a>
     </p>
 
