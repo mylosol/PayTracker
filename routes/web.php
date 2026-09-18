@@ -215,4 +215,14 @@ return static function (Router $router): void {
     $router->post('/pay-admin/draft/promote',  [PayAdminController::class, 'promoteDraft']);
     $router->post('/pay-admin/reset',          [PayAdminController::class, 'resetCurrent']);
     $router->post('/pay-admin/recompute',      [PayAdminController::class, 'recompute']);
+
+    // pay_variables editor — the global constants the formula multiplies
+    // rates by (raise, per-band mt/newBump/night/wk/tb, trainer_pay,
+    // demurrage, breakdown). Same draft → current → default staging as
+    // the rates surface above.
+    $router->get('/pay-admin/variables',                 [PayAdminController::class, 'variables']);
+    $router->post('/pay-admin/variables/draft/start',    [PayAdminController::class, 'startDraftVariables']);
+    $router->post('/pay-admin/variables/draft/upsert',   [PayAdminController::class, 'upsertDraftVariable']);
+    $router->post('/pay-admin/variables/draft/promote',  [PayAdminController::class, 'promoteDraftVariables']);
+    $router->post('/pay-admin/variables/reset',          [PayAdminController::class, 'resetVariables']);
 };
