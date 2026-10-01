@@ -89,6 +89,13 @@ $__nav = [
           href="<?= e($__fontPreload) ?>">
 
     <link rel="stylesheet" href="<?= e($__cssUrl) ?>">
+
+    <?php /* Running build id, baked into the HTML on every render. The
+             update-notifier JS reads this and compares it to a periodic
+             GET of /version.json to spot a fresh deploy without reloading
+             on its own. */ ?>
+    <meta name="app-version" content="<?= e(\PayTracker\Support\Version::string()) ?>">
+    <meta name="app-base-path" content="<?= e($__appPath) ?>">
 </head>
 <body class="min-h-screen flex flex-col">
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -226,6 +233,165 @@ $__nav = [
                     .catch(function () {});
             });
         }
+    </script>
+
+    <?php /* Update-available notifier. A tab left open across a deploy
+             polls /version.json once a minute (plus on focus and
+             tab-visible transitions) and shows a bottom-right toast
+             when the deployed build differs from the one the HTML was
+             rendered with. The user chooses when to reload; we never
+             auto-navigate so a half-filled load-entry form doesn't
+             get nuked.
+
+             Reload button first unregisters every service-worker
+             registration and deletes every Cache Storage key, then
+             location.reload()s. PayTracker's SW only caches CSS and
+             fonts/images (not HTML), but a stale cached CSS was the
+             exact failure mode behind the mobile-drawer dark-mode
+             fix shipping without reaching users — being defensive
+             here means a Reload click is unambiguously effective.
+
+             Build id of "dev" is a sentinel for local/CI runs where
+             we don't have a real deployed version to compare against;
+             the notifier stays dormant in those contexts.
+
+             Shown toast is anchored bottom-right with role="status"
+             and aria-live so it's announced for screen reader users
+             without stealing focus from a form they're filling in. */ ?>
+    <div id="update-available-toast"
+         role="status"
+         aria-live="polite"
+         hidden
+         class="fixed bottom-4 right-4 z-50 max-w-xs rounded-xl border border-brand-line bg-white dark:bg-slate-800 dark:border-slate-700 shadow-card-elev px-4 py-3 text-sm">
+        <div class="flex items-start gap-3">
+            <div class="flex-1">
+                <p class="font-semibold text-brand-ink dark:text-slate-100 m-0">
+                    New version available
+                </p>
+                <p class="text-brand-muted dark:text-slate-300 mt-1 mb-0 text-[13px]">
+                    PayTracker updated while this tab was open.
+                    Reload to pick up the latest build.
+                </p>
+                <div class="flex flex-wrap gap-2 mt-3">
+                    <button type="button"
+                            id="update-available-reload"
+                            class="btn-primary btn-sm">
+                        Reload now
+                    </button>
+                    <button type="button"
+                            id="update-available-dismiss"
+                            class="btn-secondary btn-sm"
+                            aria-label="Dismiss update notification">
+                        Later
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            const metaVersion = document.querySelector('meta[name="app-version"]');
+            const metaBase    = document.querySelector('meta[name="app-base-path"]');
+            if (!metaVersion) return;
+
+            const running = (metaVersion.content || '').trim();
+            if (!running || /\+dev$/.test(running)) {
+                // Local or CI build — the deployed version is nondeterministic
+                // and comparing would nag forever. Stay dormant.
+                return;
+            }
+            const basePath = metaBase ? (metaBase.content || '') : '';
+
+            const toast        = document.getElementById('update-available-toast');
+            const reloadBtn    = document.getElementById('update-available-reload');
+            const dismissBtn   = document.getElementById('update-available-dismiss');
+            if (!toast || !reloadBtn || !dismissBtn) return;
+
+            const DISMISS_KEY  = 'paytracker.updateDismissed'; // sessionStorage
+            const POLL_MS      = 60_000;
+
+            function readDismissed() {
+                try { return sessionStorage.getItem(DISMISS_KEY) || ''; }
+                catch (e) { return ''; }
+            }
+            function writeDismissed(v) {
+                try { sessionStorage.setItem(DISMISS_KEY, v); }
+                catch (e) { /* fail silent */ }
+            }
+
+            function render(deployed) {
+                // Remember the latest known deployed version on the DOM
+                // node itself so the Dismiss handler can record exactly
+                // what the user is dismissing. Keeps the two in lockstep
+                // without a shared JS variable.
+                toast.dataset.deployed = deployed || '';
+                if (!deployed || deployed === running) { toast.hidden = true; return; }
+                if (readDismissed() === deployed)      { toast.hidden = true; return; }
+                toast.hidden = false;
+            }
+
+            async function check() {
+                try {
+                    const resp = await fetch(basePath + '/version.json', {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        cache: 'no-store',
+                        headers: { 'Accept': 'application/json' },
+                    });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    const deployed = (data && typeof data.version === 'string') ? data.version.trim() : '';
+                    render(deployed);
+                } catch (e) {
+                    // Offline / network blip — do nothing; next tick will retry.
+                }
+            }
+
+            // Reload: unregister SWs and purge caches best-effort, then
+            // force a navigation. Any step that throws is swallowed —
+            // the reload MUST happen regardless or the toast becomes a
+            // no-op button, which is worse than caching bugs.
+            async function forceReload() {
+                reloadBtn.disabled    = true;
+                reloadBtn.textContent = 'Reloading…';
+                try {
+                    if ('serviceWorker' in navigator) {
+                        const regs = await navigator.serviceWorker.getRegistrations();
+                        await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+                    }
+                } catch (e) { /* fall through */ }
+                try {
+                    if (typeof caches !== 'undefined') {
+                        const keys = await caches.keys();
+                        await Promise.all(keys.map(k => caches.delete(k).catch(() => {})));
+                    }
+                } catch (e) { /* fall through */ }
+                window.location.reload();
+            }
+
+            reloadBtn.addEventListener('click', () => { forceReload(); });
+            dismissBtn.addEventListener('click', () => {
+                // Store the version we just dismissed so the toast
+                // doesn't nag in-session but DOES reappear when an even
+                // newer build ships.
+                const stamp = (toast.dataset.deployed || '').trim();
+                if (stamp) writeDismissed(stamp);
+                toast.hidden = true;
+            });
+
+            // Kick off: one immediate check so a user returning to an
+            // already-stale tab is told right away, then a 60s poll.
+            check();
+            setInterval(check, POLL_MS);
+
+            // Any time the user shows interest in the tab (focus,
+            // visibility flip from hidden → visible), re-check. This is
+            // what makes it feel prompt without hammering the server.
+            window.addEventListener('focus', check);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') check();
+            });
+        })();
     </script>
 
     <?php if (is_array($__account)): ?>

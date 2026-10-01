@@ -37,8 +37,11 @@ use PayTracker\Http\Router;
 return static function (Router $router): void {
     // --- Public --------------------------------------------------------
     $router->get('/',            [HomeController::class,   'index']);
-    $router->get('/health',      [HealthController::class, 'index']);
-    $router->get('/health.json', [HealthController::class, 'jsonResponse']);
+    $router->get('/health',       [HealthController::class, 'index']);
+    $router->get('/health.json',  [HealthController::class, 'jsonResponse']);
+    // Lightweight sibling of /health.json for the client-side update
+    // notifier: just the build string, no-store, no DB probe.
+    $router->get('/version.json', [HealthController::class, 'versionJson']);
 
     // --- PWA -----------------------------------------------------------
     $router->get('/sw.js',       [PwaController::class, 'serviceWorker']);

@@ -46,6 +46,38 @@ final class HealthController extends Controller
     }
 
     /**
+     * Tiny version-only probe for the client-side update notifier.
+     *
+     * This is intentionally cheaper and more cacheable-controllable than
+     * `/health.json`: no DB probe, no PHP/env/time payload, just the
+     * build string. Drivers poll this once a minute per open tab so a
+     * fresh deploy is visible without the DB being touched by every
+     * notifier. The response is `no-store` because the whole point of
+     * the comparison is to defeat caching — a Cloudflare edge serving
+     * last week's version here is exactly the failure mode we're
+     * guarding against.
+     */
+    public function versionJson(Request $request): Response
+    {
+        $parts = Version::parts();
+        return new Response(
+            body: (string) json_encode(
+                [
+                    'version' => Version::string(),
+                    'parts'   => $parts,
+                ],
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES,
+            ),
+            status: 200,
+            headers: [
+                'Content-Type'  => 'application/json; charset=utf-8',
+                'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                'Pragma'        => 'no-cache',
+            ],
+        );
+    }
+
+    /**
      * Gather the health snapshot. Any DB exception is caught and reported as
      * a structured field — the endpoint itself must always answer, even when
      * the database is unreachable.
