@@ -80,6 +80,39 @@ final class LoadEntryController extends Controller
             return $this->redirect($request->basePath() . '/login');
         }
 
+        // Flash-style old input: read, then forget. _old_* lives in the
+        // session as a one-shot repopulator for the failBack → GET
+        // /loads/new redirect after a validation failure, so the driver
+        // sees what they just typed. If no second submit lands (driver
+        // flips Store Load Info off and switches to the scratchpad POST
+        // path, or just abandons), the next visit must render fresh
+        // defaults — today's date, blank FRTL — instead of pinning the
+        // form to a day-old intent. Previously these keys lived forever
+        // in the 90-day session cookie and silently became stale
+        // defaults days or weeks later (reported: date stuck on Sept 21
+        // in October).
+        $oldKeys = [
+            'frtl'               => '_old_frtl',
+            'pickup'             => '_old_pickup',
+            'delivery'           => '_old_delivery',
+            'load_type'          => '_old_type',
+            'dem'                => '_old_dem',
+            'break'              => '_old_break',
+            'extra'              => '_old_extra',
+            'split'              => '_old_split',
+            'weekend'            => '_old_weekend',
+            'backhaul'           => '_old_backhaul',
+            'end_empty'          => '_old_end_empty',
+            'date'               => '_old_date',
+            'begin_empty_miles'  => '_old_begin_empty_miles',
+            'out_of_route_miles' => '_old_out_of_route_miles',
+        ];
+        $oldInput = [];
+        foreach ($oldKeys as $viewKey => $sessionKey) {
+            $oldInput[$viewKey] = $this->session->get($sessionKey);
+            $this->session->forget($sessionKey);
+        }
+
         // Smart Pickup default from the driver's most recent stored load:
         // long-haul ended at End Empty (so that's where the next load starts),
         // round-trip ended back at the pickup terminal. Only used when the
@@ -88,7 +121,7 @@ final class LoadEntryController extends Controller
         // current active list — the select then falls back to "Choose a
         // terminal…" instead of pre-selecting a decommissioned option.
         $suggestedPickup = '';
-        if ($this->session->get('_old_pickup') === null) {
+        if ($oldInput['pickup'] === null) {
             $last = $this->loads->mostRecentForDriver((int) $account['id']);
             if ($last !== null) {
                 $suggestedPickup = ($last['load_type'] === 0 && (string) $last['end_empty_city'] !== '')
@@ -108,20 +141,20 @@ final class LoadEntryController extends Controller
             'mode'      => 'create',
             'editFrtl'  => 0,
             'old'       => [
-                'frtl'              => $this->session->get('_old_frtl')              ?? '',
-                'pickup'            => $this->session->get('_old_pickup')            ?? $suggestedPickup,
-                'delivery'          => $this->session->get('_old_delivery')          ?? '',
-                'load_type'         => $this->session->get('_old_type')              ?? '0',
-                'dem'               => $this->session->get('_old_dem')               ?? '0',
-                'break'             => $this->session->get('_old_break')             ?? '0',
-                'extra'             => $this->session->get('_old_extra')             ?? '0',
-                'split'             => $this->session->get('_old_split')             ?? '0',
-                'weekend'           => $this->session->get('_old_weekend')           ?? '0',
-                'backhaul'          => $this->session->get('_old_backhaul')          ?? '0',
-                'end_empty'         => $this->session->get('_old_end_empty')         ?? '',
-                'date'              => $this->session->get('_old_date')              ?? '',
-                'begin_empty_miles' => $this->session->get('_old_begin_empty_miles') ?? '0',
-                'out_of_route_miles'=> $this->session->get('_old_out_of_route_miles')?? '0',
+                'frtl'              => $oldInput['frtl']               ?? '',
+                'pickup'            => $oldInput['pickup']             ?? $suggestedPickup,
+                'delivery'          => $oldInput['delivery']           ?? '',
+                'load_type'         => $oldInput['load_type']          ?? '0',
+                'dem'               => $oldInput['dem']                ?? '0',
+                'break'             => $oldInput['break']              ?? '0',
+                'extra'             => $oldInput['extra']              ?? '0',
+                'split'             => $oldInput['split']              ?? '0',
+                'weekend'           => $oldInput['weekend']            ?? '0',
+                'backhaul'          => $oldInput['backhaul']           ?? '0',
+                'end_empty'         => $oldInput['end_empty']          ?? '',
+                'date'              => $oldInput['date']               ?? '',
+                'begin_empty_miles' => $oldInput['begin_empty_miles']  ?? '0',
+                'out_of_route_miles'=> $oldInput['out_of_route_miles'] ?? '0',
                 'notes'             => '',
             ],
         ]);
