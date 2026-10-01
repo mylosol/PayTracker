@@ -610,6 +610,45 @@ $beVisible = $beChecked && ($old['load_type'] ?? '0') !== '1';
                 });
             }
 
+            // --- Scratchpad-aware Pickup default ----------------------------
+            // Server computes a smart Pickup default from the driver's most
+            // recent DB-saved load, which is empty for a scratchpad-only
+            // driver (Peter runs this way all day). When the server gave us
+            // nothing — the "Choose a terminal…" option is still selected —
+            // fall back to the most recent scratchpad entry on this device
+            // and apply the same long-haul/round-trip logic. Only runs in
+            // create mode and skips when a ?unsaved=… hydration will take
+            // over the form anyway.
+            (function () {
+                if (mode !== 'create') return;
+                const incomingUnsaved = new URLSearchParams(window.location.search).get('unsaved');
+                if (incomingUnsaved) return;
+                const pickupSel = document.getElementById('pickup_city');
+                if (!pickupSel) return;
+                // "No selection" = empty value AND no non-disabled option has
+                // selected=true. Server already renders the disabled
+                // "Choose…" option as selected when $old['pickup'] is empty.
+                if (pickupSel.value !== '') return;
+
+                const entries = readEntries();
+                if (entries.length === 0) return;
+                entries.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+                const last = entries[0] && entries[0].computed;
+                if (!last) return;
+
+                const suggested = (last.load_type === 0 && last.end_empty_city)
+                    ? last.end_empty_city
+                    : (last.pickup_city || '');
+                if (!suggested) return;
+
+                // Only apply if the suggested terminal is actually in the
+                // active whitelist — a decommissioned terminal left in a
+                // stale scratchpad entry shouldn't pre-select a dead option.
+                const match = Array.from(pickupSel.options).find(o =>
+                    !o.disabled && o.value === suggested);
+                if (match) pickupSel.value = suggested;
+            })();
+
             // --- Edit-of-unsaved hydration ---------------------------------
             // When the URL has ?unsaved=<localId>, this is an edit of a
             // scratchpad entry. Prefill the form, force the checkbox OFF
